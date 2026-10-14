@@ -1,0 +1,14 @@
+{
+  "Binary_Accuracy": 0.9984884474195638,
+  "Binary_Precision": 0.9933626820182865,
+  "Binary_Recall_DetectionRate": 0.9985702614379085,
+  "Binary_F1": 0.9959596645503005,
+  "Binary_Specificity": 0.9984696825372039,
+  "Binary_False_Positive_Rate": 0.0015303174627961085,
+  "Binary_False_Negative_Rate": 0.0014297385620915032,
+  "Binary_AUC_ROC": 0.9999680965917045,
+  "True_Negatives_BENIGN": 63941,
+  "False_Positives_Alarm": 98,
+  "False_Negatives_Missed": 21,
+  "True_Positives_ATTACK": 14667
+}

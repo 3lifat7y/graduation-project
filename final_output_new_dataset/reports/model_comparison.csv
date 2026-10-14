@@ -1,0 +1,4 @@
+Model,Val_Accuracy,Val_Macro_F1,Val_Weighted_F1,Val_Macro_Recall,Train_Time_Sec
+XGBoost,0.9967,0.8974,0.9968,0.9156,99.58
+LightGBM,0.9962,0.8963,0.9964,0.917,66.48
+ExtraTrees,0.9497,0.7359,0.9689,0.9069,20.94

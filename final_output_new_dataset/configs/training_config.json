@@ -1,0 +1,112 @@
+{
+  "timestamp": "2026-10-10 00:59:27",
+  "dataset_dir": "D:\\Projects\\Grad project\\Data Base",
+  "output_dir": "D:\\Projects\\Grad project\\final_output_new_dataset",
+  "max_samples_per_file": 50000,
+  "random_seed": 42,
+  "candidate_models": [
+    "xgboost",
+    "lightgbm",
+    "extratrees"
+  ],
+  "best_model_name": "XGBoost",
+  "num_features": 77,
+  "num_classes": 15,
+  "classes": [
+    "Benign",
+    "Bot",
+    "DDoS",
+    "DoS GoldenEye",
+    "DoS Hulk",
+    "DoS Slowhttptest",
+    "DoS slowloris",
+    "FTP-Patator",
+    "Heartbleed",
+    "Infiltration",
+    "PortScan",
+    "SSH-Patator",
+    "Web Attack - Brute Force",
+    "Web Attack - SQL Injection",
+    "Web Attack - XSS"
+  ],
+  "file_sampling_stats": {
+    "Benign-Monday-no-metadata.csv": {
+      "size_mb": 147.5,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 0,
+      "labels": {
+        "Benign": 50000
+      }
+    },
+    "Botnet-Friday-no-metadata.csv": {
+      "size_mb": 54.3,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 1437,
+      "labels": {
+        "Benign": 48563,
+        "Bot": 1437
+      }
+    },
+    "Bruteforce-Tuesday-no-metadata.csv": {
+      "size_mb": 120.7,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 9150,
+      "labels": {
+        "Benign": 40850,
+        "FTP-Patator": 5931,
+        "SSH-Patator": 3219
+      }
+    },
+    "DDoS-Friday-no-metadata.csv": {
+      "size_mb": 73.9,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 0,
+      "labels": {
+        "DDoS": 28866,
+        "Benign": 21134
+      }
+    },
+    "DoS-Wednesday-no-metadata.csv": {
+      "size_mb": 196.3,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 20910,
+      "labels": {
+        "Benign": 20150,
+        "DoS GoldenEye": 10286,
+        "DoS Hulk": 8940,
+        "DoS slowloris": 5385,
+        "DoS Slowhttptest": 5228,
+        "Heartbleed": 11
+      }
+    },
+    "Infiltration-Thursday-no-metadata.csv": {
+      "size_mb": 64.1,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 36,
+      "labels": {
+        "Benign": 49964,
+        "Infiltration": 36
+      }
+    },
+    "Portscan-Friday-no-metadata.csv": {
+      "size_mb": 36.9,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 1956,
+      "labels": {
+        "Benign": 48044,
+        "PortScan": 1956
+      }
+    },
+    "WebAttacks-Thursday-no-metadata.csv": {
+      "size_mb": 48.2,
+      "rows_loaded": 50000,
+      "rare_rows_retained": 2143,
+      "labels": {
+        "Benign": 47857,
+        "Web Attack - Brute Force": 1470,
+        "Web Attack - XSS": 652,
+        "Web Attack - SQL Injection": 21
+      }
+    }
+  }
+}
