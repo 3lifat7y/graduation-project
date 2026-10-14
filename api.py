@@ -22,6 +22,7 @@ import joblib
 from network_detector import auto_detect_primary_interface, check_capture_drivers
 from feature_extraction2 import FlowStatsCollector, capture_window_windivert, OFFICIAL_77_FEATURES
 from ipc_client import DDoSGuardIPCClient
+from service_helper import get_service_status, request_service_start, is_service_online
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -312,8 +313,18 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
             svc_status = ipc_client.get_scan_status(scan_id)
             curr_st = svc_status.get("status")
 
+            with scan_session_lock:
+                if current_scan_session.get("scan_id") == scan_id:
+                    pkts = svc_status.get("packets_captured")
+                    if pkts is not None:
+                        current_scan_session["packets_captured"] = pkts
+
             if curr_st == "captured":
                 extracted_feats = svc_status.get("features")
+                with scan_session_lock:
+                    if current_scan_session.get("scan_id") == scan_id:
+                        current_scan_session["packets_captured"] = svc_status.get("packets_captured", 0)
+                        current_scan_session["is_live_capture"] = True
                 break
             elif curr_st == "insufficient_traffic":
                 with scan_session_lock:
@@ -328,14 +339,15 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
                         })
                         is_monitoring = False
                 return
-            elif curr_st == "error":
+            elif curr_st in ["error", "service_unavailable", "timeout"]:
                 with scan_session_lock:
                     if current_scan_session.get("scan_id") == scan_id:
+                        err_msg = svc_status.get("message") or "Communication with packet sniffer service lost."
                         current_scan_session.update({
                             "status": "error",
-                            "error": svc_status.get("message"),
-                            "error_type": svc_status.get("error_type"),
-                            "message": f"Service capture error: {svc_status.get('message')}"
+                            "error": err_msg,
+                            "error_type": svc_status.get("error_type", "ServiceError"),
+                            "message": f"Service capture error: {err_msg}"
                         })
                         is_monitoring = False
                 return
@@ -456,6 +468,7 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
 
         with scan_session_lock:
             if current_scan_session.get("scan_id") == scan_id:
+                total_pkts = max(current_scan_session.get("packets_captured", 0), flow_summary["packets_captured"])
                 current_scan_session.update({
                     "status": "prediction_available",
                     "prediction": prediction,
@@ -463,7 +476,7 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
                     "is_attack": is_attack,
                     "confidence": confidence,
                     "flow_summary": flow_summary,
-                    "packets_captured": flow_summary["packets_captured"],
+                    "packets_captured": total_pkts,
                     "message": "DDoS Attack Detected!" if is_attack else "Normal Traffic - Safe",
                     "timestamp": time.strftime("%H:%M:%S")
                 })
@@ -500,16 +513,29 @@ def get_adapter_info():
         adapter, driver_status = auto_detect_primary_interface()
         svc_probe = ipc_client.ping()
         service_online = bool(svc_probe.get("pong", False))
+        svc_state = get_service_status()
+
         driver_status["service_online"] = service_online
         driver_status["service_info"] = svc_probe
+        driver_status["service_state"] = svc_state
+
         if service_online:
             driver_status["can_capture_live"] = True
             driver_status["active_engine"] = "WinDivert (Windows Service)"
             driver_status["remediation_guide"] = "DDoS-Guard Windows Service is active and ready."
+        elif svc_state.get("installed") and svc_state.get("status") == "STOPPED":
+            driver_status["can_capture_live"] = False
+            driver_status["active_engine"] = "None"
+            driver_status["remediation_guide"] = "DDoS-Guard Service is installed but stopped. Starting a scan will request permission to start it."
+        elif not svc_state.get("installed"):
+            driver_status["can_capture_live"] = False
+            driver_status["active_engine"] = "None"
+            driver_status["remediation_guide"] = "DDoS-Guard Service is not installed. Run 'service_manager.ps1 Install' as Administrator."
         return jsonify({
             "status": "success",
             "adapter": adapter,
-            "driver_status": driver_status
+            "driver_status": driver_status,
+            "service_state": svc_state
         }), 200
     except Exception as e:
         return jsonify({
@@ -517,6 +543,25 @@ def get_adapter_info():
             "message": str(e)
         }), 500
 
+
+@app.route('/api/service-status', methods=['GET'])
+def get_service_status_route():
+    """Returns unprivileged Windows Service state and IPC probe status."""
+    try:
+        st = get_service_status(include_ipc=True)
+        return jsonify({"status": "success", "service": st}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/service-start', methods=['POST'])
+def start_service_route():
+    """Requests scoped UAC elevation to start the DDoSGuardSnifferService."""
+    try:
+        res = request_service_start(timeout=6.0)
+        return jsonify(res), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/api/scan', methods=['GET', 'POST'])
@@ -530,6 +575,30 @@ def start_scan():
                 "message": "A network scan is already in progress.",
                 "scan_id": current_scan_session["scan_id"]
             }), 200
+
+        # Health check: If service is installed but stopped, request scoped UAC startup
+        svc_state = get_service_status(include_ipc=True)
+        if not svc_state.get("ipc_online") and svc_state.get("installed") and svc_state.get("status") == "STOPPED":
+            uac_res = request_service_start(timeout=8.0)
+            if uac_res.get("status") == "uac_cancelled":
+                return jsonify({
+                    "status": "uac_cancelled",
+                    "error_type": "UAC_CANCELLED",
+                    "error": uac_res.get("message"),
+                    "message": uac_res.get("message"),
+                    "service_state": get_service_status(include_ipc=True)
+                }), 200
+            elif uac_res.get("status") == "start_failed":
+                return jsonify({
+                    "status": "error",
+                    "error_type": "SERVICE_START_FAILED",
+                    "error": uac_res.get("message"),
+                    "message": uac_res.get("message"),
+                    "log_tail": uac_res.get("log_tail", []),
+                    "service_state": get_service_status(include_ipc=True)
+                }), 200
+            # Refresh verified service state after startup
+            svc_state = get_service_status(include_ipc=True)
 
         try:
             adapter_info, driver_info = auto_detect_primary_interface()
@@ -561,6 +630,8 @@ def start_scan():
             "packets_captured": 0,
             "interface": adapter_info,
             "driver_status": driver_info,
+            "service_state": svc_state,
+            "is_live_capture": bool(svc_state.get("running") and svc_state.get("ipc_online")),
             "prediction": None,
             "label": None,
             "is_attack": False,
@@ -582,9 +653,11 @@ def start_scan():
 
 @app.route('/api/scan-status', methods=['GET'])
 def get_scan_status():
-    """Polls the active scan session state."""
+    """Polls the active scan session state with synchronized service state."""
     with scan_session_lock:
-        return jsonify(current_scan_session), 200
+        resp = dict(current_scan_session)
+    resp["service_state"] = get_service_status(include_ipc=True)
+    return jsonify(resp), 200
 
 
 @app.route('/api/scan-stop', methods=['GET', 'POST'])

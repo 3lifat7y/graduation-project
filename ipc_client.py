@@ -119,21 +119,20 @@ class DDoSGuardIPCClient:
 
         t = timeout or self.timeout
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(t)
-            s.connect((self.host, self.port))
-            msg = json.dumps(req) + "\n"
-            s.sendall(msg.encode("utf-8"))
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(t)
+                s.connect((self.host, self.port))
+                msg = json.dumps(req) + "\n"
+                s.sendall(msg.encode("utf-8"))
 
-            buf = b""
-            while not buf.endswith(b"\n"):
-                chunk = s.recv(4096)
-                if not chunk:
-                    break
-                buf += chunk
-                if len(buf) > 131072:
-                    break
-            s.close()
+                buf = b""
+                while not buf.endswith(b"\n"):
+                    chunk = s.recv(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    if len(buf) > 131072:
+                        break
 
             if not buf:
                 return {"status": "error", "message": "Empty response from service."}

@@ -113,8 +113,43 @@ const adapterIcon = document.getElementById("adapterIcon");
 
 
 // ==============================================================================
-// 1. Adapter Discovery & Initialization
+// 1. Adapter Discovery & Windows Service Status Synchronization
 // ==============================================================================
+function updateServiceBadge(svc, drv) {
+  if (!driverStatusBadge) return;
+  if (!svc && !drv) return;
+
+  svc = svc || {};
+  drv = drv || {};
+
+  const statusStr = (svc.status || "").toUpperCase();
+  const isRunning = svc.running === true || statusStr === "RUNNING";
+  const isPending = statusStr === "START_PENDING";
+  const isStopped = statusStr === "STOPPED" || statusStr === "STOP_PENDING";
+
+  if (isRunning) {
+    if (svc.ipc_online !== false) {
+      driverStatusBadge.textContent = "Service: Running";
+      driverStatusBadge.className = "driver-badge driver-ready";
+    } else {
+      driverStatusBadge.textContent = "Service: Running (Connecting...)";
+      driverStatusBadge.className = "driver-badge driver-pending";
+    }
+  } else if (isPending) {
+    driverStatusBadge.textContent = "Service: Starting...";
+    driverStatusBadge.className = "driver-badge driver-pending";
+  } else if (svc.installed) {
+    driverStatusBadge.textContent = `Service: ${svc.status || "Stopped"}`;
+    driverStatusBadge.className = "driver-badge driver-stopped";
+  } else if (drv.can_capture_live) {
+    driverStatusBadge.textContent = "WinDivert: Ready";
+    driverStatusBadge.className = "driver-badge driver-ready";
+  } else {
+    driverStatusBadge.textContent = "Service: Not Installed";
+    driverStatusBadge.className = "driver-badge driver-stopped";
+  }
+}
+
 async function loadAdapterInfo() {
   try {
     const res = await fetch(`${API_BASE_URL}/adapter-info`);
@@ -124,6 +159,7 @@ async function loadAdapterInfo() {
     if (data.status === "success" && data.adapter) {
       const ad = data.adapter;
       const drv = data.driver_status || {};
+      const svc = data.service_state || drv.service_state || {};
 
       if (adapterName) adapterName.textContent = `${ad.name} (${ad.type})`;
       if (adapterIp) adapterIp.textContent = `IP: ${ad.primary_ip || "DHCP"}`;
@@ -132,15 +168,7 @@ async function loadAdapterInfo() {
         adapterIcon.className = (ad.type === "Ethernet") ? "fas fa-ethernet" : "fas fa-wifi";
       }
 
-      if (driverStatusBadge) {
-        if (drv.can_capture_live) {
-          driverStatusBadge.textContent = "WinDivert: Ready";
-          driverStatusBadge.className = "driver-badge driver-ready";
-        } else {
-          driverStatusBadge.textContent = "WinDivert (Admin needed)";
-          driverStatusBadge.className = "driver-badge";
-        }
-      }
+      updateServiceBadge(svc, drv);
     }
   } catch (err) {
     console.warn("Could not load adapter info:", err);
@@ -156,6 +184,11 @@ window.addEventListener("DOMContentLoaded", loadAdapterInfo);
 // ==============================================================================
 function setUIState(state, payload = {}) {
   if (!stateBadge) return;
+
+  // Immediately synchronize service badge if state payload includes it
+  if (payload && (payload.service_state || payload.driver_status)) {
+    updateServiceBadge(payload.service_state, payload.driver_status);
+  }
 
   // Reset badge class
   stateBadge.className = `status-indicator-badge state-${state}`;
@@ -266,6 +299,29 @@ function setUIState(state, payload = {}) {
       }
       break;
 
+    case "uac_cancelled":
+      isScanning = false;
+      stateBadge.textContent = "Elevation Cancelled";
+      checkBtn.disabled = false;
+      checkBtn.innerHTML = '<i class="fas fa-search"></i> Scan Network';
+      stopBtn.style.display = "none";
+
+      if (labelEl) {
+        labelEl.textContent = "Notice";
+        labelEl.style.color = "#ff9800";
+      }
+      if (statusEl) {
+        statusEl.textContent = "Administrator approval was cancelled. You can scan simulated traffic with 'python send_traffic.py' or click 'Scan Network' again to approve the Windows prompt.";
+        statusEl.style.color = "#ff9800";
+      }
+      if (diagnosticAlert) {
+        diagnosticAlert.style.display = "flex";
+        if (diagnosticMsg) {
+          diagnosticMsg.textContent = payload.message || "Administrator approval was cancelled. Live packet capture requires starting the background service.";
+        }
+      }
+      break;
+
     case "error":
       isScanning = false;
       stateBadge.textContent = "Scan Error";
@@ -284,7 +340,11 @@ function setUIState(state, payload = {}) {
       if (diagnosticAlert) {
         diagnosticAlert.style.display = "flex";
         if (diagnosticMsg) {
-          diagnosticMsg.textContent = payload.error || payload.message || "Driver or permissions error. Run terminal as Administrator for WinDivert.";
+          let errDetail = payload.error || payload.message || "Driver or permissions error.";
+          if (payload.log_tail && Array.isArray(payload.log_tail) && payload.log_tail.length > 0) {
+            errDetail += `\n\n[Service Log Details]:\n${payload.log_tail.slice(-5).join("\n")}`;
+          }
+          diagnosticMsg.textContent = errDetail;
         }
       }
       break;
@@ -320,6 +380,19 @@ async function startScan() {
       return;
     }
 
+    const startData = await res.json().catch(() => ({}));
+    if (startData.service_state || startData.driver_status) {
+      updateServiceBadge(startData.service_state, startData.driver_status);
+    }
+    if (startData.status === "uac_cancelled") {
+      setUIState("uac_cancelled", startData);
+      return;
+    }
+    if (startData.status === "error" || startData.error_type === "SERVICE_START_FAILED") {
+      setUIState("error", startData);
+      return;
+    }
+
     // Begin active status polling
     if (scanPollInterval) clearInterval(scanPollInterval);
     scanPollInterval = setInterval(pollScanStatus, 400);
@@ -344,10 +417,19 @@ async function pollScanStatus() {
     if (!res.ok) return;
     const data = await res.json();
 
+    // Synchronize live service badge state during active scanning
+    if (data.service_state || data.driver_status) {
+      updateServiceBadge(data.service_state, data.driver_status);
+    }
+
     const status = data.status;
     if (status === "scanning") {
       const elapsed = ((Date.now() - scanStartTime) / 1000).toFixed(1);
-      if (statusEl) statusEl.textContent = `Sniffing live packets on ${data.interface?.name || "adapter"} (${elapsed}s elapsed)...`;
+      const pkts = data.packets_captured !== undefined ? data.packets_captured : 0;
+      const iface = data.interface?.name || "adapter";
+      if (statusEl) {
+        statusEl.textContent = `Sniffing live packets on ${iface} (${pkts} packets captured, ${elapsed}s elapsed)...`;
+      }
     } else if (status === "processing") {
       setUIState("processing", data);
     } else if (status === "prediction_available") {
@@ -367,6 +449,23 @@ async function pollScanStatus() {
     console.warn("Polling error:", err);
   }
 }
+
+async function syncServiceStatus() {
+  if (isScanning) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/service-status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.status === "success" && data.service) {
+      updateServiceBadge(data.service);
+    }
+  } catch (err) {
+    // Ignore background polling error
+  }
+}
+
+// Keep badge synchronized in real-time every 5 seconds when idle
+setInterval(syncServiceStatus, 5000);
 
 async function stopScan(silent = false) {
   if (scanPollInterval) {

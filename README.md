@@ -86,6 +86,7 @@ powershell -ExecutionPolicy Bypass -File .\service_manager.ps1 Status
 Grad project/
 ├── api.py                      # Flask REST API & Web Dashboard backend
 ├── ddos_guard_service.py       # Windows Sniffer Service & Secure Local IPC capture engine
+├── service_helper.py           # Unprivileged SCM query helper & scoped UAC elevation manager
 ├── ipc_client.py               # Resilient local IPC client with auto-reconnect & token auth
 ├── feature_extraction2.py      # Real-time 77 network flow feature extractor
 ├── network_detector.py         # Network interface discovery & driver validation
@@ -93,6 +94,7 @@ Grad project/
 ├── send_traffic.py             # Realistic attack and benign traffic flow simulator
 ├── read_features.py            # Feature extractor & JSON dataset generator
 ├── service_manager.ps1         # Windows Service lifecycle manager (Install/Start/Stop)
+├── test_service_architecture.py # Non-privileged service architecture & pipeline verification suite
 ├── run_ddos_guard.bat          # One-click Windows launcher for Web UI
 ├── simulate_attack.bat         # One-click Windows launcher for attack simulator
 ├── requirements.txt            # Python dependencies
@@ -109,12 +111,15 @@ Grad project/
 
 ## 🧪 Testing
 
-Run the focused test suites:
+Run the verification test suites:
 ```powershell
-# IPC Authentication and security test suite
+# Non-privileged Service Architecture & Pipeline Verification (7 automated tests)
+python test_service_architecture.py
+
+# IPC Authentication and security test suite (requires service running)
 python test_ipc_auth.py
 
-# End-to-end Flask integration test
+# End-to-end Flask integration test (requires service running)
 python test_flask_ipc_live.py
 ```
 

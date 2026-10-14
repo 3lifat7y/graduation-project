@@ -22,6 +22,8 @@ import socket
 import secrets
 import threading
 import hmac
+import logging
+import logging.handlers
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 
@@ -32,6 +34,31 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+LOG_FILE = PROJECT_ROOT / "ddos_guard_service.log"
+
+def get_service_logger() -> logging.Logger:
+    logger = logging.getLogger("DDoSGuardService")
+    if not logger.handlers:
+        logger.setLevel(logging.DEBUG)
+        try:
+            fh = logging.handlers.RotatingFileHandler(
+                str(LOG_FILE), maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+            )
+            formatter = logging.Formatter(
+                "%(asctime)s [%(levelname)s] [PID:%(process)d/TID:%(thread)d] %(name)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S"
+            )
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+        except Exception:
+            pass
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+        logger.addHandler(ch)
+    return logger
+
+logger = get_service_logger()
 
 from feature_extraction2 import FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES
 from network_detector import auto_detect_primary_interface, is_admin_user
@@ -376,34 +403,106 @@ class DDoSGuardWindowsService(win32serviceutil.ServiceFramework if HAS_WIN32 els
     _svc_name_ = "DDoSGuardSnifferService"
     _svc_display_name_ = "DDoS-Guard Network Sniffer Service"
     _svc_description_ = "DDoS-Guard kernel packet capture engine running WinDivert in monitor-only mode."
+    _exe_name_ = str(PROJECT_ROOT / ".venv" / "pythonservice.exe")
+    _exe_path_ = str(PROJECT_ROOT / ".venv" / "pythonservice.exe")
 
     def __init__(self, args):
-        if HAS_WIN32:
-            super().__init__(args)
-            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
-        self.worker = CaptureWorker()
-        self.ipc_server = SecureIPCServer(self.worker)
+        logger.info(f"DDoSGuardWindowsService.__init__ called (PID: {os.getpid()})")
+        try:
+            if HAS_WIN32:
+                super().__init__(args)
+                self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+            self.worker = CaptureWorker()
+            self.ipc_server = SecureIPCServer(self.worker, host=IPC_HOST, port=IPC_PORT)
+            self.server_thread = None
+            logger.info("DDoSGuardWindowsService instance initialized successfully.")
+        except Exception as e:
+            logger.exception(f"FATAL Exception in DDoSGuardWindowsService.__init__: {e}")
+            raise
 
     def SvcStop(self):
-        if HAS_WIN32:
-            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            win32event.SetEvent(self.hWaitStop)
-        self.ipc_server.stop()
-        self.worker.stop_window()
+        logger.info("SvcStop signal received. Initiating graceful shutdown...")
+        try:
+            if HAS_WIN32:
+                self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+                win32event.SetEvent(self.hWaitStop)
+            if self.ipc_server:
+                self.ipc_server.stop()
+            if self.worker:
+                self.worker.stop_window()
+            logger.info("SvcStop completed successfully.")
+        except Exception as e:
+            logger.exception(f"Exception during SvcStop: {e}")
 
     def SvcDoRun(self):
-        if HAS_WIN32:
-            servicemanager.LogMsg(
-                servicemanager.EVENTLOG_INFORMATION_TYPE,
-                servicemanager.PYS_SERVICE_STARTED,
-                (self._svc_name_, "")
+        logger.info(f"SvcDoRun started for {self._svc_name_} (PID: {os.getpid()})")
+        try:
+            if HAS_WIN32:
+                # 1. Immediately report SERVICE_START_PENDING to prevent SCM 7000/7009 timeouts
+                self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
+                try:
+                    servicemanager.LogMsg(
+                        servicemanager.EVENTLOG_INFORMATION_TYPE,
+                        servicemanager.PYS_SERVICE_STARTED,
+                        (self._svc_name_, "")
+                    )
+                except Exception:
+                    pass
+
+            # 2. Ensure sys.path includes PROJECT_ROOT and virtual environment site-packages
+            if str(PROJECT_ROOT) not in sys.path:
+                sys.path.insert(0, str(PROJECT_ROOT))
+            site_packages = PROJECT_ROOT / ".venv" / "Lib" / "site-packages"
+            if site_packages.exists() and str(site_packages) not in sys.path:
+                sys.path.insert(1, str(site_packages))
+
+            # 3. Start IPC server in dedicated daemon thread
+            logger.info(f"Starting SecureIPCServer on {IPC_HOST}:{IPC_PORT}...")
+            self.server_thread = threading.Thread(
+                target=self._run_ipc_server,
+                daemon=True,
+                name="IPCServerThread"
             )
-        server_thread = threading.Thread(target=self.ipc_server.start, daemon=True)
-        server_thread.start()
-        if HAS_WIN32:
-            win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
-        else:
-            server_thread.join()
+            self.server_thread.start()
+
+            # 4. Wait briefly to ensure server bound successfully
+            time.sleep(0.4)
+            if not self.ipc_server or not self.ipc_server.running:
+                raise RuntimeError(f"IPC Server failed to bind to {IPC_HOST}:{IPC_PORT}.")
+
+            # 5. CRITICAL: Report SERVICE_RUNNING to Windows SCM
+            if HAS_WIN32:
+                self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+            logger.info(f"Reported SERVICE_RUNNING to Windows SCM. {self._svc_name_} is now ACTIVE.")
+
+            # 6. Block until service stop event is signaled
+            if HAS_WIN32:
+                win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
+            else:
+                self.server_thread.join()
+
+            logger.info("Service stop event signaled. Exiting SvcDoRun loop.")
+        except Exception as e:
+            logger.exception(f"FATAL Exception in SvcDoRun: {e}")
+            if HAS_WIN32:
+                try:
+                    self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+                except Exception:
+                    pass
+            raise
+        finally:
+            if HAS_WIN32:
+                try:
+                    self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+                except Exception:
+                    pass
+            logger.info(f"SvcDoRun finished: Reported SERVICE_STOPPED for {self._svc_name_}.")
+
+    def _run_ipc_server(self):
+        try:
+            self.ipc_server.start()
+        except Exception as e:
+            logger.exception(f"IPC server thread crashed: {e}")
 
 
 def main():
@@ -436,7 +535,8 @@ def main():
             servicemanager.Initialize()
             servicemanager.PrepareToHostSingle(DDoSGuardWindowsService)
             servicemanager.StartServiceCtrlDispatcher()
-        except Exception:
+        except Exception as e:
+            logger.exception(f"SCM Dispatcher exception: {e}")
             win32serviceutil.HandleCommandLine(DDoSGuardWindowsService)
     else:
         # CLI management commands: install, remove, start, stop, restart, debug
