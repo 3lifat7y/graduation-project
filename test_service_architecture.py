@@ -19,6 +19,8 @@ import sys
 import json
 import time
 import struct
+import logging
+import logging.handlers
 import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock

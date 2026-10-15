@@ -174,6 +174,32 @@ class DDoSGuardIPCClient:
         res = self.ping()
         return bool(res.get("pong", False))
 
+    def verify_authenticated_health(self) -> Tuple[bool, str]:
+        """
+        Conducts an authenticated IPC health probe verifying both TCP connectivity
+        and HMAC authentication token acceptance.
+        Returns:
+            (is_healthy: bool, details_message: str)
+        """
+        tok = self._get_token()
+        if not tok:
+            tok = self._get_token(force_refresh=True)
+        if not tok:
+            return False, "No provisioned IPC authentication secret found on disk or environment."
+
+        resp = self.get_scan_status(scan_id="__ipc_auth_health_probe__")
+        status = resp.get("status")
+        if status in ["waiting", "ready", "stopped", "captured", "scanning", "insufficient_traffic"]:
+            return True, "Authenticated IPC connection verified healthy."
+        elif status == "service_unavailable":
+            return False, resp.get("message", "Service is offline or not listening.")
+        elif status == "error" and "Unauthorized" in resp.get("message", ""):
+            return False, f"IPC authentication failed: {resp.get('message')}"
+        elif status == "timeout":
+            return False, "IPC server communication timed out."
+        else:
+            return False, f"IPC health check returned unexpected status: {resp.get('message') or status}"
+
     def get_status(self) -> Dict[str, Any]:
         return self._send_command("STATUS")
 

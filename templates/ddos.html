@@ -3,247 +3,757 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI-Based DDoS Detection</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <meta name="description" content="DDoS-Guard: AI-Powered Real-Time Intrusion & DDoS Detection System with 77-Feature Flow Telemetry and Multi-Class Classification." />
+  <meta name="theme-color" content="#070913" />
+  <title>DDoS-Guard — AI-Based Real-Time Intrusion & DDoS Detection</title>
+
+  <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- DDoS-Guard Design System -->
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
 <body>
-    <header class="site-header" id="top">
-    <div class="header-inner">
-      <a class="logo" href="/"><i class="fas fa-shield-virus"></i> DDoS-Guard</a>
+  <!-- Ambient Backdrop Glows -->
+  <div class="ambient-glow glow-top" aria-hidden="true"></div>
+  <div class="ambient-glow glow-scanner" aria-hidden="true"></div>
 
-      <nav class="main-nav" aria-label="Main Navigation">
-        <a href="#info">Info</a>
-        <a href="#check-connection">Check Connection</a>
-        <a href="#team">Team</a>
+  <!-- Sticky Cyber Header / Navigation -->
+  <header class="site-header" id="top">
+    <div class="header-inner">
+      <a class="logo" href="#top" aria-label="DDoS-Guard Homepage">
+        <div class="logo-shield">
+          <i class="fas fa-shield-halved"></i>
+          <span class="logo-core-pulse"></span>
+        </div>
+        <span class="logo-text">DDoS<span class="logo-accent">-Guard</span></span>
+        <span class="logo-badge">SOC v2.5</span>
+      </a>
+
+      <nav class="main-nav" id="mainNav" aria-label="Main Navigation">
+        <a href="#overview" class="nav-link active">Overview</a>
+        <a href="#check-connection" class="nav-link">Live Scanner</a>
+        <a href="#threat-intelligence" class="nav-link">Threat Vectors</a>
+        <a href="#prevention" class="nav-link">Mitigation</a>
+        <a href="#team" class="nav-link">Team</a>
       </nav>
 
-      <button class="header-cta" onclick="document.getElementById('check-connection').scrollIntoView({behavior:'smooth'})">
-        <i class="fas fa-network-wired"></i> Quick Check
-      </button>
+      <div class="header-actions">
+        <div class="system-health-pill" id="systemHealthPill" title="Windows Sniffer Service Status">
+          <span class="health-dot" id="headerHealthDot"></span>
+          <span class="health-label" id="headerHealthLabel">Service Checking...</span>
+        </div>
+
+        <button class="header-cta" id="headerQuickCheckBtn" type="button" aria-label="Jump to Live Scanner">
+          <i class="fas fa-satellite-dish"></i>
+          <span>Launch Scanner</span>
+        </button>
+
+        <button class="menu-toggle" id="menuToggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mainNav">
+          <i class="fas fa-bars"></i>
+        </button>
+      </div>
     </div>
   </header>
 
-<section class="ai-ddos-section">
-  <div class="background-icon">
-    <i class="fas fa-shield-alt"></i>
-  </div>
+  <main>
+    <!-- Section 1: Hero Overview -->
+    <section class="hero-section" id="overview">
+      <div class="hero-container">
+        <div class="hero-content">
+          <div class="hero-eyebrow">
+            <span class="eyebrow-pill"><i class="fas fa-brain"></i> Machine Learning Engine</span>
+            <span class="eyebrow-divider">•</span>
+            <span class="eyebrow-text">CIC-IDS2017 Benchmark Verified</span>
+          </div>
 
-  <div class="section-content flex-layout">
-    <div class="ai-ddos-text">
-      <h2>AI-Based DDoS Detection</h2>
-      <p>This project focuses on using Artificial Intelligence (AI) to detect Distributed Denial of Service (DDoS) attacks in real time. DDoS attacks overwhelm servers or networks with massive traffic, causing services to slow down or crash. By leveraging AI and machine learning algorithms, the system can automatically analyze network traffic patterns, identify abnormal behavior, and respond quickly to prevent service disruption.</p>
-      <h3>Importance:</h3>
-      <ul>
-        <li>Enhances network security by detecting attacks faster than traditional methods.</li>
-        <li>Reduces downtime and service disruption for websites and applications.</li>
-        <li>Helps organizations protect sensitive data and maintain trust with users.</li>
-        <li>Provides an intelligent, adaptive defense that evolves with new attack patterns.</li>
-      </ul>
-    </div>
+          <h1 class="hero-title">
+            Enterprise <span class="gradient-text">AI-Driven DDoS</span> Detection & Threat Telemetry
+          </h1>
 
-    <div class="ai-ddos-img-wrap">
-      <img src="/static/images/ddos00.jpg" alt="AI-Based DDoS Detection Image" />
-    </div>
-  </div>
-</section>
+          <p class="hero-description">
+            Autonomous network traffic inspection powered by kernel-level packet sniffing and 77-feature bidirectional flow extraction. Neutralize volumetric floods, reflection attacks, and protocol exploits before service disruption.
+          </p>
 
-<section class="slider-section" id="info">
-  <h2 class="slider-title">
-    <i class="fas fa-info-circle"></i>
-    Information About DDoS Attacks
-  </h2>
+          <div class="hero-stats-grid">
+            <div class="hero-stat-card">
+              <span class="stat-number">15</span>
+              <span class="stat-label">Attack Classes</span>
+            </div>
+            <div class="hero-stat-card">
+              <span class="stat-number">77</span>
+              <span class="stat-label">Flow Features</span>
+            </div>
+            <div class="hero-stat-card">
+              <span class="stat-number">99.86%</span>
+              <span class="stat-label">Threat Recall</span>
+            </div>
+            <div class="hero-stat-card">
+              <span class="stat-number">&lt; 1.0s</span>
+              <span class="stat-label">Inference Time</span>
+            </div>
+          </div>
 
-  <section class="slider">
-
-    <div class="card-container">
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos2.jpg" alt="DrDoS_DNS" /></div><h3>DrDoS_DNS</h3><p>DNS-based Distributed Reflection DDoS. Attackers exploit open DNS resolvers to flood a target with amplified traffic.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos3.jpg" alt="DrDoS_LDAP" /></div><h3>DrDoS_LDAP</h3><p>LDAP-based Distributed Reflection DDoS. Uses LDAP servers to reflect and amplify attack traffic.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos4.jpg" alt="DrDoS_MSSQL" /></div><h3>DrDoS_MSSQL</h3><p>Microsoft SQL-based Distributed Reflection DDoS. Leverages exposed MSSQL servers to generate large response traffic.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos5.jpg" alt="DrDoS_NTP" /></div><h3>DrDoS_NTP</h3><p>NTP-based Distributed Reflection DDoS. Exploits Network Time Protocol servers using the "monlist" command.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos6.jpg" alt="DrDoS_NetBIOS" /></div><h3>DrDoS_NetBIOS</h3><p>NetBIOS-based Distributed Reflection DDoS. Abuses NetBIOS services in Windows systems.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos7.jpg" alt="DrDoS_SNMP" /></div><h3>DrDoS_SNMP</h3><p>SNMP-based Distributed Reflection DDoS. Takes advantage of SNMP devices.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos8.jpg" alt="DrDoS_SSDP" /></div><h3>DrDoS_SSDP</h3><p>SSDP-based Distributed Reflection DDoS. Uses IoT devices for amplification.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos9.jpg" alt="DrDoS_UDP" /></div><h3>DrDoS_UDP</h3><p>UDP-based Distributed Reflection DDoS. General UDP reflection attack.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos10.jpg" alt="LDAP" /></div><h3>LDAP</h3><p>Direct LDAP flood attack. High volumes of LDAP requests.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos11.jpg" alt="MSSQL" /></div><h3>MSSQL</h3><p>Direct MSSQL flood attack. Excessive SQL requests.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos12.jpg" alt="NetBIOS" /></div><h3>NetBIOS</h3><p>Direct NetBIOS flood attack. Overloads Windows services.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos13.jpg" alt="Portmap" /></div><h3>Portmap</h3><p>Port mapping-based flood attack. Exploits RPC service.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos14.jpg" alt="SYN" /></div><h3>Syn</h3><p>SYN flood attack. Incomplete TCP handshakes.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos15.jpg" alt="TFTP" /></div><h3>TFTP</h3><p>Trivial File Transfer Protocol flood attack.</p></div>
-      <div class="card"><div class="img-wrap"><img src="/static/images/ddos16.jpg" alt="UDP" /></div><h3>UDP</h3><p>UDP flood attack. Overwhelms with UDP packets.</p></div>
-    </div>
-
-    <button class="prev"><i class="fas fa-chevron-left"></i></button>
-    <button class="next"><i class="fas fa-chevron-right"></i></button>
-  </section>
-</section>
-
-<section class="attack-explain-section" id="attacks">
-  <h2 class="section-title"><i class="fas fa-exclamation-triangle"></i> Common DDoS Attack Types</h2>
-  <div class="attack-cards">
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos2.jpg" alt="DrDoS_DNS" /></div>
-      <h4>DrDoS_DNS</h4>
-      <p>DNS-based reflection attack using open DNS resolvers to amplify traffic.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos3.jpg" alt="DrDoS_LDAP" /></div>
-      <h4>DrDoS_LDAP</h4>
-      <p>LDAP reflection/amplification using exposed LDAP servers.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos4.jpg" alt="DrDoS_MSSQL" /></div>
-      <h4>DrDoS_MSSQL</h4>
-      <p>MSSQL-based reflection attack leveraging poorly configured SQL servers.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos5.jpg" alt="DrDoS_NTP" /></div>
-      <h4>DrDoS_NTP</h4>
-      <p>NTP amplification using the "monlist" command to generate large responses.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos6.jpg" alt="DrDoS_NetBIOS" /></div>
-      <h4>DrDoS_NetBIOS</h4>
-      <p>NetBIOS-based reflection or direct floods targeting Windows services.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos7.jpg" alt="DrDoS_SNMP" /></div>
-      <h4>DrDoS_SNMP</h4>
-      <p>SNMP devices abused for reflection and amplification.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos8.jpg" alt="DrDoS_SSDP" /></div>
-      <h4>DrDoS_SSDP</h4>
-      <p>SSDP/UPnP-based amplification commonly seen with IoT devices.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos9.jpg" alt="DrDoS_UDP" /></div>
-      <h4>DrDoS_UDP</h4>
-      <p>General UDP reflection attacks using various services for amplification.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos10.jpg" alt="LDAP" /></div>
-      <h4>LDAP</h4>
-      <p>Direct LDAP flood: high volume of LDAP requests to overwhelm servers.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos11.jpg" alt="MSSQL" /></div>
-      <h4>MSSQL</h4>
-      <p>Direct MSSQL flood: excessive SQL queries causing resource exhaustion.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos12.jpg" alt="NetBIOS" /></div>
-      <h4>NetBIOS</h4>
-      <p>Floods targeting NetBIOS services on Windows hosts.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos13.jpg" alt="Portmap" /></div>
-      <h4>Portmap</h4>
-      <p>Portmap/RPC-based floods exploiting open RPC services.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos14.jpg" alt="Syn" /></div>
-      <h4>Syn</h4>
-      <p>SYN flood: incomplete TCP handshakes that exhaust connection tables.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos15.jpg" alt="TFTP" /></div>
-      <h4>TFTP</h4>
-      <p>TFTP floods using trivial file transfer protocol servers for high traffic.</p>
-    </div>
-    <div class="attack-card">
-      <div class="attack-img"><img src="/static/images/ddos16.jpg" alt="UDP" /></div>
-      <h4>UDP</h4>
-      <p>UDP flood attack: overwhelming targets with UDP packets.</p>
-    </div>
-  </div>
-</section>
-
-<section class="check-connection" id="check-connection">
-  <h2><i class="fas fa-satellite-dish"></i> Live Network Traffic & DDoS Scanner</h2>
-  <p>Real-time AI packet inspection across active network adapters (Wi-Fi / Ethernet).</p>
-
-  <div class="adapter-chip-container">
-    <div class="adapter-chip" id="adapterChip">
-      <i class="fas fa-wifi" id="adapterIcon"></i>
-      <span id="adapterName">Detecting Network Adapter...</span>
-      <span class="chip-divider">|</span>
-      <span id="adapterIp">IPv4: Checking...</span>
-      <span class="chip-divider">|</span>
-      <span id="driverStatusBadge" class="driver-badge">Driver: Checking...</span>
-    </div>
-  </div>
-
-  <div class="connection-wrapper">
-    <div class="connection-box">
-      <div class="status-indicator-badge state-ready" id="stateBadge">Ready</div>
-      <div class="btn-group-scan">
-        <button id="checkBtn" class="check-btn"><i class="fas fa-search"></i> Scan Network</button>
-        <button id="stopBtn" class="stop-btn" type="button" aria-live="polite"><i class="fas fa-times-circle"></i> Cancel Scan</button>
-      </div>
-      <p id="connectionStatus">System ready. Click 'Scan Network' to capture live traffic.</p>
-    </div>
-    <div class="connection-result">
-      <i class="fas fa-shield-alt result-icon" id="resultIcon"></i>
-      <div class="result-header">
-        <h3>Result:</h3>
-        <div id="connectionStatusText" class="result-label">Waiting for scan...</div>
-      </div>
-      <p id="connectionRate">Confidence: --%</p>
-      
-      <div class="telemetry-grid" id="telemetryGrid" style="display:none;">
-        <div class="telemetry-item">
-          <span class="t-label">Packets</span>
-          <span class="t-value" id="telemetryPkts">0</span>
+          <div class="hero-cta-group">
+            <button class="btn-primary" id="heroStartScanBtn" type="button" onclick="document.getElementById('check-connection').scrollIntoView({behavior:'smooth'})">
+              <i class="fas fa-satellite-dish"></i> Start Live Scan
+            </button>
+            <a href="#threat-intelligence" class="btn-secondary">
+              <i class="fas fa-shield-virus"></i> Threat Knowledgebase
+            </a>
+          </div>
         </div>
-        <div class="telemetry-item">
-          <span class="t-label">Duration</span>
-          <span class="t-value" id="telemetryDuration">0.0 ms</span>
-        </div>
-        <div class="telemetry-item">
-          <span class="t-label">Rate</span>
-          <span class="t-value" id="telemetryThroughput">0.0 KB/s</span>
-        </div>
-        <div class="telemetry-item">
-          <span class="t-label">Protocol</span>
-          <span class="t-value" id="telemetryProtocol">--</span>
+
+        <div class="hero-visual">
+          <div class="cyber-console-card">
+            <div class="console-card-header">
+              <div class="console-card-dots">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-amber"></span>
+                <span class="dot dot-green"></span>
+              </div>
+              <span class="console-card-title">ddos_guard_core.sys</span>
+              <span class="console-badge-active">ACTIVE DEFENSE</span>
+            </div>
+
+            <div class="console-pipeline">
+              <div class="pipeline-node">
+                <div class="node-icon"><i class="fas fa-network-wired"></i></div>
+                <div class="node-meta">
+                  <span class="node-title">Kernel Sniffer</span>
+                  <span class="node-desc">WinDivert Flag.SNIFF</span>
+                </div>
+                <span class="node-badge-ok">ACTIVE</span>
+              </div>
+              <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
+
+              <div class="pipeline-node">
+                <div class="node-icon"><i class="fas fa-layer-group"></i></div>
+                <div class="node-meta">
+                  <span class="node-title">Feature Engine</span>
+                  <span class="node-desc">77 Bidirectional Metrics</span>
+                </div>
+                <span class="node-badge-ok">STREAMING</span>
+              </div>
+              <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
+
+              <div class="pipeline-node highlight">
+                <div class="node-icon"><i class="fas fa-microchip"></i></div>
+                <div class="node-meta">
+                  <span class="node-title">XGBoost Classifier</span>
+                  <span class="node-desc">Champion Multi-Class Model</span>
+                </div>
+                <span class="node-badge-ai">INFERENCE</span>
+              </div>
+            </div>
+
+            <div class="console-footer-telemetry">
+              <div class="telemetry-pill">
+                <span class="lbl">IPC Port:</span>
+                <span class="val">127.0.0.1:50505</span>
+              </div>
+              <div class="telemetry-pill">
+                <span class="lbl">Auth:</span>
+                <span class="val">HMAC-SHA256</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+    </section>
 
-      <div class="diagnostic-alert" id="diagnosticAlert" style="display:none;">
-        <i class="fas fa-exclamation-triangle"></i>
-        <span id="diagnosticMsg"></span>
+    <!-- Section 2: Live Network Scanner & Telemetry Command Center -->
+    <section class="scanner-section" id="check-connection">
+      <div class="section-container">
+        <div class="section-header text-center">
+          <div class="section-badge">
+            <i class="fas fa-radar"></i> Live Threat Telemetry
+          </div>
+          <h2 class="section-title">Live Network Traffic & DDoS Scanner</h2>
+          <p class="section-subtitle">
+            Real-time packet inspection across physical and wireless adapters with sub-second AI inference.
+          </p>
+        </div>
+
+        <!-- Adapter Discovery & Driver HUD -->
+        <div class="adapter-chip-container">
+          <div class="adapter-chip" id="adapterChip" role="status" aria-live="polite">
+            <div class="chip-segment">
+              <i class="fas fa-wifi" id="adapterIcon" aria-hidden="true"></i>
+              <span id="adapterName">Detecting Network Adapter...</span>
+            </div>
+            <span class="chip-divider" aria-hidden="true">|</span>
+            <div class="chip-segment">
+              <i class="fas fa-network-wired" aria-hidden="true"></i>
+              <span id="adapterIp">IPv4: Checking...</span>
+            </div>
+            <span class="chip-divider" aria-hidden="true">|</span>
+            <div class="chip-segment">
+              <span id="driverStatusBadge" class="driver-badge">Driver: Checking...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Central Scanner Workstation -->
+        <div class="connection-wrapper">
+          <!-- Control Console -->
+          <div class="connection-box" id="scannerConsole">
+            <div class="box-top-bar">
+              <span class="panel-eyebrow"><i class="fas fa-terminal"></i> Scan Controller</span>
+              <div class="status-indicator-badge state-ready" id="stateBadge" aria-live="polite">Ready</div>
+            </div>
+
+            <!-- Radar Graphic (Visual Feedback) -->
+            <div class="radar-box" id="radarBox" aria-hidden="true">
+              <div class="radar-sweep"></div>
+              <div class="radar-ring ring-1"></div>
+              <div class="radar-ring ring-2"></div>
+              <div class="radar-ring ring-3"></div>
+              <div class="radar-crosshair-h"></div>
+              <div class="radar-crosshair-v"></div>
+              <div class="radar-center-icon">
+                <i class="fas fa-crosshairs"></i>
+              </div>
+            </div>
+
+            <div class="btn-group-scan">
+              <button id="checkBtn" class="check-btn" type="button">
+                <i class="fas fa-search"></i>
+                <span class="btn-text">Scan Network</span>
+              </button>
+              <button id="stopBtn" class="stop-btn" type="button" aria-live="polite">
+                <i class="fas fa-ban"></i>
+                <span class="btn-text">Cancel Scan</span>
+              </button>
+            </div>
+
+            <p id="connectionStatus" class="connection-status" aria-live="polite">
+              System ready. Click 'Scan Network' to capture live traffic.
+            </p>
+
+            <div class="scanner-hint">
+              <i class="fas fa-shield-heart"></i>
+              <span>Live capture sniffs non-intrusively without dropping legitimate packets.</span>
+            </div>
+          </div>
+
+          <!-- Result & Telemetry Console -->
+          <div class="connection-result" id="resultsConsole" role="region" aria-label="Scan Results Panel">
+            <div class="result-top-bar">
+              <span class="panel-eyebrow"><i class="fas fa-chart-line"></i> Inference Output</span>
+              <span class="result-chip-state" id="resultChipState">Awaiting Scan</span>
+            </div>
+
+            <div class="result-hero-row">
+              <div class="result-icon-wrap" id="resultIconWrap">
+                <i class="fas fa-shield-alt result-icon" id="resultIcon" aria-hidden="true"></i>
+              </div>
+              <div class="result-header">
+                <span class="result-sub-label">Classification Result:</span>
+                <div id="connectionStatusText" class="result-label" aria-live="assertive">Waiting for scan...</div>
+              </div>
+            </div>
+
+            <!-- Confidence Meter -->
+            <div class="confidence-container" id="confidenceContainer">
+              <div class="confidence-labels">
+                <span class="conf-title">Model Confidence</span>
+                <span id="connectionRate" class="conf-value">Confidence: --%</span>
+              </div>
+              <div class="confidence-bar-track">
+                <div class="confidence-bar-fill" id="confidenceBarFill" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Telemetry Metrics Grid -->
+            <div class="telemetry-grid" id="telemetryGrid" style="display:none;" aria-live="polite">
+              <div class="telemetry-item">
+                <div class="t-icon"><i class="fas fa-cubes"></i></div>
+                <div class="t-meta">
+                  <span class="t-label">Packets</span>
+                  <span class="t-value" id="telemetryPkts">0</span>
+                </div>
+              </div>
+              <div class="telemetry-item">
+                <div class="t-icon"><i class="fas fa-stopwatch"></i></div>
+                <div class="t-meta">
+                  <span class="t-label">Duration</span>
+                  <span class="t-value" id="telemetryDuration">0.0 ms</span>
+                </div>
+              </div>
+              <div class="telemetry-item">
+                <div class="t-icon"><i class="fas fa-gauge-high"></i></div>
+                <div class="t-meta">
+                  <span class="t-label">Throughput</span>
+                  <span class="t-value" id="telemetryThroughput">0.0 KB/s</span>
+                </div>
+              </div>
+              <div class="telemetry-item">
+                <div class="t-icon"><i class="fas fa-layer-group"></i></div>
+                <div class="t-meta">
+                  <span class="t-label">Protocol</span>
+                  <span class="t-value" id="telemetryProtocol">--</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Diagnostic Alert -->
+            <div class="diagnostic-alert" id="diagnosticAlert" style="display:none;" role="alert">
+              <i class="fas fa-triangle-exclamation diagnostic-icon" aria-hidden="true"></i>
+              <div class="diagnostic-content">
+                <strong class="diagnostic-title">System Guidance:</strong>
+                <span id="diagnosticMsg"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: Threat Intelligence & Attack Vectors -->
+    <section class="threat-intel-section" id="threat-intelligence">
+      <div class="section-container">
+        <div class="section-header text-center">
+          <div class="section-badge">
+            <i class="fas fa-biohazard"></i> Attack Classification
+          </div>
+          <h2 class="section-title">Common DDoS Attack Vectors & Signatures</h2>
+          <p class="section-subtitle">
+            DDoS-Guard's AI model is benchmarked against 15 distinct network traffic profiles, covering volumetric reflection, state exhaustion, and application flooding.
+          </p>
+        </div>
+
+        <!-- Category Filter Tabs -->
+        <div class="category-filter-bar" role="tablist" aria-label="Attack Category Filters">
+          <button class="filter-tab active" data-filter="all" role="tab" aria-selected="true">
+            All Vectors <span class="tab-count">15</span>
+          </button>
+          <button class="filter-tab" data-filter="drdos" role="tab" aria-selected="false">
+            Reflection (DrDoS) <span class="tab-count">8</span>
+          </button>
+          <button class="filter-tab" data-filter="flood" role="tab" aria-selected="false">
+            Direct Floods <span class="tab-count">5</span>
+          </button>
+          <button class="filter-tab" data-filter="exploit" role="tab" aria-selected="false">
+            Protocol Exploits <span class="tab-count">2</span>
+          </button>
+        </div>
+
+        <!-- Slider Navigation Controls -->
+        <div class="slider-controls-wrap">
+          <div class="slider-counter">
+            <span id="sliderCurrentIndex">1</span> / <span id="sliderTotalCount">15</span>
+          </div>
+          <div class="slider-arrows">
+            <button class="nav-btn prev" id="sliderPrevBtn" aria-label="Previous attack card">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <button class="nav-btn next" id="sliderNextBtn" aria-label="Next attack card">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Attack Cards Container -->
+        <div class="slider" id="info">
+          <div class="card-container" id="attackCardContainer">
+            <!-- 1. DrDoS_DNS -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 53</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos2.jpg" alt="DrDoS_DNS Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_DNS</h3>
+              <p>DNS-based Distributed Reflection DDoS. Attackers exploit open recursive DNS resolvers with spoofed source IPs to flood target servers with amplified responses.</p>
+            </div>
+
+            <!-- 2. DrDoS_LDAP -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 389</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos3.jpg" alt="DrDoS_LDAP Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_LDAP</h3>
+              <p>LDAP-based Distributed Reflection DDoS. Abuses exposed Lightweight Directory Access Protocol daemons to generate disproportionate response payloads.</p>
+            </div>
+
+            <!-- 3. DrDoS_MSSQL -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 1434</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos4.jpg" alt="DrDoS_MSSQL Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_MSSQL</h3>
+              <p>Microsoft SQL Server resolution reflection. Sends MC-SSTP discovery probes to SQL Server Browser services, reflecting large response flows.</p>
+            </div>
+
+            <!-- 4. DrDoS_NTP -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 123</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos5.jpg" alt="DrDoS_NTP Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_NTP</h3>
+              <p>Network Time Protocol amplification. Exploits legacy NTP "monlist" commands to achieve up to 556x traffic amplification against the victim.</p>
+            </div>
+
+            <!-- 5. DrDoS_NetBIOS -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 137</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos6.jpg" alt="DrDoS_NetBIOS Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_NetBIOS</h3>
+              <p>NetBIOS Name Service reflection. Abuses exposed NBNS services on Windows machines to reflect voluminous name status queries.</p>
+            </div>
+
+            <!-- 6. DrDoS_SNMP -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 161</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos7.jpg" alt="DrDoS_SNMP Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_SNMP</h3>
+              <p>Simple Network Management Protocol reflection. Sends GetBulk requests with public community strings to flood the target via network hardware.</p>
+            </div>
+
+            <!-- 7. DrDoS_SSDP -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : 1900</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos8.jpg" alt="DrDoS_SSDP Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_SSDP</h3>
+              <p>Simple Service Discovery Protocol amplification. Leverages exposed UPnP IoT devices to reflect continuous M-SEARCH discovery responses.</p>
+            </div>
+
+            <!-- 8. DrDoS_UDP -->
+            <div class="card attack-card-item" data-category="drdos">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-drdos">Reflection</span>
+                <span class="protocol-tag">UDP : Variable</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos9.jpg" alt="DrDoS_UDP Attack Diagram" loading="lazy" />
+              </div>
+              <h3>DrDoS_UDP</h3>
+              <p>General UDP reflection attack. Employs miscellaneous connectionless UDP endpoints to saturate inbound network pipeline bandwidth.</p>
+            </div>
+
+            <!-- 9. LDAP Flood -->
+            <div class="card attack-card-item" data-category="flood">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-flood">Direct Flood</span>
+                <span class="protocol-tag">TCP/UDP : 389</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos10.jpg" alt="LDAP Flood Attack Diagram" loading="lazy" />
+              </div>
+              <h3>LDAP Flood</h3>
+              <p>Direct volumetric LDAP flood. Generates overwhelming rates of directory queries, exhausting server CPU, worker threads, and memory.</p>
+            </div>
+
+            <!-- 10. MSSQL Flood -->
+            <div class="card attack-card-item" data-category="flood">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-flood">Direct Flood</span>
+                <span class="protocol-tag">TCP : 1433</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos11.jpg" alt="MSSQL Flood Attack Diagram" loading="lazy" />
+              </div>
+              <h3>MSSQL Flood</h3>
+              <p>Direct database connection flood. Saturates SQL query listener threads with malformed or incomplete connection handshakes.</p>
+            </div>
+
+            <!-- 11. NetBIOS Flood -->
+            <div class="card attack-card-item" data-category="flood">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-flood">Direct Flood</span>
+                <span class="protocol-tag">TCP/UDP : 139</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos12.jpg" alt="NetBIOS Flood Attack Diagram" loading="lazy" />
+              </div>
+              <h3>NetBIOS Flood</h3>
+              <p>Direct NetBIOS session service flooding. Targets file-sharing and domain services on Windows servers to cause denial of service.</p>
+            </div>
+
+            <!-- 12. Portmap -->
+            <div class="card attack-card-item" data-category="exploit">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-exploit">Protocol Exploit</span>
+                <span class="protocol-tag">UDP : 111</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos13.jpg" alt="Portmap Attack Diagram" loading="lazy" />
+              </div>
+              <h3>Portmap / RPC</h3>
+              <p>Open Network Computing Remote Procedure Call (ONC RPC) flood. Exploits rpcbind daemon tables to cause resource starvation.</p>
+            </div>
+
+            <!-- 13. SYN Flood -->
+            <div class="card attack-card-item" data-category="flood">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-flood">State Exhaustion</span>
+                <span class="protocol-tag">TCP : Variable</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos14.jpg" alt="SYN Flood Attack Diagram" loading="lazy" />
+              </div>
+              <h3>SYN Flood</h3>
+              <p>Classic TCP state-table exhaustion. Sends thousands of TCP SYN packets with spoofed IPs, filling the backlog queue with half-open connections.</p>
+            </div>
+
+            <!-- 14. TFTP -->
+            <div class="card attack-card-item" data-category="exploit">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-exploit">Protocol Exploit</span>
+                <span class="protocol-tag">UDP : 69</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos15.jpg" alt="TFTP Attack Diagram" loading="lazy" />
+              </div>
+              <h3>TFTP Flood</h3>
+              <p>Trivial File Transfer Protocol flood. Exploits UDP-based file requests to tie up bandwidth and transfer sockets on vulnerable systems.</p>
+            </div>
+
+            <!-- 15. UDP Flood -->
+            <div class="card attack-card-item" data-category="flood">
+              <div class="card-badge-row">
+                <span class="attack-type-tag tag-flood">Volumetric</span>
+                <span class="protocol-tag">UDP : Random</span>
+              </div>
+              <div class="img-wrap">
+                <img src="/static/images/ddos16.jpg" alt="UDP Flood Attack Diagram" loading="lazy" />
+              </div>
+              <h3>UDP Flood</h3>
+              <p>Raw Layer 4 volumetric flood. Sends high-velocity random UDP datagrams to force servers into repeatedly issuing ICMP "Destination Unreachable" replies.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: DDoS Prevention & Mitigation Architecture -->
+    <section class="prevention-section" id="prevention">
+      <div class="section-container">
+        <div class="section-header text-center">
+          <div class="section-badge">
+            <i class="fas fa-shield-halved"></i> Defensive Architecture
+          </div>
+          <h2 class="section-title">DDoS Prevention & Defense-In-Depth</h2>
+          <p class="section-subtitle">
+            Essential operational practices and multi-layered controls to safeguard enterprise infrastructure against coordinated attacks.
+          </p>
+        </div>
+
+        <div class="tips-container">
+          <div class="tip-card">
+            <div class="tip-icon-box">
+              <i class="fas fa-network-wired tip-icon"></i>
+            </div>
+            <h3>Continuous Traffic Inspection</h3>
+            <p>Deploy continuous flow telemetry to monitor ingress packet rates, TCP flag ratios, and anomalous packet burst signatures before disruption occurs.</p>
+          </div>
+
+          <div class="tip-card">
+            <div class="tip-icon-box">
+              <i class="fas fa-filter tip-icon"></i>
+            </div>
+            <h3>Intelligent Rate Limiting & Firewalls</h3>
+            <p>Implement adaptive SYN cookies, connection velocity limits, and upstream BGP Flowspec filtering to drop malicious traffic at perimeter routers.</p>
+          </div>
+
+          <div class="tip-card highlight-tip">
+            <div class="tip-icon-box">
+              <i class="fas fa-brain tip-icon"></i>
+            </div>
+            <h3>AI-Powered Anomaly Detection</h3>
+            <p>Leverage machine learning classifiers to distinguish legitimate traffic spikes from distributed multi-vector attacks with high precision.</p>
+          </div>
+
+          <div class="tip-card">
+            <div class="tip-icon-box">
+              <i class="fas fa-cloud-arrow-up tip-icon"></i>
+            </div>
+            <h3>Anycast Cloud Scrubbing</h3>
+            <p>Distribute traffic globally via Anycast routing, redirecting volumetric floods to high-capacity cloud scrubbing centers for packet sanitization.</p>
+          </div>
+
+          <div class="tip-card">
+            <div class="tip-icon-box">
+              <i class="fas fa-screwdriver-wrench tip-icon"></i>
+            </div>
+            <h3>Endpoint & Service Hardening</h3>
+            <p>Close open recursive resolvers, disable NTP monlist, block vulnerable NetBIOS/RPC ports (111, 137, 1434), and keep network stacks patched.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 5: Engineering Team -->
+    <section class="team-section" id="team">
+      <div class="section-container">
+        <div class="section-header text-center">
+          <div class="section-badge">
+            <i class="fas fa-users-gear"></i> Project Contributors
+          </div>
+          <h2 class="section-title">Project Engineering Team</h2>
+          <p class="section-subtitle">
+            Faculty of Computers and Artificial Intelligence Graduation Project — AI-Powered Cybersecurity Research Team.
+          </p>
+        </div>
+
+        <div class="team-container">
+          <!-- Member 1: Ali Fathy -->
+          <div class="team-card">
+            <div class="team-avatar">
+              <span class="avatar-initials">AF</span>
+              <div class="avatar-role-icon"><i class="fas fa-brain"></i></div>
+            </div>
+            <h4>Ali Fathy</h4>
+            <span class="team-role-pill">AI Engineer</span>
+            <p class="team-role-desc">AI Model Architecture &amp; ML Training Pipeline</p>
+          </div>
+
+          <!-- Member 2: Shahd Amr -->
+          <div class="team-card">
+            <div class="team-avatar">
+              <span class="avatar-initials">SA</span>
+              <div class="avatar-role-icon"><i class="fas fa-chart-pie"></i></div>
+            </div>
+            <h4>Shahd Amr</h4>
+            <span class="team-role-pill">AI Engineer</span>
+            <p class="team-role-desc">Feature Engineering &amp; Model Optimization</p>
+          </div>
+
+          <!-- Member 3: Mohamed Abo-Alezz -->
+          <div class="team-card">
+            <div class="team-avatar">
+              <span class="avatar-initials">MA</span>
+              <div class="avatar-role-icon"><i class="fas fa-shield-virus"></i></div>
+            </div>
+            <h4>Mohamed Abo-Alezz</h4>
+            <span class="team-role-pill">SOC Analyst</span>
+            <p class="team-role-desc">Threat Intelligence &amp; Attack Vector Modeling</p>
+          </div>
+
+          <!-- Member 4: Mohamed EL-Nagar -->
+          <div class="team-card">
+            <div class="team-avatar">
+              <span class="avatar-initials">MN</span>
+              <div class="avatar-role-icon"><i class="fas fa-server"></i></div>
+            </div>
+            <h4>Mohamed EL-Nagar</h4>
+            <span class="team-role-pill">Backend Engineer</span>
+            <p class="team-role-desc">Windows Service &amp; Local IPC Architecture</p>
+          </div>
+
+          <!-- Member 5: Mennaallah Azmi -->
+          <div class="team-card">
+            <div class="team-avatar">
+              <span class="avatar-initials">MA</span>
+              <div class="avatar-role-icon"><i class="fas fa-network-wired"></i></div>
+            </div>
+            <h4>Mennaallah Azmi</h4>
+            <span class="team-role-pill">Backend Engineer</span>
+            <p class="team-role-desc">REST API Engine &amp; Traffic Ingestion</p>
+          </div>
+
+          <!-- Member 6: Eman Tag -->
+          <div class="team-card">
+            <div class="team-avatar">
+              <span class="avatar-initials">ET</span>
+              <div class="avatar-role-icon"><i class="fas fa-code"></i></div>
+            </div>
+            <h4>Eman Tag</h4>
+            <span class="team-role-pill">Frontend Engineer</span>
+            <p class="team-role-desc">Dashboard Architecture &amp; UI Systems</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-main-row">
+        <div class="footer-brand">
+          <div class="footer-logo">
+            <i class="fas fa-shield-halved"></i>
+            <span>DDoS-Guard</span>
+          </div>
+          <p class="footer-tagline">
+            Autonomous intrusion and DDoS defense system powered by 77-feature network flow telemetry and machine learning.
+          </p>
+          <div class="footer-status-indicator">
+            <span class="status-live-dot"></span>
+            <span class="status-live-text">Kernel Engine: WinDivert Active</span>
+          </div>
+        </div>
+
+        <div class="footer-links-group">
+          <span class="footer-group-title">Navigation</span>
+          <a href="#overview">Overview</a>
+          <a href="#check-connection">Live Scanner</a>
+          <a href="#threat-intelligence">Threat Vectors</a>
+          <a href="#prevention">Mitigation</a>
+          <a href="#team">Team</a>
+        </div>
+
+        <div class="footer-links-group">
+          <span class="footer-group-title">Model Benchmarks</span>
+          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> XGBoost Multi-Class</span>
+          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 99.86% Recall Rate</span>
+          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 15 Attack Classes</span>
+          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 77 Bidirectional Features</span>
+        </div>
+      </div>
+
+      <div class="footer-bottom-row">
+        <p class="footer-note">© 2025–2026 DDoS-Guard Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
+        <div class="footer-badges">
+          <span class="cert-pill">SOC v2.5</span>
+          <span class="cert-pill">CIC-IDS2017</span>
+        </div>
       </div>
     </div>
-  </div>
-</section>
-<section class="prevention-section" id="prevention">
-  <h2><i class="fas fa-shield-alt"></i> DDoS Prevention & Mitigation Tips</h2>
-  <p>Learn how to protect your network from DDoS attacks with practical tips:</p>
-  <div class="tips-container">
-    <div class="tip-card"><i class="fas fa-network-wired tip-icon"></i><h3>Monitor Traffic</h3><p>Keep track of incoming and outgoing traffic patterns.</p></div>
-    <div class="tip-card"><i class="fas fa-lock tip-icon"></i><h3>Use Firewalls & Rate Limiting</h3><p>Block suspicious IPs and reduce overload.</p></div>
-    <div class="tip-card"><i class="fas fa-robot tip-icon"></i><h3>AI-Powered Detection</h3><p>Leverage AI and machine learning.</p></div>
-    <div class="tip-card"><i class="fas fa-cloud-upload-alt tip-icon"></i><h3>Cloud-Based Protection</h3><p>Use cloud security services.</p></div>
-    <div class="tip-card"><i class="fas fa-user-shield tip-icon"></i><h3>Regular Updates</h3><p>Keep servers and software updated.</p></div>
-  </div>
-</section>
+  </footer>
 
-<footer id="team">
-  <h2 class="team-title">Team Members</h2>
-  <div class="team-container">
-    <div class="team-card"><i class="fas fa-robot team-icon"></i><h4>Ali Fathy</h4><p>AI Engineer<br>AI Model</p></div>
-    <div class="team-card"><i class="fas fa-robot team-icon"></i><h4>Shahd Amr</h4><p>AI Engineer<br>AI Model</p></div>
-    <div class="team-card"><i class="fas fa-shield-alt team-icon"></i><h4>Mohamed Abo-Alezz</h4><p>SOC Analyst</p></div>
-    <div class="team-card"><i class="fas fa-server team-icon"></i><h4>Mohamed EL-Nagar</h4><p>Back-End<br>API</p></div>
-    <div class="team-card"><i class="fas fa-server team-icon"></i><h4>Mennaallah Azmi</h4><p>Back-End<br>API</p></div>
-    <div class="team-card"><i class="fas fa-laptop-code team-icon"></i><h4>Eman Tag</h4><p>Front-End</p></div>
-  </div>
-  <p class="footer-note">© 2025 All Rights Reserved</p>
-</footer>
+  <!-- Floating Back to Top Button -->
+  <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top of page">
+    <i class="fas fa-arrow-up"></i>
+  </button>
 
-<script src="/static/main.js"></script>
+  <!-- DDoS-Guard Scripts -->
+  <script src="/static/main.js"></script>
 </body>
 </html>

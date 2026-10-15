@@ -102,7 +102,9 @@ class CaptureWorker:
     def start_window(self, scan_id: str, duration: float = 3.0, min_packets: int = 3, filter_str: str = "true"):
         with self.lock:
             if self.is_capturing:
-                return {"status": "error", "message": "Capture already in progress", "scan_id": self.active_scan_id}
+                # Signal previous window to stop cleanly so new scan can proceed
+                self.stop_requested = True
+                self.is_capturing = False
             self.is_capturing = True
             self.stop_requested = False
             self.active_scan_id = scan_id
@@ -113,6 +115,7 @@ class CaptureWorker:
                 "duration": duration,
                 "min_packets": min_packets,
                 "packets_captured": 0,
+                "features": None,
                 "message": f"Capturing traffic for {duration}s in monitor-only mode..."
             }
 
@@ -134,6 +137,16 @@ class CaptureWorker:
 
     def get_status(self, scan_id: Optional[str] = None):
         with self.lock:
+            # Prevent stale result poisoning: if scan_id specified, ensure current_result matches
+            if scan_id is not None:
+                cur_id = self.current_result.get("scan_id")
+                if cur_id != scan_id and self.active_scan_id != scan_id:
+                    return {
+                        "status": "waiting",
+                        "scan_id": scan_id,
+                        "packets_captured": 0,
+                        "message": f"Scan '{scan_id}' has not recorded results yet."
+                    }
             return dict(self.current_result)
 
     def _capture_loop(self, scan_id: str, duration: float, min_packets: int, filter_str: str):
@@ -142,13 +155,14 @@ class CaptureWorker:
 
         if not HAS_PYDIVERT:
             with self.lock:
-                self.is_capturing = False
-                self.current_result = {
-                    "status": "error",
-                    "error_type": "ModuleMissing",
-                    "message": "pydivert library not found.",
-                    "scan_id": scan_id
-                }
+                if self.active_scan_id == scan_id:
+                    self.is_capturing = False
+                    self.current_result = {
+                        "status": "error",
+                        "error_type": "ModuleMissing",
+                        "message": "pydivert library not found.",
+                        "scan_id": scan_id
+                    }
             return
 
         try:
@@ -156,7 +170,7 @@ class CaptureWorker:
             with pydivert.WinDivert(filter_str, flags=pydivert.Flag.SNIFF) as w:
                 while True:
                     with self.lock:
-                        if self.stop_requested or not self.is_capturing:
+                        if self.stop_requested or not self.is_capturing or self.active_scan_id != scan_id:
                             break
                     elapsed = time.time() - start_t
                     if elapsed >= duration:
@@ -170,38 +184,51 @@ class CaptureWorker:
                                 collector.add_packet(pkt_dict)
                                 self.total_packets_seen += 1
                                 with self.lock:
-                                    self.current_result["packets_captured"] = collector.packet_count
+                                    if self.active_scan_id == scan_id:
+                                        self.current_result["packets_captured"] = collector.packet_count
                     except TimeoutError:
                         continue
                     except Exception:
                         break
         except PermissionError as pe:
             with self.lock:
-                self.is_capturing = False
-                self.current_result = {
-                    "status": "error",
-                    "error_type": "DriverPermissionError",
-                    "message": f"Kernel driver permission denied: {pe}",
-                    "scan_id": scan_id
-                }
+                if self.active_scan_id == scan_id:
+                    self.is_capturing = False
+                    self.current_result = {
+                        "status": "error",
+                        "error_type": "DriverPermissionError",
+                        "message": f"Kernel driver permission denied: {pe}",
+                        "scan_id": scan_id
+                    }
             return
         except Exception as e:
             with self.lock:
-                self.is_capturing = False
-                self.current_result = {
-                    "status": "error",
-                    "error_type": "WinDivertError",
-                    "message": str(e),
-                    "scan_id": scan_id
-                }
+                if self.active_scan_id == scan_id:
+                    self.is_capturing = False
+                    self.current_result = {
+                        "status": "error",
+                        "error_type": "WinDivertError",
+                        "message": str(e),
+                        "scan_id": scan_id
+                    }
             return
 
         actual_duration = round(time.time() - start_t, 2)
         pkt_count = collector.packet_count
 
         with self.lock:
+            if self.active_scan_id != scan_id:
+                return
             self.is_capturing = False
-            if pkt_count < min_packets:
+            if self.stop_requested:
+                self.current_result = {
+                    "status": "stopped",
+                    "scan_id": scan_id,
+                    "packets_captured": pkt_count,
+                    "duration": actual_duration,
+                    "message": "Scan cancelled."
+                }
+            elif pkt_count < min_packets:
                 self.current_result = {
                     "status": "insufficient_traffic",
                     "scan_id": scan_id,
@@ -336,16 +363,19 @@ class SecureIPCServer:
 
             req = json.loads(data.decode("utf-8").strip())
             cmd = req.get("cmd", "")
+            logger.debug(f"[IPC] Request: cmd={cmd}, scan_id={req.get('scan_id')}")
 
             # Verify token for mutating commands
             req_token = req.get("token")
             if cmd not in ["PING", "STATUS"] and not self._is_authorized(req_token):
+                logger.warning(f"[IPC] Unauthorized request rejected for cmd={cmd}")
                 resp = {"status": "error", "message": "Unauthorized IPC request."}
                 client_sock.sendall((json.dumps(resp) + "\n").encode("utf-8"))
                 client_sock.close()
                 return
 
             resp = self._dispatch_command(cmd, req)
+            logger.debug(f"[IPC] Response for {cmd}: status={resp.get('status')}, scan_id={resp.get('scan_id')}")
             client_sock.sendall((json.dumps(resp) + "\n").encode("utf-8"))
         except Exception as e:
             err_resp = {"status": "error", "message": f"IPC dispatch error: {e}"}

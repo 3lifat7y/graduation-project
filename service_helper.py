@@ -16,7 +16,7 @@ import json
 import ctypes
 from ctypes import wintypes
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 LOG_FILE = PROJECT_ROOT / "ddos_guard_service.log"
@@ -160,14 +160,29 @@ def get_service_status(include_ipc: bool = True) -> Dict[str, Any]:
     return result
 
 
-def is_service_online() -> bool:
-    """Checks if the service is online and actively answering authenticated IPC pings."""
+def is_service_online(require_auth: bool = False) -> bool:
+    """Checks if the service is online and answering IPC pings or authenticated commands."""
     try:
         from ipc_client import DDoSGuardIPCClient
         client = DDoSGuardIPCClient()
+        if require_auth:
+            ok, _ = client.verify_authenticated_health()
+            return ok
         return client.is_service_running()
     except Exception:
         return False
+
+
+def is_authenticated_service_online() -> Tuple[bool, str]:
+    """Checks if the service is online and verified with authenticated IPC token."""
+    if not is_service_online():
+        return False, "Service is offline or not responding to IPC."
+    try:
+        from ipc_client import DDoSGuardIPCClient
+        client = DDoSGuardIPCClient()
+        return client.verify_authenticated_health()
+    except Exception as e:
+        return False, f"IPC client exception: {e}"
 
 
 def tail_service_log(max_lines: int = 20) -> List[str]:
@@ -193,15 +208,16 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
     - {'status': 'uac_cancelled', 'message': ...}
     - {'status': 'start_failed', 'message': ..., 'log_tail': ...}
     """
-    # 1. Quick check: already running?
+    # 1. Quick check: already running and authenticated?
     if is_service_online():
-        return {
-            "status": "already_running",
-            "message": "DDoS-Guard Windows Service is already running."
-        }
+        if is_service_online(require_auth=True):
+            return {
+                "status": "already_running",
+                "message": "DDoS-Guard Windows Service is already running and authenticated."
+            }
 
     # 2. Check installation state
-    svc_state = get_service_status()
+    svc_state = get_service_status(include_ipc=False)
     if not svc_state.get("installed"):
         return {
             "status": "not_installed",
@@ -211,6 +227,18 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
                 "as Administrator once before capturing live packets."
             )
         }
+
+    # If SCM status is START_PENDING, wait briefly for it to transition to RUNNING
+    if svc_state.get("status") == "START_PENDING":
+        pending_start = time.time()
+        while time.time() - pending_start < 4.0:
+            time.sleep(0.4)
+            st = get_service_status(include_ipc=False)
+            if st.get("status") == "RUNNING" and is_service_online(require_auth=True):
+                return {
+                    "status": "started",
+                    "message": "DDoS-Guard Windows Service transitioned to RUNNING and authenticated IPC is active."
+                }
 
     # 3. Prepare scoped UAC elevation
     # Dynamically resolve virtual environment and python paths for SCM host
@@ -223,7 +251,7 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
     proj_root = str(PROJECT_ROOT)
     py_path = f"{site_packages};{win32_dir};{win32_lib};{proj_root}"
 
-    # Command ensures SCM Environment (PYTHONPATH & PYTHONHOME) is configured, then starts service
+    # Command ensures SCM Environment (PYTHONPATH & PYTHONHOME) is configured only if missing, then starts service
     ps_cmd = (
         f"$ErrorActionPreference='Stop'; "
         f"$svcKey='HKLM:\\SYSTEM\\CurrentControlSet\\Services\\{SERVICE_NAME}'; "
@@ -274,16 +302,28 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
     hProcess = sei.hProcess
     if hProcess:
         kernel32.WaitForSingleObject(hProcess, 15000)
+        exit_code = wintypes.DWORD()
+        if kernel32.GetExitCodeProcess(hProcess, ctypes.byref(exit_code)):
+            if exit_code.value != 0:
+                recent_logs = tail_service_log(15)
+                kernel32.CloseHandle(hProcess)
+                return {
+                    "status": "start_failed",
+                    "error_code": exit_code.value,
+                    "message": f"Elevated Start-Service command failed (Process Exit Code: {exit_code.value}).",
+                    "log_tail": recent_logs
+                }
         kernel32.CloseHandle(hProcess)
 
-    # 4. Verify actual Windows service state and IPC health
+    # 4. Verify actual Windows service state and authenticated IPC health
     start_t = time.time()
     while time.time() - start_t < timeout:
-        st = get_service_status()
-        if st.get("status") == "RUNNING" and is_service_online():
+        st = get_service_status(include_ipc=False)
+        auth_ok, auth_detail = is_authenticated_service_online()
+        if st.get("status") == "RUNNING" and auth_ok:
             return {
                 "status": "started",
-                "message": "DDoS-Guard Windows Service started and verified online."
+                "message": "DDoS-Guard Windows Service started and verified online via authenticated IPC."
             }
         time.sleep(0.3)
 
@@ -292,7 +332,7 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
     return {
         "status": "start_failed",
         "message": (
-            "Service was triggered, but IPC server did not respond within timeout. "
+            "Service was triggered, but service or authenticated IPC did not respond within timeout. "
             "Inspect 'ddos_guard_service.log' for details."
         ),
         "log_tail": recent_logs
