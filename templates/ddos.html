@@ -38,6 +38,7 @@
       <nav class="main-nav" id="mainNav" aria-label="Main Navigation">
         <a href="#overview" class="nav-link active">Overview</a>
         <a href="#check-connection" class="nav-link">Live Scanner</a>
+        <a href="#port-scanner" class="nav-link">Port Scanner</a>
         <a href="#threat-intelligence" class="nav-link">Threat Vectors</a>
         <a href="#prevention" class="nav-link">Mitigation</a>
         <a href="#team" class="nav-link">Team</a>
@@ -310,6 +311,202 @@
                 <span id="diagnosticMsg"></span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Independent Port & Network Scanner -->
+    <section class="port-scanner-section" id="port-scanner">
+      <div class="section-container">
+        <div class="section-header text-center">
+          <div class="section-badge">
+            <i class="fas fa-network-wired"></i> Network Reconnaissance
+          </div>
+          <h2 class="section-title">Port &amp; Network Scanner</h2>
+          <p class="section-subtitle">
+            Autonomous multi-mode host discovery and service port enumeration powered by internal asynchronous Python engine.
+          </p>
+        </div>
+
+        <!-- Mode Switcher Tabs -->
+        <div class="ps-mode-bar" role="tablist" aria-label="Port Scanner Mode Selector">
+          <button class="ps-mode-tab active" id="psTabLocalhost" data-mode="localhost" type="button" role="tab" aria-selected="true">
+            <i class="fas fa-desktop"></i>
+            <span>Localhost Scan</span>
+            <span class="ps-mode-pill">127.0.0.1</span>
+          </button>
+          <button class="ps-mode-tab" id="psTabTargetIp" data-mode="target_ip" type="button" role="tab" aria-selected="false">
+            <i class="fas fa-bullseye"></i>
+            <span>Target IP Scan</span>
+            <span class="ps-mode-pill">Single Host</span>
+          </button>
+          <button class="ps-mode-tab" id="psTabNetwork" data-mode="network" type="button" role="tab" aria-selected="false">
+            <i class="fas fa-diagram-project"></i>
+            <span>Network Subnet Scan</span>
+            <span class="ps-mode-pill">CIDR /24</span>
+          </button>
+        </div>
+
+        <!-- Port Scanner Control Console -->
+        <div class="ps-console-card">
+          <div class="ps-card-header">
+            <div class="ps-header-left">
+              <span class="ps-console-title"><i class="fas fa-terminal"></i> Scan Configuration &amp; Parameters</span>
+              <span class="ps-status-pill ps-state-ready" id="psStateBadge">Ready</span>
+            </div>
+            <div class="ps-header-right">
+              <span class="ps-local-ip-badge" id="psLocalIpBadge">
+                <i class="fas fa-circle-dot"></i> Local IP: Detecting...
+              </span>
+            </div>
+          </div>
+
+          <div class="ps-card-body">
+            <div class="ps-config-grid">
+              <!-- Left Column: Target Configuration -->
+              <div class="ps-config-group">
+                <label class="ps-label" for="psTargetInput">
+                  <span>Target Address / Subnet:</span>
+                  <span class="ps-label-hint" id="psTargetHint">Loopback interface strictly locked for local inspection.</span>
+                </label>
+                <div class="ps-input-wrap">
+                  <i class="fas fa-server ps-input-icon"></i>
+                  <input type="text" id="psTargetInput" class="ps-input" value="127.0.0.1" readonly placeholder="127.0.0.1" autocomplete="off" />
+                  <button type="button" id="psAutoSubnetBtn" class="ps-inline-btn" style="display:none;" title="Use Auto-Detected Subnet">
+                    <i class="fas fa-magic"></i> Auto
+                  </button>
+                </div>
+
+                <div class="ps-auth-wrap" id="psAuthWrap" style="display:none;">
+                  <label class="ps-checkbox-label">
+                    <input type="checkbox" id="psAuthCheck" checked />
+                    <span>I confirm authorization to perform port discovery on this target network.</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Right Column: Port Selection & Concurrency -->
+              <div class="ps-config-group">
+                <label class="ps-label">
+                  <span>Port Selection Range:</span>
+                  <span class="ps-label-hint">Choose preset or customize ports</span>
+                </label>
+                <div class="ps-port-presets">
+                  <button type="button" class="ps-preset-btn active" data-preset="top20">Top 20 Ports</button>
+                  <button type="button" class="ps-preset-btn" data-preset="top100">Top 100</button>
+                  <button type="button" class="ps-preset-btn" data-preset="wellknown">Well-Known (1-1024)</button>
+                  <button type="button" class="ps-preset-btn" data-preset="custom">Custom Ports</button>
+                </div>
+
+                <div class="ps-custom-port-wrap" id="psCustomPortWrap" style="display:none;">
+                  <input type="text" id="psCustomPortInput" class="ps-input" placeholder="e.g. 80, 443, 8080, 3000-3005" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Advanced Toggles (Timeout & Concurrency) -->
+            <div class="ps-advanced-bar">
+              <div class="ps-adv-item">
+                <label for="psTimeoutSelect">Socket Timeout:</label>
+                <select id="psTimeoutSelect" class="ps-select">
+                  <option value="0.2">Fast (0.2s - LAN only)</option>
+                  <option value="0.5" selected>Normal (0.5s - Recommended)</option>
+                  <option value="1.0">Thorough (1.0s - High Latency)</option>
+                </select>
+              </div>
+              <div class="ps-adv-item">
+                <label for="psConcurrencySelect">Concurrency Limit:</label>
+                <select id="psConcurrencySelect" class="ps-select">
+                  <option value="50">Conservative (50 connections)</option>
+                  <option value="150" selected>Balanced (150 connections)</option>
+                  <option value="250">Aggressive (250 connections)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Action Controls -->
+            <div class="ps-actions-row">
+              <div class="ps-btn-group">
+                <button type="button" id="psStartBtn" class="ps-btn-primary">
+                  <i class="fas fa-play"></i>
+                  <span>Start Port Scan</span>
+                </button>
+                <button type="button" id="psStopBtn" class="ps-btn-danger" style="display:none;">
+                  <i class="fas fa-stop"></i>
+                  <span>Cancel Scan</span>
+                </button>
+              </div>
+
+              <div class="ps-export-group" id="psExportGroup" style="display:none;">
+                <button type="button" id="psExportJsonBtn" class="ps-btn-secondary" title="Export JSON">
+                  <i class="fas fa-file-code"></i> JSON
+                </button>
+                <button type="button" id="psExportCsvBtn" class="ps-btn-secondary" title="Export CSV">
+                  <i class="fas fa-file-csv"></i> CSV
+                </button>
+              </div>
+            </div>
+
+            <!-- Progress & Telemetry Bar -->
+            <div class="ps-progress-box" id="psProgressBox" style="display:none;">
+              <div class="ps-progress-header">
+                <span class="ps-progress-status" id="psProgressStatusText">Scanning targets...</span>
+                <span class="ps-progress-pct" id="psProgressPct">0%</span>
+              </div>
+              <div class="ps-progress-track">
+                <div class="ps-progress-bar" id="psProgressBar" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- KPI Summary Counters -->
+            <div class="ps-kpi-grid" id="psKpiGrid" style="display:none;">
+              <div class="ps-kpi-card">
+                <span class="ps-kpi-val" id="psKpiHosts">0</span>
+                <span class="ps-kpi-lbl">Active Hosts</span>
+              </div>
+              <div class="ps-kpi-card">
+                <span class="ps-kpi-val" id="psKpiScanned">0</span>
+                <span class="ps-kpi-lbl">Scanned Ports</span>
+              </div>
+              <div class="ps-kpi-card highlight-kpi">
+                <span class="ps-kpi-val" id="psKpiOpen">0</span>
+                <span class="ps-kpi-lbl">Open Ports Found</span>
+              </div>
+              <div class="ps-kpi-card">
+                <span class="ps-kpi-val" id="psKpiDuration">0.0s</span>
+                <span class="ps-kpi-lbl">Scan Time</span>
+              </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div class="ps-error-banner" id="psErrorBanner" style="display:none;" role="alert">
+              <i class="fas fa-circle-exclamation"></i>
+              <span id="psErrorText"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scan Results Workstation -->
+        <div class="ps-results-wrapper" id="psResultsWrapper" style="display:none;">
+          <div class="ps-results-toolbar">
+            <div class="ps-filter-tabs">
+              <button type="button" class="ps-filter-pill active" data-filter="open">
+                Open Ports Only <span class="ps-count-badge" id="psFilterOpenCount">0</span>
+              </button>
+              <button type="button" class="ps-filter-pill" data-filter="all">
+                All Scanned Ports <span class="ps-count-badge" id="psFilterAllCount">0</span>
+              </button>
+            </div>
+            <div class="ps-search-box">
+              <i class="fas fa-magnifying-glass"></i>
+              <input type="text" id="psSearchInput" placeholder="Filter by port or service..." />
+            </div>
+          </div>
+
+          <!-- Dynamic Results Container: Single Host Table or Multi-Host Cards -->
+          <div id="psResultsContent" class="ps-results-content">
+            <!-- Injected dynamically via PortScannerUI in main.js -->
           </div>
         </div>
       </div>
@@ -724,6 +921,7 @@
           <span class="footer-group-title">Navigation</span>
           <a href="#overview">Overview</a>
           <a href="#check-connection">Live Scanner</a>
+          <a href="#port-scanner">Port Scanner</a>
           <a href="#threat-intelligence">Threat Vectors</a>
           <a href="#prevention">Mitigation</a>
           <a href="#team">Team</a>

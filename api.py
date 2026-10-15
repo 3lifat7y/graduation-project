@@ -951,6 +951,80 @@ def predict_direct():
         return jsonify({"error": str(e)}), 500
 
 
+# ==============================================================================
+# Isolated Port & Network Scanner Endpoints
+# Architecture: Independent async manager, zero interference with DDoS core.
+# ==============================================================================
+from port_scanner import port_scanner_manager
+from network_detector import get_active_routable_ip
+
+
+@app.route('/api/port-scan/network-info', methods=['GET'])
+def get_port_scan_network_info():
+    """Returns local host IP and suggested /24 subnet for network scanning."""
+    try:
+        local_ip = get_active_routable_ip() or "127.0.0.1"
+        suggested_subnet = "192.168.1.0/24"
+        if local_ip and not local_ip.startswith("127."):
+            parts = local_ip.split(".")
+            if len(parts) == 4:
+                suggested_subnet = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+        return jsonify({
+            "status": "success",
+            "local_ip": local_ip,
+            "suggested_subnet": suggested_subnet
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/port-scan/start', methods=['POST'])
+def start_port_scan():
+    """Initiates an isolated port scan session."""
+    try:
+        data = request.get_json(silent=True) or {}
+        scan_type = data.get("scan_type", "localhost")
+        target = data.get("target", "127.0.0.1")
+        ports_mode = data.get("ports_mode", "top20")
+        custom_ports = data.get("custom_ports")
+        timeout = float(data.get("timeout", 0.5))
+        concurrency = int(data.get("concurrency", 150))
+
+        res = port_scanner_manager.start_scan(
+            scan_type=scan_type,
+            target=target,
+            ports_mode=ports_mode,
+            custom_ports=custom_ports,
+            timeout=timeout,
+            concurrency=concurrency
+        )
+        return jsonify(res), 200
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/port-scan/status', methods=['GET'])
+def get_port_scan_status():
+    """Polls real-time progress and accumulated results of the port scan."""
+    try:
+        status = port_scanner_manager.get_status()
+        return jsonify(status), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/port-scan/stop', methods=['POST'])
+def stop_port_scan():
+    """Cooperatively cancels the active port scan session immediately."""
+    try:
+        res = port_scanner_manager.stop_scan()
+        return jsonify(res), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 def check_port_availability(port: int = 5000):
     """Detects and alerts if port is already bound."""
     import socket
