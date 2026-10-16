@@ -60,7 +60,7 @@ def get_service_logger() -> logging.Logger:
 
 logger = get_service_logger()
 
-from feature_extraction2 import FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES
+from feature_extraction2 import FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES, validate_flow_features
 from network_detector import auto_detect_primary_interface, is_admin_user
 
 try:
@@ -80,6 +80,7 @@ except ImportError:
 
 IPC_HOST = "127.0.0.1"
 IPC_PORT = 50505
+SERVICE_VERSION = "2.2-isolated-traffic"
 PRIMARY_TOKEN_FILE = PROJECT_ROOT / ".ipc_auth.token"
 LEGACY_TOKEN_FILE = PROJECT_ROOT / "scratch" / "ipc_auth.token"
 TOKEN_FILE = PRIMARY_TOKEN_FILE
@@ -99,7 +100,15 @@ class CaptureWorker:
         }
         self.total_packets_seen = 0
 
-    def start_window(self, scan_id: str, duration: float = 3.0, min_packets: int = 3, filter_str: str = "true"):
+    def start_window(
+        self,
+        scan_id: str,
+        duration: float = 3.0,
+        min_packets: int = 3,
+        filter_str: Optional[str] = None,
+        interface_name: Optional[str] = None,
+        interface_index: Optional[int] = None
+    ):
         with self.lock:
             if self.is_capturing:
                 # Signal previous window to stop cleanly so new scan can proceed
@@ -114,14 +123,17 @@ class CaptureWorker:
                 "started_at": time.time(),
                 "duration": duration,
                 "min_packets": min_packets,
+                "interface_name": interface_name,
+                "interface_index": interface_index,
                 "packets_captured": 0,
+                "last_packet_time": None,
                 "features": None,
-                "message": f"Capturing traffic for {duration}s in monitor-only mode..."
+                "message": f"Capturing traffic on [{interface_name or 'Network Adapter'}] for {duration}s in monitor-only mode..."
             }
 
         thread = threading.Thread(
             target=self._capture_loop,
-            args=(scan_id, duration, min_packets, filter_str),
+            args=(scan_id, duration, min_packets, filter_str, interface_name, interface_index),
             daemon=True
         )
         thread.start()
@@ -149,8 +161,16 @@ class CaptureWorker:
                     }
             return dict(self.current_result)
 
-    def _capture_loop(self, scan_id: str, duration: float, min_packets: int, filter_str: str):
-        collector = FlowStatsCollector()
+    def _capture_loop(
+        self,
+        scan_id: str,
+        duration: float,
+        min_packets: int,
+        filter_str: Optional[str],
+        interface_name: Optional[str],
+        interface_index: Optional[int]
+    ):
+        collector = FlowStatsCollector(target_interface_index=interface_index)
         start_t = time.time()
 
         if not HAS_PYDIVERT:
@@ -165,9 +185,24 @@ class CaptureWorker:
                     }
             return
 
+        # Build safe WinDivert kernel filter strictly excluding loopback and management ports
+        if not filter_str or filter_str.strip() == "true":
+            base_exclude = "!loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
+            if interface_index is not None and int(interface_index) > 0:
+                effective_filter = f"ifIdx == {int(interface_index)} && {base_exclude}"
+            else:
+                effective_filter = base_exclude
+        else:
+            effective_filter = filter_str
+
+        logger.info(
+            f"[SCAN_START] scan_id={scan_id} | adapter={interface_name} (idx={interface_index}) | "
+            f"duration={duration}s | min_pkts={min_packets} | filter='{effective_filter}'"
+        )
+
         try:
             # Strictly enforce Flag.SNIFF (monitor-only, non-dropping)
-            with pydivert.WinDivert(filter_str, flags=pydivert.Flag.SNIFF) as w:
+            with pydivert.WinDivert(effective_filter, flags=pydivert.Flag.SNIFF) as w:
                 while True:
                     with self.lock:
                         if self.stop_requested or not self.is_capturing or self.active_scan_id != scan_id:
@@ -179,13 +214,14 @@ class CaptureWorker:
                     try:
                         packet = w.recv(timeout=min(time_left, 0.3))
                         if packet:
-                            pkt_dict = parse_windivert_packet(packet)
+                            pkt_dict = parse_windivert_packet(packet, target_if_idx=interface_index)
                             if pkt_dict:
                                 collector.add_packet(pkt_dict)
                                 self.total_packets_seen += 1
                                 with self.lock:
                                     if self.active_scan_id == scan_id:
                                         self.current_result["packets_captured"] = collector.packet_count
+                                        self.current_result["last_packet_time"] = collector.last_packet_time
                     except TimeoutError:
                         continue
                     except Exception:
@@ -200,6 +236,7 @@ class CaptureWorker:
                         "message": f"Kernel driver permission denied: {pe}",
                         "scan_id": scan_id
                     }
+            logger.error(f"[SCAN_ERROR] scan_id={scan_id} | PermissionError: {pe}")
             return
         except Exception as e:
             with self.lock:
@@ -211,10 +248,12 @@ class CaptureWorker:
                         "message": str(e),
                         "scan_id": scan_id
                     }
+            logger.error(f"[SCAN_ERROR] scan_id={scan_id} | WinDivertError: {e}")
             return
 
         actual_duration = round(time.time() - start_t, 2)
         pkt_count = collector.packet_count
+        last_pkt_time = collector.last_packet_time
 
         with self.lock:
             if self.active_scan_id != scan_id:
@@ -228,6 +267,22 @@ class CaptureWorker:
                     "duration": actual_duration,
                     "message": "Scan cancelled."
                 }
+                logger.info(f"[SCAN_CANCELLED] scan_id={scan_id}")
+            elif pkt_count == 0:
+                self.current_result = {
+                    "status": "no_traffic",
+                    "scan_id": scan_id,
+                    "packets_captured": 0,
+                    "min_required": min_packets,
+                    "duration": actual_duration,
+                    "interface_name": interface_name,
+                    "last_packet_time": None,
+                    "message": f"No traffic detected on [{interface_name or 'Network Adapter'}]. 0 packets intercepted."
+                }
+                logger.info(
+                    f"[SCAN_END] scan_id={scan_id} | adapter={interface_name} | new_pkts=0 | "
+                    f"state=no_traffic | duration={actual_duration}s"
+                )
             elif pkt_count < min_packets:
                 self.current_result = {
                     "status": "insufficient_traffic",
@@ -235,29 +290,54 @@ class CaptureWorker:
                     "packets_captured": pkt_count,
                     "min_required": min_packets,
                     "duration": actual_duration,
-                    "message": f"Only {pkt_count} packet(s) captured in {actual_duration}s."
+                    "interface_name": interface_name,
+                    "last_packet_time": last_pkt_time,
+                    "message": f"Only {pkt_count} packet(s) captured in {actual_duration}s (min: {min_packets}). Insufficient data."
                 }
+                logger.info(
+                    f"[SCAN_END] scan_id={scan_id} | adapter={interface_name} | new_pkts={pkt_count} | "
+                    f"last_pkt_time={last_pkt_time} | state=insufficient_traffic | duration={actual_duration}s"
+                )
             else:
                 features = collector.compute_77_features()
-                self.current_result = {
-                    "status": "captured",
-                    "scan_id": scan_id,
-                    "packets_captured": pkt_count,
-                    "duration": actual_duration,
-                    "features": features,
-                    "message": f"Successfully captured {pkt_count} packets."
-                }
+                is_valid, val_reason = validate_flow_features(features, min_packets=min_packets)
+                if not is_valid:
+                    self.current_result = {
+                        "status": "error",
+                        "scan_id": scan_id,
+                        "error_type": "InvalidFlowFeatures",
+                        "packets_captured": pkt_count,
+                        "duration": actual_duration,
+                        "message": f"Flow validation failed: {val_reason}"
+                    }
+                    logger.warning(f"[SCAN_INVALID] scan_id={scan_id} | validation_failed={val_reason}")
+                else:
+                    self.current_result = {
+                        "status": "captured",
+                        "scan_id": scan_id,
+                        "packets_captured": pkt_count,
+                        "duration": actual_duration,
+                        "interface_name": interface_name,
+                        "last_packet_time": last_pkt_time,
+                        "features": features,
+                        "message": f"Successfully captured {pkt_count} packets."
+                    }
+                    logger.info(
+                        f"[SCAN_END] scan_id={scan_id} | adapter={interface_name} | new_pkts={pkt_count} | "
+                        f"last_pkt_time={last_pkt_time} | state=captured | duration={actual_duration}s"
+                    )
 
 
 class SecureIPCServer:
     """Listens on 127.0.0.1:50505 for local commands from the Flask application."""
 
-    def __init__(self, capture_worker: CaptureWorker, host: str = IPC_HOST, port: int = IPC_PORT, auth_token: Optional[str] = None):
+    def __init__(self, capture_worker: CaptureWorker, host: str = IPC_HOST, port: int = IPC_PORT, auth_token: Optional[str] = None, stop_callback: Optional[Any] = None):
         self.worker = capture_worker
         self.host = host
         self.port = port
         self.running = False
         self.server_socket = None
+        self.stop_callback = stop_callback
         self.auth_token = auth_token or self._init_auth_token()
 
     def _sync_token_files(self, token: str):
@@ -396,6 +476,9 @@ class SecureIPCServer:
                 "status": "ok",
                 "pong": True,
                 "service": "DDoSGuardSnifferService",
+                "service_version": SERVICE_VERSION,
+                "service_pid": os.getpid(),
+                "capabilities": ["loopback_exclusion", "iface_binding", "dynamic_filter"],
                 "is_admin": admin,
                 "windivert_available": HAS_PYDIVERT,
                 "total_packets": self.worker.total_packets_seen
@@ -406,6 +489,8 @@ class SecureIPCServer:
             return {
                 "status": "ok",
                 "service_running": True,
+                "service_version": SERVICE_VERSION,
+                "service_pid": os.getpid(),
                 "is_admin": admin,
                 "total_packets": self.worker.total_packets_seen,
                 "scan_state": self.worker.get_status()
@@ -415,7 +500,17 @@ class SecureIPCServer:
             duration = float(req.get("duration", 3.0))
             min_packets = int(req.get("min_packets", 3))
             scan_id = req.get("scan_id", f"srv_scan_{int(time.time()*1000)}")
-            return self.worker.start_window(scan_id=scan_id, duration=duration, min_packets=min_packets)
+            interface_name = req.get("interface_name")
+            interface_index = req.get("interface_index")
+            filter_str = req.get("filter_str")
+            return self.worker.start_window(
+                scan_id=scan_id,
+                duration=duration,
+                min_packets=min_packets,
+                filter_str=filter_str,
+                interface_name=interface_name,
+                interface_index=interface_index
+            )
 
         elif cmd == "GET_SCAN_STATUS":
             scan_id = req.get("scan_id")
@@ -423,6 +518,20 @@ class SecureIPCServer:
 
         elif cmd == "STOP_SCAN":
             return self.worker.stop_window()
+
+        elif cmd == "STOP_SERVICE":
+            logger.info(f"[IPC] STOP_SERVICE command received from authorized client (PID: {os.getpid()})")
+            def _delayed_stop():
+                time.sleep(0.4)
+                if self.stop_callback:
+                    try:
+                        self.stop_callback()
+                    except Exception as ex:
+                        logger.error(f"stop_callback exception: {ex}")
+                else:
+                    sys.exit(0)
+            threading.Thread(target=_delayed_stop, daemon=True).start()
+            return {"status": "stopping", "message": f"DDoSGuardSnifferService (PID: {os.getpid()}) is stopping."}
 
         else:
             return {"status": "error", "message": f"Unknown command: '{cmd}'"}
@@ -443,12 +552,24 @@ class DDoSGuardWindowsService(win32serviceutil.ServiceFramework if HAS_WIN32 els
                 super().__init__(args)
                 self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
             self.worker = CaptureWorker()
-            self.ipc_server = SecureIPCServer(self.worker, host=IPC_HOST, port=IPC_PORT)
+            self.ipc_server = SecureIPCServer(
+                self.worker,
+                host=IPC_HOST,
+                port=IPC_PORT,
+                stop_callback=self._request_service_exit
+            )
             self.server_thread = None
             logger.info("DDoSGuardWindowsService instance initialized successfully.")
         except Exception as e:
             logger.exception(f"FATAL Exception in DDoSGuardWindowsService.__init__: {e}")
             raise
+
+    def _request_service_exit(self):
+        logger.info("Service exit triggered via authorized IPC.")
+        if HAS_WIN32 and hasattr(self, 'hWaitStop'):
+            win32event.SetEvent(self.hWaitStop)
+        else:
+            sys.exit(0)
 
     def SvcStop(self):
         logger.info("SvcStop signal received. Initiating graceful shutdown...")

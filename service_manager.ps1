@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     DDoS-Guard: Windows Service & Driver Management Script
 .DESCRIPTION
@@ -142,8 +142,8 @@ except Exception as e:
             $null = & sc.exe description $ServiceName $descText 2>&1
 
             # Configure SCM Environment block (PYTHONPATH and PYTHONHOME) for LocalSystem host
-            $pyHome = & $PythonExe -c "import sys; print(sys.base_prefix)"
-            $venvDir = & $PythonExe -c "import sys; print(sys.prefix)"
+            $pyHome = (& $PythonExe -c "import sys; print(sys.base_prefix)").Trim()
+            $venvDir = (& $PythonExe -c "import sys; print(sys.prefix)").Trim()
             $pyPath = "$venvDir\Lib\site-packages;$venvDir\Lib\site-packages\win32;$venvDir\Lib\site-packages\win32\lib;$ScriptDir"
             $envStrings = @(
                 "PYTHONPATH=$pyPath",
@@ -152,7 +152,7 @@ except Exception as e:
                 "PATH=$venvDir\Scripts;$venvDir\Lib\site-packages\win32;$pyHome;$pyHome\Scripts;$env:PATH"
             )
             Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name "Environment" -Value $envStrings -Type MultiString
-            Write-Host "  ✓ Configured SCM service Environment (PYTHONPATH and PYTHONHOME)." -ForegroundColor Green
+            Write-Host "  + Configured SCM service Environment (PYTHONPATH and PYTHONHOME)." -ForegroundColor Green
             Write-Host "✅ Successfully registered $ServiceName!" -ForegroundColor Green
             Write-Host "To start the service now, run: .\service_manager.ps1 Start" -ForegroundColor Gray
         } else {
@@ -181,10 +181,10 @@ except Exception as e:
         # Ensure SCM Environment is verified and configured before starting
         $svcKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
         $existingEnv = (Get-ItemProperty -Path $svcKey -ErrorAction SilentlyContinue).Environment
-        $pyHome = & $PythonExe -c "import sys; print(sys.base_prefix)"
-        $venvDir = & $PythonExe -c "import sys; print(sys.prefix)"
+        $pyHome = (& $PythonExe -c "import sys; print(sys.base_prefix)").Trim()
+        $venvDir = (& $PythonExe -c "import sys; print(sys.prefix)").Trim()
         $pyPath = "$venvDir\Lib\site-packages;$venvDir\Lib\site-packages\win32;$venvDir\Lib\site-packages\win32\lib;$ScriptDir"
-        if (-not $existingEnv -or ($existingEnv -notmatch [regex]::Escape($pyPath))) {
+        if (-not $existingEnv -or (($existingEnv -join "`n") -notmatch [regex]::Escape($pyPath))) {
             $envStrings = @(
                 "PYTHONPATH=$pyPath",
                 "PYTHONHOME=$pyHome",
@@ -192,7 +192,7 @@ except Exception as e:
                 "PATH=$venvDir\Scripts;$venvDir\Lib\site-packages\win32;$pyHome;$pyHome\Scripts;$env:PATH"
             )
             Set-ItemProperty -Path $svcKey -Name "Environment" -Value $envStrings -Type MultiString
-            Write-Host "  ✓ Updated SCM Environment registry settings for $ServiceName." -ForegroundColor Gray
+            Write-Host "  + Updated SCM Environment registry settings for $ServiceName." -ForegroundColor Gray
         }
 
         Write-Host "Starting $ServiceName..." -ForegroundColor Cyan

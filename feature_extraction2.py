@@ -77,7 +77,8 @@ else:
 class FlowStatsCollector:
     """Collects and aggregates packet metadata to compute the standard 77 flow features."""
 
-    def __init__(self):
+    def __init__(self, target_interface_index: Optional[int] = None):
+        self.target_interface_index = target_interface_index
         self.reset()
 
     def reset(self):
@@ -88,6 +89,7 @@ class FlowStatsCollector:
         self.protocol_num = 6  # Default TCP
         self.start_time = None
         self.end_time = None
+        self.last_packet_time = None
 
         # Packet sizes
         self.all_packet_sizes: List[int] = []
@@ -120,10 +122,23 @@ class FlowStatsCollector:
 
     def add_packet(self, pkt_info: Dict[str, Any]):
         """Processes a single raw or parsed packet dictionary."""
+        # Strictly reject loopback or internal control packets if passed here
+        if pkt_info.get("is_loopback", False):
+            return
+        src = pkt_info.get("src_ip", "0.0.0.0")
+        dst = pkt_info.get("dst_ip", "0.0.0.0")
+        if src.startswith("127.") or dst.startswith("127.") or src == "::1" or dst == "::1":
+            return
+        s_port = int(pkt_info.get("src_port", 0))
+        d_port = int(pkt_info.get("dst_port", 0))
+        if s_port in (5000, 50505) or d_port in (5000, 50505):
+            return
+
         ts = pkt_info.get("timestamp", time.time())
         if self.start_time is None:
             self.start_time = ts
         self.end_time = ts
+        self.last_packet_time = ts
 
         src = pkt_info.get("src_ip", "0.0.0.0")
         dst = pkt_info.get("dst_ip", "0.0.0.0")
@@ -348,16 +363,70 @@ class FlowStatsCollector:
         return ordered_dict
 
 
-def parse_windivert_packet(packet) -> Optional[Dict[str, Any]]:
-    """Extracts transport and IP headers from a pydivert Packet object."""
+def validate_flow_features(features_dict: Any, min_packets: int = 3) -> Tuple[bool, str]:
+    """
+    Strict validation gate to ensure flow features originate from real intercepted traffic.
+    Prevents empty, all-zero, or default synthetic features from triggering false predictions.
+    """
+    if not isinstance(features_dict, dict) or not features_dict:
+        return False, "Feature dictionary is empty or not a valid dictionary."
+
+    # Unwrap nested features if passed
+    if "features" in features_dict and isinstance(features_dict["features"], dict):
+        features_dict = features_dict["features"]
+
+    # Check key packet count indicators
+    fwd_pkts = float(features_dict.get("Total Fwd Packets", 0))
+    bwd_pkts = float(features_dict.get("Total Backward Packets", 0))
+    total_pkts = fwd_pkts + bwd_pkts
+
+    if total_pkts < min_packets:
+        return False, f"Total packets ({total_pkts}) is less than minimum required ({min_packets})."
+
+    # Check byte volume and non-zero counts
+    fwd_bytes = float(features_dict.get("Fwd Packets Length Total", 0))
+    bwd_bytes = float(features_dict.get("Bwd Packets Length Total", 0))
+    total_bytes = fwd_bytes + bwd_bytes
+
+    if total_bytes <= 0:
+        return False, "Total packet bytes is zero. No valid network flow payload or headers."
+
+    non_zero_count = sum(1 for k, v in features_dict.items() if isinstance(v, (int, float)) and abs(float(v)) > 1e-9)
+    if non_zero_count < 5:
+        return False, f"Feature vector contains only {non_zero_count} non-zero values; invalid network flow."
+
+    return True, "Valid flow features."
+
+
+def parse_windivert_packet(packet, target_if_idx: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Extracts transport and IP headers from a pydivert Packet object, rejecting loopback/management."""
     try:
+        # 1. Reject loopback flag from WinDivert kernel driver
+        if getattr(packet, 'is_loopback', False):
+            return None
+
+        # 2. Extract and check interface index
+        if_tuple = getattr(packet, 'interface', None)
+        if_idx = if_tuple[0] if if_tuple and len(if_tuple) > 0 else None
+        if target_if_idx is not None and if_idx is not None and if_idx != target_if_idx:
+            return None
+
         ts = float(packet.timestamp.timestamp()) if hasattr(packet.timestamp, 'timestamp') else time.time()
         length = len(packet.raw) if packet.raw else 60
 
         src_ip = str(packet.src_addr or "0.0.0.0")
         dst_ip = str(packet.dst_addr or "0.0.0.0")
+
+        # 3. Reject loopback IP addresses
+        if src_ip.startswith("127.") or dst_ip.startswith("127.") or src_ip == "::1" or dst_ip == "::1":
+            return None
+
         src_port = int(packet.src_port or 0)
         dst_port = int(packet.dst_port or 0)
+
+        # 4. Reject local management ports (Flask: 5000, IPC: 50505)
+        if src_port in (5000, 50505) or dst_port in (5000, 50505):
+            return None
 
         proto = 6
         if packet.ipv4:
@@ -401,7 +470,9 @@ def parse_windivert_packet(packet) -> Optional[Dict[str, Any]]:
             "header_len": header_len,
             "win_size": win_size,
             "payload_len": payload_len,
-            "flags": flags
+            "flags": flags,
+            "interface_index": if_idx,
+            "is_loopback": False
         }
     except Exception:
         return None
@@ -488,12 +559,14 @@ def write_features_atomic(payload: Dict[str, Any], output_path: Path):
 
 def capture_window_windivert(
     interface_name: Optional[str] = None,
+    interface_index: Optional[int] = None,
     duration: float = 3.0,
     min_packets: int = 3,
-    filter_str: str = "true"
+    filter_str: Optional[str] = None
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Captures live packets via WinDivert kernel filter in SNIFF mode for `duration` seconds.
+    Strictly excludes loopback traffic and binds to target interface when index is provided.
     Returns:
         (status_dict, features_dict)
     """
@@ -504,11 +577,21 @@ def capture_window_windivert(
             "message": "pydivert module is not installed. Install with 'pip install pydivert'."
         }, {}
 
-    collector = FlowStatsCollector()
+    # Build safe kernel filter that eliminates loopback and restricts to physical traffic
+    if not filter_str or filter_str.strip() == "true":
+        base_exclude = "!loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
+        if interface_index is not None and int(interface_index) > 0:
+            effective_filter = f"ifIdx == {int(interface_index)} && {base_exclude}"
+        else:
+            effective_filter = base_exclude
+    else:
+        effective_filter = filter_str
+
+    collector = FlowStatsCollector(target_interface_index=interface_index)
     start_t = time.time()
 
     try:
-        with pydivert.WinDivert(filter_str, flags=pydivert.Flag.SNIFF) as w:
+        with pydivert.WinDivert(effective_filter, flags=pydivert.Flag.SNIFF) as w:
             while True:
                 elapsed = time.time() - start_t
                 if elapsed >= duration:
@@ -517,7 +600,7 @@ def capture_window_windivert(
                 try:
                     packet = w.recv(timeout=min(time_left, 0.4))
                     if packet:
-                        pkt_dict = parse_windivert_packet(packet)
+                        pkt_dict = parse_windivert_packet(packet, target_if_idx=interface_index)
                         if pkt_dict:
                             collector.add_packet(pkt_dict)
                 except TimeoutError:
@@ -548,21 +631,46 @@ def capture_window_windivert(
     actual_duration = round(time.time() - start_t, 2)
     pkt_count = collector.packet_count
 
-    if pkt_count < min_packets:
+    if pkt_count == 0:
+        return {
+            "status": "no_traffic",
+            "packets_captured": 0,
+            "min_required": min_packets,
+            "duration": actual_duration,
+            "interface": interface_name or "Network Adapter",
+            "last_packet_time": None,
+            "message": f"No traffic detected on [{interface_name or 'Network Adapter'}]. 0 packets intercepted."
+        }, {}
+    elif pkt_count < min_packets:
         return {
             "status": "insufficient_traffic",
             "packets_captured": pkt_count,
             "min_required": min_packets,
             "duration": actual_duration,
-            "message": f"Only {pkt_count} packet(s) intercepted during the {actual_duration}s observation window. Insufficient to form a full statistical flow."
+            "interface": interface_name or "Network Adapter",
+            "last_packet_time": collector.last_packet_time,
+            "message": f"Only {pkt_count} packet(s) intercepted during the {actual_duration}s observation window. Insufficient data to form a full statistical flow."
         }, {}
 
     features = collector.compute_77_features()
+    is_valid, val_reason = validate_flow_features(features, min_packets=min_packets)
+    if not is_valid:
+        return {
+            "status": "error",
+            "error_type": "InvalidFlowFeatures",
+            "message": f"Feature validation failed: {val_reason}",
+            "packets_captured": pkt_count,
+            "duration": actual_duration,
+            "interface": interface_name or "Network Adapter",
+            "last_packet_time": collector.last_packet_time
+        }, {}
+
     return {
         "status": "captured",
         "packets_captured": pkt_count,
         "duration": actual_duration,
-        "interface": interface_name or "WinDivert (All Adapters)"
+        "interface": interface_name or "WinDivert (Physical)",
+        "last_packet_time": collector.last_packet_time
     }, features
 
 

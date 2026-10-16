@@ -20,6 +20,7 @@ PRIMARY_TOKEN_FILE = PROJECT_ROOT / ".ipc_auth.token"
 LEGACY_TOKEN_FILE = PROJECT_ROOT / "scratch" / "ipc_auth.token"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 50505
+REQUIRED_SERVICE_VERSION = "2.2-isolated-traffic"
 
 
 def get_candidate_token_files() -> List[Path]:
@@ -174,10 +175,29 @@ class DDoSGuardIPCClient:
         res = self.ping()
         return bool(res.get("pong", False))
 
-    def verify_authenticated_health(self) -> Tuple[bool, str]:
+    def get_service_version_info(self) -> Dict[str, Any]:
+        """Probes the running service and returns version, capabilities, and whether it is up to date."""
+        ping_res = self.ping()
+        ver = ping_res.get("service_version")
+        is_online = bool(ping_res.get("pong", False))
+        is_updated = (ver == REQUIRED_SERVICE_VERSION)
+        return {
+            "online": is_online,
+            "version": ver or "legacy-unversioned",
+            "is_updated": is_updated,
+            "pid": ping_res.get("service_pid"),
+            "capabilities": ping_res.get("capabilities", []),
+            "raw": ping_res
+        }
+
+    def stop_service(self) -> Dict[str, Any]:
+        """Requests graceful termination of the sniffer service."""
+        return self._send_command("STOP_SERVICE", timeout=2.0)
+
+    def verify_authenticated_health(self, require_updated_version: bool = True) -> Tuple[bool, str]:
         """
-        Conducts an authenticated IPC health probe verifying both TCP connectivity
-        and HMAC authentication token acceptance.
+        Conducts an authenticated IPC health probe verifying both TCP connectivity,
+        HMAC authentication token acceptance, and version compatibility.
         Returns:
             (is_healthy: bool, details_message: str)
         """
@@ -187,9 +207,15 @@ class DDoSGuardIPCClient:
         if not tok:
             return False, "No provisioned IPC authentication secret found on disk or environment."
 
+        # Probe version compatibility to prevent using an unpatched service leaking loopback
+        if require_updated_version:
+            v_info = self.get_service_version_info()
+            if v_info["online"] and not v_info["is_updated"]:
+                return False, f"Sniffer service is running outdated build '{v_info['version']}' (requires '{REQUIRED_SERVICE_VERSION}'). Restart required."
+
         resp = self.get_scan_status(scan_id="__ipc_auth_health_probe__")
         status = resp.get("status")
-        if status in ["waiting", "ready", "stopped", "captured", "scanning", "insufficient_traffic"]:
+        if status in ["waiting", "ready", "stopped", "captured", "scanning", "insufficient_traffic", "no_traffic"]:
             return True, "Authenticated IPC connection verified healthy."
         elif status == "service_unavailable":
             return False, resp.get("message", "Service is offline or not listening.")
@@ -203,12 +229,26 @@ class DDoSGuardIPCClient:
     def get_status(self) -> Dict[str, Any]:
         return self._send_command("STATUS")
 
-    def start_scan(self, duration: float = 3.0, min_packets: int = 3, scan_id: Optional[str] = None) -> Dict[str, Any]:
+    def start_scan(
+        self,
+        duration: float = 3.0,
+        min_packets: int = 3,
+        scan_id: Optional[str] = None,
+        interface_name: Optional[str] = None,
+        interface_index: Optional[int] = None,
+        filter_str: Optional[str] = None
+    ) -> Dict[str, Any]:
         args = {
             "duration": duration,
             "min_packets": min_packets,
             "scan_id": scan_id or f"scan_{int(time.time()*1000)}"
         }
+        if interface_name:
+            args["interface_name"] = str(interface_name)
+        if interface_index is not None:
+            args["interface_index"] = int(interface_index)
+        if filter_str:
+            args["filter_str"] = str(filter_str)
         return self._send_command("START_SCAN", args)
 
     def get_scan_status(self, scan_id: Optional[str] = None) -> Dict[str, Any]:

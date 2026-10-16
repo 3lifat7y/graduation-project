@@ -262,37 +262,38 @@ def auto_detect_primary_interface() -> Tuple[Dict[str, Any], Dict[str, Any]]:
                     selected = ad
                     break
 
-    # Priority 3: Any physical adapter that is 'Up'
+    # Priority 3: Any physical adapter that is 'Up' (even without configured IP yet)
+    if not selected:
+        for ad in adapters:
+            if ad["status"] == "Up" and not ad["is_virtual"] and ad["type"] in ["Wi-Fi", "Ethernet"]:
+                selected = ad
+                break
+
+    # Priority 4: Fallback to any non-virtual adapter that is 'Up'
     if not selected:
         for ad in adapters:
             if ad["status"] == "Up" and not ad["is_virtual"]:
                 selected = ad
                 break
 
-    # Priority 4: Fallback to any adapter that is 'Up'
     if not selected:
-        for ad in adapters:
-            if ad["status"] == "Up":
-                selected = ad
-                break
-
-    if not selected:
-        # Build helpful diagnostic error
-        err_lines = [
-            "❌ No active network adapter with an active link was detected on this system!",
-            "Available network adapters:"
-        ]
-        if adapters:
-            for ad in adapters:
-                ips_str = ", ".join(ad["ips"]) if ad["ips"] else "No IPv4"
-                err_lines.append(f"  • {ad['name']:<25} ({ad['type']}) | Status: {ad['status']:<10} | IP: {ips_str}")
+        # Check if physical adapters exist but are down / disabled (e.g. Wi-Fi turned off)
+        down_physical = [ad for ad in adapters if ad["type"] in ["Wi-Fi", "Ethernet"]]
+        if down_physical:
+            names = ", ".join(f"{a['name']} ({a['status']})" for a in down_physical)
+            raise RuntimeError(
+                f"Network adapter is offline or disconnected: {names}. "
+                f"Please enable Wi-Fi or connect an Ethernet cable."
+            )
         else:
-            err_lines.append("  (Could not query adapters via system APIs.)")
-        err_lines.append("Please connect your device to Wi-Fi or plug in an Ethernet cable.")
-        raise RuntimeError("\n".join(err_lines))
+            raise RuntimeError(
+                "No active physical network adapter detected on this system. "
+                "Please connect your device to Wi-Fi or plug in an Ethernet cable."
+            )
 
     # Enrich selected adapter
-    selected["primary_ip"] = active_ip or (selected["ips"][0] if selected["ips"] else "127.0.0.1")
+    selected["primary_ip"] = active_ip or (selected["ips"][0] if selected["ips"] else None)
+    selected["is_connected"] = bool(active_ip or [ip for ip in selected["ips"] if not ip.startswith("169.254.") and not ip.startswith("127.")])
     selected["driver_status"] = drivers
 
     return selected, drivers

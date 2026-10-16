@@ -196,9 +196,9 @@ def tail_service_log(max_lines: int = 20) -> List[str]:
         return []
 
 
-def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
+def request_service_start(timeout: float = 8.0, force_restart: bool = False) -> Dict[str, Any]:
     """
-    Prompts the user with a narrowly-scoped UAC elevation dialog to start only
+    Prompts the user with a narrowly-scoped UAC elevation dialog to start or restart
     the DDoSGuardSnifferService.
     
     Returns:
@@ -208,8 +208,8 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
     - {'status': 'uac_cancelled', 'message': ...}
     - {'status': 'start_failed', 'message': ..., 'log_tail': ...}
     """
-    # 1. Quick check: already running and authenticated?
-    if is_service_online():
+    # 1. Quick check: already running, authenticated, and up to date?
+    if not force_restart and is_service_online():
         if is_service_online(require_auth=True):
             return {
                 "status": "already_running",
@@ -228,8 +228,8 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
             )
         }
 
-    # If SCM status is START_PENDING, wait briefly for it to transition to RUNNING
-    if svc_state.get("status") == "START_PENDING":
+    # If SCM status is START_PENDING and not forcing restart, wait briefly for it to transition to RUNNING
+    if not force_restart and svc_state.get("status") == "START_PENDING":
         pending_start = time.time()
         while time.time() - pending_start < 4.0:
             time.sleep(0.4)
@@ -251,7 +251,9 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
     proj_root = str(PROJECT_ROOT)
     py_path = f"{site_packages};{win32_dir};{win32_lib};{proj_root}"
 
-    # Command ensures SCM Environment (PYTHONPATH & PYTHONHOME) is configured only if missing, then starts service
+    svc_action = f"Restart-Service -Name '{SERVICE_NAME}' -Force" if force_restart or svc_state.get("running") else f"Start-Service -Name '{SERVICE_NAME}'"
+
+    # Command ensures SCM Environment (PYTHONPATH & PYTHONHOME) is configured only if missing, then starts/restarts service
     ps_cmd = (
         f"$ErrorActionPreference='Stop'; "
         f"$svcKey='HKLM:\\SYSTEM\\CurrentControlSet\\Services\\{SERVICE_NAME}'; "
@@ -260,7 +262,7 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
         f"  $envArr=@('PYTHONPATH={py_path}', 'PYTHONHOME={py_home}', 'VIRTUAL_ENV={venv_dir}', 'PATH={scripts_dir};{win32_dir};{py_home};{py_home}\\Scripts;' + $env:PATH); "
         f"  Set-ItemProperty -Path $svcKey -Name 'Environment' -Value $envArr -Type MultiString; "
         f"}}; "
-        f"Start-Service -Name '{SERVICE_NAME}'; "
+        f"{svc_action}; "
         f"exit 0"
     )
     params = f"-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -Command \"{ps_cmd}\""
@@ -337,6 +339,11 @@ def request_service_start(timeout: float = 8.0) -> Dict[str, Any]:
         ),
         "log_tail": recent_logs
     }
+
+
+def request_service_restart(timeout: float = 10.0) -> Dict[str, Any]:
+    """Prompts UAC to execute an elevated Restart-Service for DDoSGuardSnifferService."""
+    return request_service_start(timeout=timeout, force_restart=True)
 
 
 if __name__ == "__main__":

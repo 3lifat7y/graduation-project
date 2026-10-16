@@ -324,11 +324,59 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         break;
 
+      case "no_traffic":
+        isScanning = false;
+        if (stateBadge) stateBadge.textContent = "No Traffic";
+        if (radarBox) radarBox.classList.remove("active");
+        if (resultChipState) resultChipState.textContent = "Idle Network";
+
+        if (checkBtn) {
+          checkBtn.disabled = false;
+          checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Scan Again</span>';
+        }
+        if (stopBtn) stopBtn.style.display = "none";
+
+        if (labelEl) {
+          labelEl.textContent = "No Traffic Detected";
+          labelEl.style.color = "var(--text-muted)";
+        }
+        if (rateEl) {
+          rateEl.textContent = "Confidence: N/A";
+          rateEl.style.color = "var(--text-muted)";
+        }
+        if (confidenceBarFill) confidenceBarFill.style.width = "0%";
+
+        if (statusEl) {
+          statusEl.textContent = payload.message || "No packets intercepted during capture window. Please verify your network connection or generate network traffic.";
+          statusEl.style.color = "var(--text-muted)";
+        }
+
+        if (resultIcon) {
+          resultIcon.className = "fas fa-network-wired result-icon";
+          resultIcon.style.color = "var(--text-muted)";
+        }
+
+        if (telemetryGrid) {
+          telemetryGrid.style.display = "grid";
+          if (telemetryPkts) telemetryPkts.textContent = "0";
+          if (telemetryDuration) telemetryDuration.textContent = `${payload.duration || 3.0} s`;
+          if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
+          if (telemetryProtocol) telemetryProtocol.textContent = "N/A";
+        }
+
+        if (diagnosticAlert) {
+          diagnosticAlert.style.display = "flex";
+          if (diagnosticMsg) {
+            diagnosticMsg.textContent = "Zero physical network packets intercepted. If Wi-Fi is disabled, please connect to a network. If connected, browse a webpage or run 'python send_traffic.py' and scan again.";
+          }
+        }
+        break;
+
       case "insufficient_traffic":
         isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Insufficient Traffic";
+        if (stateBadge) stateBadge.textContent = "Insufficient Data";
         if (radarBox) radarBox.classList.remove("active");
-        if (resultChipState) resultChipState.textContent = "Notice";
+        if (resultChipState) resultChipState.textContent = "Low Packet Volume";
 
         if (checkBtn) {
           checkBtn.disabled = false;
@@ -337,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (stopBtn) stopBtn.style.display = "none";
 
         if (labelEl) {
-          labelEl.textContent = "Quiet Network";
+          labelEl.textContent = "Insufficient Data";
           labelEl.style.color = "var(--status-warning)";
         }
         if (rateEl) {
@@ -351,12 +399,23 @@ document.addEventListener("DOMContentLoaded", () => {
           statusEl.style.color = "var(--status-warning)";
         }
 
-        if (telemetryGrid) telemetryGrid.style.display = "none";
+        if (resultIcon) {
+          resultIcon.className = "fas fa-hourglass-half result-icon";
+          resultIcon.style.color = "var(--status-warning)";
+        }
+
+        if (telemetryGrid) {
+          telemetryGrid.style.display = "grid";
+          if (telemetryPkts) telemetryPkts.textContent = payload.packets_captured || 0;
+          if (telemetryDuration) telemetryDuration.textContent = `${payload.duration || 3.0} s`;
+          if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
+          if (telemetryProtocol) telemetryProtocol.textContent = "Incomplete";
+        }
 
         if (diagnosticAlert) {
           diagnosticAlert.style.display = "flex";
           if (diagnosticMsg) {
-            diagnosticMsg.textContent = "The network adapter had minimal traffic during the scan. Generate traffic in your browser or run 'python send_traffic.py' and scan again.";
+            diagnosticMsg.textContent = `Only ${payload.packets_captured || 0} packet(s) were captured (minimum ${payload.min_required || 3} required). Generate more traffic or retry.`;
           }
         }
         break;
@@ -395,7 +454,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       case "error":
         isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Scan Error";
+        if (stateBadge) stateBadge.textContent = "Capture Error";
         if (radarBox) radarBox.classList.remove("active");
         if (resultChipState) resultChipState.textContent = "Error";
 
@@ -406,7 +465,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (stopBtn) stopBtn.style.display = "none";
 
         if (labelEl) {
-          labelEl.textContent = "Scan Error";
+          labelEl.textContent = "Capture Error";
           labelEl.style.color = "var(--status-attack)";
         }
         if (rateEl) rateEl.textContent = "Confidence: N/A";
@@ -415,6 +474,16 @@ document.addEventListener("DOMContentLoaded", () => {
         if (statusEl) {
           statusEl.textContent = payload.message || "An error occurred during packet capture.";
           statusEl.style.color = "var(--status-attack)";
+        }
+
+        if (telemetryPkts) telemetryPkts.textContent = "0";
+        if (telemetryDuration) telemetryDuration.textContent = "0.0 s";
+        if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
+        if (telemetryProtocol) telemetryProtocol.textContent = "N/A";
+
+        if (resultIcon) {
+          resultIcon.className = "fas fa-triangle-exclamation result-icon";
+          resultIcon.style.color = "var(--status-attack)";
         }
 
         if (diagnosticAlert) {
@@ -565,6 +634,11 @@ document.addEventListener("DOMContentLoaded", () => {
         clearTimeout(scanTimeoutTimer);
         console.log(`[DDoS-Guard] Scan completed: ${data.label} (Confidence: ${data.confidence}%, Packets: ${data.packets_captured})`);
         setUIState("prediction_available", data);
+      } else if (status === "no_traffic") {
+        clearInterval(scanPollInterval);
+        clearTimeout(scanTimeoutTimer);
+        console.warn("[DDoS-Guard] Scan completed: No traffic detected on network adapter.");
+        setUIState("no_traffic", data);
       } else if (status === "insufficient_traffic") {
         clearInterval(scanPollInterval);
         clearTimeout(scanTimeoutTimer);
