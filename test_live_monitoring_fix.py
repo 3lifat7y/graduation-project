@@ -190,7 +190,7 @@ class TestLiveMonitoringFix(unittest.TestCase):
     def test_05_adapter_offline_produces_capture_error(self):
         """5. Verify that disabled / disconnected adapter produces Capture Error, not Benign."""
         with patch("api.get_service_status", return_value={"installed": True, "status": "RUNNING", "running": True, "ipc_online": True, "pid": 1234}), \
-             patch("api.ipc_client.get_service_version_info", return_value={"online": True, "version": "2.2-isolated-traffic", "is_updated": True}), \
+             patch("api.ipc_client.get_service_version_info", return_value={"online": True, "version": "2.3-continuous-monitoring", "is_updated": True}), \
              patch("api.ipc_client.verify_authenticated_health", return_value=(True, "OK")), \
              patch("api.auto_detect_primary_interface", side_effect=RuntimeError("Network adapter is offline or disconnected: Wi-Fi (Disabled)")):
             res = self.client.post("/api/scan")
@@ -232,7 +232,7 @@ class TestLiveMonitoringFix(unittest.TestCase):
 
         # Start new scan in api -> previous prediction and counters must be wiped immediately
         with patch("api.get_service_status", return_value={"installed": True, "status": "RUNNING", "running": True, "ipc_online": True, "pid": 1234}), \
-             patch("api.ipc_client.get_service_version_info", return_value={"online": True, "version": "2.2-isolated-traffic", "is_updated": True}), \
+             patch("api.ipc_client.get_service_version_info", return_value={"online": True, "version": "2.3-continuous-monitoring", "is_updated": True}), \
              patch("api.ipc_client.verify_authenticated_health", return_value=(True, "OK")), \
              patch("api.auto_detect_primary_interface", return_value=({"name": "Wi-Fi", "index": 14, "type": "Wi-Fi"}, {"can_capture_live": True})), \
              patch("api.ipc_client.start_scan", return_value={"status": "scanning", "scan_id": "new_scan_333"}):

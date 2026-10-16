@@ -928,6 +928,18 @@ body {
   border: 1px solid var(--status-attack-border);
 }
 
+.state-monitoring {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--status-benign);
+  border: 1px solid var(--status-benign-border);
+}
+
+.state-stopped {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
 @keyframes pulseScan {
   0% { transform: scale(0.97); opacity: 0.85; }
   100% { transform: scale(1.03); opacity: 1; }

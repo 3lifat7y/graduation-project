@@ -87,7 +87,8 @@ if ($errors) {{
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", self.ps1_path, "Status"],
             capture_output=True,
-            text=True
+            encoding="utf-8",
+            errors="replace"
         )
         self.assertEqual(proc.returncode, 0, f"'Status' failed with code {proc.returncode}:\n{proc.stderr}")
         self.assertIn("DDoS-Guard Service Status", proc.stdout)
@@ -128,7 +129,8 @@ if ($hasRestartClause -and $restartUsesRestartService) {{
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
             capture_output=True,
-            text=True
+            encoding="utf-8",
+            errors="replace"
         )
         self.assertEqual(proc.returncode, 0, f"Restart logic check failed:\n{proc.stdout}\n{proc.stderr}")
         self.assertIn("RESTART_LOGIC_VALID", proc.stdout)

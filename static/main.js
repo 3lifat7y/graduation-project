@@ -197,30 +197,40 @@ document.addEventListener("DOMContentLoaded", () => {
     switch (state) {
       case "ready":
         isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Ready";
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-ready";
+          stateBadge.textContent = "Ready";
+        }
         if (radarBox) radarBox.classList.remove("active");
         if (resultChipState) resultChipState.textContent = "Standby";
 
         if (checkBtn) {
           checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="fas fa-search"></i> <span class="btn-text">Scan Network</span>';
+          checkBtn.innerHTML = '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
-        if (stopBtn) stopBtn.style.display = "none";
+        if (stopBtn) {
+          stopBtn.style.display = "none";
+          stopBtn.disabled = true;
+        }
         if (statusEl) {
-          statusEl.textContent = payload.message || "System ready. Click 'Scan Network' to capture live traffic.";
+          statusEl.textContent = payload.message || "System ready. Click 'Start Monitoring' to capture live network traffic.";
           statusEl.style.color = "";
         }
         break;
 
+      case "starting":
       case "scanning":
         isScanning = true;
-        if (stateBadge) stateBadge.textContent = "Scanning...";
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-scanning";
+          stateBadge.textContent = "Starting...";
+        }
         if (radarBox) radarBox.classList.add("active");
-        if (resultChipState) resultChipState.textContent = "Sniffing Packets";
+        if (resultChipState) resultChipState.textContent = "Starting Engine";
 
         if (checkBtn) {
           checkBtn.disabled = true;
-          checkBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span class="btn-text">Sniffing Packets...</span>';
+          checkBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span class="btn-text">Starting...</span>';
         }
         if (stopBtn) {
           stopBtn.style.display = "inline-flex";
@@ -228,38 +238,30 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (statusEl) {
-          statusEl.textContent = payload.message || "Capturing live packets across active network adapter...";
+          statusEl.textContent = payload.message || "Initializing packet capture session across active adapter...";
           statusEl.style.color = "";
         }
         if (diagnosticAlert) diagnosticAlert.style.display = "none";
         break;
 
-      case "processing":
-        if (stateBadge) stateBadge.textContent = "Processing Features";
+      case "monitoring":
+      case "prediction_available":
+        isScanning = true;
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-monitoring";
+          stateBadge.textContent = "Monitoring";
+        }
         if (radarBox) radarBox.classList.add("active");
-        if (resultChipState) resultChipState.textContent = "Evaluating 77 Features";
+        if (resultChipState) resultChipState.textContent = "Live Telemetry";
 
         if (checkBtn) {
           checkBtn.disabled = true;
-          checkBtn.innerHTML = '<i class="fas fa-microchip fa-spin"></i> <span class="btn-text">Evaluating Model...</span>';
+          checkBtn.innerHTML = '<i class="fas fa-wave-square fa-spin"></i> <span class="btn-text">Monitoring Live</span>';
         }
-        if (statusEl) {
-          statusEl.textContent = payload.message || "Running 77-feature extraction through AI model...";
-          statusEl.style.color = "";
+        if (stopBtn) {
+          stopBtn.style.display = "inline-flex";
+          stopBtn.disabled = false;
         }
-        break;
-
-      case "prediction_available":
-        isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Prediction Available";
-        if (radarBox) radarBox.classList.remove("active");
-        if (resultChipState) resultChipState.textContent = "Scan Complete";
-
-        if (checkBtn) {
-          checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Scan Again</span>';
-        }
-        if (stopBtn) stopBtn.style.display = "none";
 
         const isAttack = Boolean(payload.is_attack);
         const label = payload.label || (isAttack ? "DDoS Attack" : "Benign");
@@ -267,6 +269,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const confStr = confNum > 0 ? `${confNum.toFixed(1)}%` : "--%";
 
         if (resultsConsole) {
+          resultsConsole.classList.remove("state-benign", "state-attack");
           resultsConsole.classList.add(isAttack ? "state-attack" : "state-benign");
         }
 
@@ -302,40 +305,56 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Render Telemetry Flow Statistics
-        if (telemetryGrid && payload.flow_summary) {
-          const fs = payload.flow_summary;
+        if (telemetryGrid) {
           telemetryGrid.style.display = "grid";
-
           if (telemetryPkts) {
-            telemetryPkts.textContent = fs.packets_captured || payload.packets_captured || 0;
+            const totalPkts = payload.packets_captured !== undefined ? payload.packets_captured : (payload.flow_summary?.packets_captured || 0);
+            const winPkts = payload.window_packets !== undefined ? payload.window_packets : 0;
+            telemetryPkts.textContent = winPkts > 0 ? `${totalPkts} (${winPkts}/win)` : `${totalPkts}`;
           }
           if (telemetryDuration) {
-            const durMs = ((fs.flow_duration_us || 0) / 1000).toFixed(1);
-            telemetryDuration.textContent = `${durMs} ms`;
+            const dur = payload.duration !== undefined ? payload.duration : (((payload.flow_summary?.flow_duration_us || 0) / 1000000));
+            telemetryDuration.textContent = `${Number(dur).toFixed(1)} s`;
           }
           if (telemetryThroughput) {
-            const kbps = ((fs.flow_bytes_per_s || 0) / 1024).toFixed(1);
-            telemetryThroughput.textContent = `${kbps} KB/s`;
+            const kbps = payload.throughput_kbps !== undefined ? payload.throughput_kbps : (((payload.flow_summary?.flow_bytes_per_s || 0) / 1024));
+            telemetryThroughput.textContent = `${Number(kbps).toFixed(1)} KB/s`;
           }
           if (telemetryProtocol) {
-            const protoMap = { 6: "TCP (6)", 17: "UDP (17)", 1: "ICMP (1)" };
-            telemetryProtocol.textContent = protoMap[fs.protocol] || `Proto ${fs.protocol || 6}`;
+            telemetryProtocol.textContent = payload.protocol || "WinDivert";
           }
         }
+        if (diagnosticAlert) diagnosticAlert.style.display = "none";
         break;
 
       case "no_traffic":
-        isScanning = false;
-        if (stateBadge) stateBadge.textContent = "No Traffic";
-        if (radarBox) radarBox.classList.remove("active");
-        if (resultChipState) resultChipState.textContent = "Idle Network";
+        const isContinuousNoTraffic = payload.continuous !== false;
+        isScanning = isContinuousNoTraffic;
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-no_traffic";
+          stateBadge.textContent = "No Traffic Detected";
+        }
+        if (radarBox) {
+          if (isContinuousNoTraffic) radarBox.classList.add("active");
+          else radarBox.classList.remove("active");
+        }
+        if (resultChipState) resultChipState.textContent = isContinuousNoTraffic ? "Idle Window" : "Idle Network";
 
         if (checkBtn) {
-          checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Scan Again</span>';
+          checkBtn.disabled = isContinuousNoTraffic;
+          checkBtn.innerHTML = isContinuousNoTraffic
+            ? '<i class="fas fa-wave-square"></i> <span class="btn-text">Monitoring (Idle)...</span>'
+            : '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
-        if (stopBtn) stopBtn.style.display = "none";
+        if (stopBtn) {
+          stopBtn.style.display = isContinuousNoTraffic ? "inline-flex" : "none";
+          stopBtn.disabled = !isContinuousNoTraffic;
+        }
 
+        // Clear stale prediction (never classify empty or invalid features as Benign)
+        if (resultsConsole) {
+          resultsConsole.classList.remove("state-benign", "state-attack");
+        }
         if (labelEl) {
           labelEl.textContent = "No Traffic Detected";
           labelEl.style.color = "var(--text-muted)";
@@ -347,7 +366,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (confidenceBarFill) confidenceBarFill.style.width = "0%";
 
         if (statusEl) {
-          statusEl.textContent = payload.message || "No packets intercepted during capture window. Please verify your network connection or generate network traffic.";
+          statusEl.textContent = payload.message || "No packets intercepted during rolling window. Waiting for network traffic...";
           statusEl.style.color = "var(--text-muted)";
         }
 
@@ -358,32 +377,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (telemetryGrid) {
           telemetryGrid.style.display = "grid";
-          if (telemetryPkts) telemetryPkts.textContent = "0";
-          if (telemetryDuration) telemetryDuration.textContent = `${payload.duration || 3.0} s`;
+          if (telemetryPkts) telemetryPkts.textContent = `${payload.packets_captured || 0} (0/win)`;
+          if (telemetryDuration) telemetryDuration.textContent = `${Number(payload.duration || 0).toFixed(1)} s`;
           if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
-          if (telemetryProtocol) telemetryProtocol.textContent = "N/A";
+          if (telemetryProtocol) telemetryProtocol.textContent = "Idle";
         }
 
         if (diagnosticAlert) {
           diagnosticAlert.style.display = "flex";
           if (diagnosticMsg) {
-            diagnosticMsg.textContent = "Zero physical network packets intercepted. If Wi-Fi is disabled, please connect to a network. If connected, browse a webpage or run 'python send_traffic.py' and scan again.";
+            diagnosticMsg.textContent = "Zero physical network packets intercepted in active window. If Wi-Fi is disabled, please connect to a network. If connected, browse a webpage or run 'python send_traffic.py'.";
           }
         }
         break;
 
       case "insufficient_traffic":
-        isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Insufficient Data";
-        if (radarBox) radarBox.classList.remove("active");
+        const isContinuousInsufficient = payload.continuous !== false;
+        isScanning = isContinuousInsufficient;
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-insufficient_traffic";
+          stateBadge.textContent = "Insufficient Data";
+        }
+        if (radarBox) {
+          if (isContinuousInsufficient) radarBox.classList.add("active");
+          else radarBox.classList.remove("active");
+        }
         if (resultChipState) resultChipState.textContent = "Low Packet Volume";
 
         if (checkBtn) {
-          checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Retry Scan</span>';
+          checkBtn.disabled = isContinuousInsufficient;
+          checkBtn.innerHTML = isContinuousInsufficient
+            ? '<i class="fas fa-wave-square"></i> <span class="btn-text">Monitoring (Low Traffic)...</span>'
+            : '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
-        if (stopBtn) stopBtn.style.display = "none";
+        if (stopBtn) {
+          stopBtn.style.display = isContinuousInsufficient ? "inline-flex" : "none";
+          stopBtn.disabled = !isContinuousInsufficient;
+        }
 
+        // Clear stale prediction (never classify insufficient features as Benign)
+        if (resultsConsole) {
+          resultsConsole.classList.remove("state-benign", "state-attack");
+        }
         if (labelEl) {
           labelEl.textContent = "Insufficient Data";
           labelEl.style.color = "var(--status-warning)";
@@ -395,7 +430,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (confidenceBarFill) confidenceBarFill.style.width = "0%";
 
         if (statusEl) {
-          statusEl.textContent = payload.message || "Not enough packets intercepted during the capture window to form a valid flow.";
+          statusEl.textContent = payload.message || "Interpreting traffic: window packet volume is below model classification threshold.";
           statusEl.style.color = "var(--status-warning)";
         }
 
@@ -406,31 +441,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (telemetryGrid) {
           telemetryGrid.style.display = "grid";
-          if (telemetryPkts) telemetryPkts.textContent = payload.packets_captured || 0;
-          if (telemetryDuration) telemetryDuration.textContent = `${payload.duration || 3.0} s`;
-          if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
-          if (telemetryProtocol) telemetryProtocol.textContent = "Incomplete";
+          const winPkts = payload.window_packets !== undefined ? payload.window_packets : (payload.packets_captured || 0);
+          if (telemetryPkts) telemetryPkts.textContent = `${payload.packets_captured || 0} (${winPkts}/win)`;
+          if (telemetryDuration) telemetryDuration.textContent = `${Number(payload.duration || 0).toFixed(1)} s`;
+          if (telemetryThroughput) telemetryThroughput.textContent = `${(payload.throughput_kbps || 0.0).toFixed(1)} KB/s`;
+          if (telemetryProtocol) telemetryProtocol.textContent = payload.protocol || "Gathering...";
         }
 
         if (diagnosticAlert) {
           diagnosticAlert.style.display = "flex";
           if (diagnosticMsg) {
-            diagnosticMsg.textContent = `Only ${payload.packets_captured || 0} packet(s) were captured (minimum ${payload.min_required || 3} required). Generate more traffic or retry.`;
+            diagnosticMsg.textContent = `Only ${payload.window_packets || payload.packets_captured || 0} packet(s) were captured in current window (minimum ${payload.min_required || 3} required). Generate more traffic.`;
           }
+        }
+        break;
+
+      case "stopped":
+        isScanning = false;
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-stopped";
+          stateBadge.textContent = "Stopped";
+        }
+        if (radarBox) radarBox.classList.remove("active");
+        if (resultChipState) resultChipState.textContent = "Monitoring Stopped";
+
+        if (checkBtn) {
+          checkBtn.disabled = false;
+          checkBtn.innerHTML = '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
+        }
+        if (stopBtn) {
+          stopBtn.style.display = "none";
+          stopBtn.disabled = true;
+        }
+
+        if (statusEl) {
+          statusEl.textContent = payload.message || "Continuous monitoring stopped by user.";
+          statusEl.style.color = "var(--text-muted)";
+        }
+        if (telemetryDuration && payload.duration) {
+          telemetryDuration.textContent = `${Number(payload.duration).toFixed(1)} s`;
         }
         break;
 
       case "uac_cancelled":
         isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Elevation Cancelled";
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-uac_cancelled";
+          stateBadge.textContent = "Elevation Cancelled";
+        }
         if (radarBox) radarBox.classList.remove("active");
         if (resultChipState) resultChipState.textContent = "Cancelled";
 
         if (checkBtn) {
           checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="fas fa-search"></i> <span class="btn-text">Scan Network</span>';
+          checkBtn.innerHTML = '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
-        if (stopBtn) stopBtn.style.display = "none";
+        if (stopBtn) {
+          stopBtn.style.display = "none";
+          stopBtn.disabled = true;
+        }
 
         if (labelEl) {
           labelEl.textContent = "Elevation Cancelled";
@@ -440,7 +509,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (confidenceBarFill) confidenceBarFill.style.width = "0%";
 
         if (statusEl) {
-          statusEl.textContent = "Administrator approval was cancelled. Click 'Scan Network' to approve the prompt or stream simulation packets.";
+          statusEl.textContent = "Administrator approval was cancelled. Click 'Start Monitoring' to approve the prompt or stream simulation packets.";
           statusEl.style.color = "var(--status-warning)";
         }
 
@@ -454,15 +523,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
       case "error":
         isScanning = false;
-        if (stateBadge) stateBadge.textContent = "Capture Error";
+        if (stateBadge) {
+          stateBadge.className = "status-indicator-badge state-error";
+          stateBadge.textContent = "Capture Error";
+        }
         if (radarBox) radarBox.classList.remove("active");
         if (resultChipState) resultChipState.textContent = "Error";
 
         if (checkBtn) {
           checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Retry Scan</span>';
+          checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Start Monitoring</span>';
         }
-        if (stopBtn) stopBtn.style.display = "none";
+        if (stopBtn) {
+          stopBtn.style.display = "none";
+          stopBtn.disabled = true;
+        }
 
         if (labelEl) {
           labelEl.textContent = "Capture Error";
@@ -507,7 +582,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isScanning) return;
 
     activeScanId = null;
-    console.log("[DDoS-Guard] Scan button clicked. Initiating fresh scan session...");
+    console.log("[DDoS-Guard] Start Monitoring clicked. Initiating fresh continuous session...");
 
     // Reset previous outputs immediately
     if (resultsConsole) {
@@ -518,7 +593,7 @@ document.addEventListener("DOMContentLoaded", () => {
       resultIcon.style.color = "var(--accent-cyan)";
     }
     if (labelEl) {
-      labelEl.textContent = "Sniffing Live Packets...";
+      labelEl.textContent = "Starting Monitoring...";
       labelEl.style.color = "var(--text-primary)";
     }
     if (rateEl) {
@@ -539,14 +614,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (diagnosticAlert) diagnosticAlert.style.display = "none";
 
-    setUIState("scanning");
+    setUIState("starting");
     scanStartTime = Date.now();
 
     try {
       const res = await fetch(`${API_BASE_URL}/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ duration: 3.0, min_packets: 3 })
+        body: JSON.stringify({ continuous: true, min_packets: 3 })
       });
 
       if (!res.ok) {
@@ -558,7 +633,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const startData = await res.json().catch(() => ({}));
       activeScanId = startData.scan_id || null;
-      console.log("[DDoS-Guard] Scan session registered:", activeScanId, startData);
+      console.log("[DDoS-Guard] Monitoring session registered:", activeScanId, startData);
 
       if (startData.service_state || startData.driver_status) {
         updateServiceBadge(startData.service_state, startData.driver_status);
@@ -576,18 +651,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Begin polling status every 300ms
+      // Begin polling status every 500ms continuously until Stop is clicked
       if (scanPollInterval) clearInterval(scanPollInterval);
-      scanPollInterval = setInterval(pollScanStatus, 300);
-
-      // Watchdog timeout (15 seconds)
-      if (scanTimeoutTimer) clearTimeout(scanTimeoutTimer);
-      scanTimeoutTimer = setTimeout(() => {
-        if (isScanning) {
-          stopScan(true);
-          setUIState("error", { message: "Scan request timed out without receiving packets from kernel engine." });
-        }
-      }, 15000);
+      scanPollInterval = setInterval(pollScanStatus, 500);
 
     } catch (err) {
       console.error("[DDoS-Guard] Fetch failed:", err);
@@ -614,40 +680,45 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const status = data.status;
-      if (status === "scanning") {
-        const elapsed = ((Date.now() - scanStartTime) / 1000).toFixed(1);
-        const pkts = data.packets_captured !== undefined ? data.packets_captured : 0;
-        const iface = data.interface?.name || "active adapter";
-        if (statusEl) {
-          statusEl.textContent = `Sniffing live packets on [${iface}] — ${pkts} pkts captured (${elapsed}s)...`;
+      const isContinuous = data.continuous !== false;
+
+      if (status === "starting" || status === "scanning") {
+        setUIState("starting", data);
+      } else if (status === "monitoring" || status === "prediction_available") {
+        setUIState("monitoring", data);
+        if (!isContinuous) {
+          if (scanPollInterval) {
+            clearInterval(scanPollInterval);
+            scanPollInterval = null;
+          }
         }
-        if (telemetryPkts) {
-          telemetryPkts.textContent = pkts;
-        }
-        if (telemetryDuration) {
-          telemetryDuration.textContent = `${elapsed} s`;
-        }
-      } else if (status === "processing") {
-        setUIState("processing", data);
-      } else if (status === "prediction_available") {
-        clearInterval(scanPollInterval);
-        clearTimeout(scanTimeoutTimer);
-        console.log(`[DDoS-Guard] Scan completed: ${data.label} (Confidence: ${data.confidence}%, Packets: ${data.packets_captured})`);
-        setUIState("prediction_available", data);
       } else if (status === "no_traffic") {
-        clearInterval(scanPollInterval);
-        clearTimeout(scanTimeoutTimer);
-        console.warn("[DDoS-Guard] Scan completed: No traffic detected on network adapter.");
         setUIState("no_traffic", data);
+        if (!isContinuous) {
+          if (scanPollInterval) {
+            clearInterval(scanPollInterval);
+            scanPollInterval = null;
+          }
+        }
       } else if (status === "insufficient_traffic") {
-        clearInterval(scanPollInterval);
-        clearTimeout(scanTimeoutTimer);
-        console.warn("[DDoS-Guard] Scan completed: Insufficient traffic intercepted.");
         setUIState("insufficient_traffic", data);
+        if (!isContinuous) {
+          if (scanPollInterval) {
+            clearInterval(scanPollInterval);
+            scanPollInterval = null;
+          }
+        }
+      } else if (status === "stopped") {
+        if (scanPollInterval) {
+          clearInterval(scanPollInterval);
+          scanPollInterval = null;
+        }
+        setUIState("stopped", data);
       } else if (status === "error") {
-        clearInterval(scanPollInterval);
-        clearTimeout(scanTimeoutTimer);
-        console.error("[DDoS-Guard] Scan failed with error:", data.error || data.message);
+        if (scanPollInterval) {
+          clearInterval(scanPollInterval);
+          scanPollInterval = null;
+        }
         setUIState("error", data);
       }
     } catch (err) {
@@ -665,15 +736,18 @@ document.addEventListener("DOMContentLoaded", () => {
       scanTimeoutTimer = null;
     }
     activeScanId = null;
+    isScanning = false;
 
     try {
-      await fetch(`${API_BASE_URL}/scan-stop`, { method: "POST" });
+      const res = await fetch(`${API_BASE_URL}/scan-stop`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!silent) {
+        setUIState("stopped", data.status === "stopped" ? data : { message: "Monitoring session stopped." });
+      }
     } catch (err) {
-      // Ignore stop network errors
-    }
-
-    if (!silent) {
-      setUIState("ready", { message: "Scan cancelled by user." });
+      if (!silent) {
+        setUIState("stopped", { message: "Monitoring stopped." });
+      }
     }
   }
 

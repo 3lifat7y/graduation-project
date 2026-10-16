@@ -20,7 +20,7 @@ PRIMARY_TOKEN_FILE = PROJECT_ROOT / ".ipc_auth.token"
 LEGACY_TOKEN_FILE = PROJECT_ROOT / "scratch" / "ipc_auth.token"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 50505
-REQUIRED_SERVICE_VERSION = "2.2-isolated-traffic"
+REQUIRED_SERVICE_VERSION = "2.3-continuous-monitoring"
 
 
 def get_candidate_token_files() -> List[Path]:
@@ -236,12 +236,14 @@ class DDoSGuardIPCClient:
         scan_id: Optional[str] = None,
         interface_name: Optional[str] = None,
         interface_index: Optional[int] = None,
-        filter_str: Optional[str] = None
+        filter_str: Optional[str] = None,
+        continuous: bool = True
     ) -> Dict[str, Any]:
         args = {
             "duration": duration,
             "min_packets": min_packets,
-            "scan_id": scan_id or f"scan_{int(time.time()*1000)}"
+            "scan_id": scan_id or f"scan_{int(time.time()*1000)}",
+            "continuous": continuous
         }
         if interface_name:
             args["interface_name"] = str(interface_name)
@@ -251,12 +253,35 @@ class DDoSGuardIPCClient:
             args["filter_str"] = str(filter_str)
         return self._send_command("START_SCAN", args)
 
+    def start_monitoring(
+        self,
+        min_packets: int = 3,
+        scan_id: Optional[str] = None,
+        interface_name: Optional[str] = None,
+        interface_index: Optional[int] = None,
+        filter_str: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Convenience method to initiate continuous real-time traffic monitoring."""
+        return self.start_scan(
+            duration=0.0,
+            min_packets=min_packets,
+            scan_id=scan_id,
+            interface_name=interface_name,
+            interface_index=interface_index,
+            filter_str=filter_str,
+            continuous=True
+        )
+
     def get_scan_status(self, scan_id: Optional[str] = None) -> Dict[str, Any]:
         args = {"scan_id": scan_id} if scan_id else None
         return self._send_command("GET_SCAN_STATUS", args)
 
     def stop_scan(self) -> Dict[str, Any]:
         return self._send_command("STOP_SCAN")
+
+    def stop_monitoring(self) -> Dict[str, Any]:
+        """Convenience alias for stop_scan."""
+        return self.stop_scan()
 
 
 if __name__ == "__main__":

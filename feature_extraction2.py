@@ -13,7 +13,8 @@ import time
 import socket
 import argparse
 import subprocess
-from collections import defaultdict
+from collections import defaultdict, deque
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -396,6 +397,131 @@ def validate_flow_features(features_dict: Any, min_packets: int = 3) -> Tuple[bo
         return False, f"Feature vector contains only {non_zero_count} non-zero values; invalid network flow."
 
     return True, "Valid flow features."
+
+
+class RollingFlowStatsCollector:
+    """
+    Maintains a thread-safe sliding window buffer of intercepted packets.
+    Enables continuous, non-stop packet capture while generating fresh 77-feature
+    snapshots for real-time monitoring (e.g. every 500ms).
+    """
+
+    def __init__(self, target_interface_index: Optional[int] = None, window_seconds: float = 2.0, max_buffer_packets: int = 10000):
+        self.target_interface_index = target_interface_index
+        self.window_seconds = window_seconds
+        self.max_buffer_packets = max_buffer_packets
+        self.lock = threading.Lock()
+        self.reset()
+
+    def reset(self):
+        with self.lock:
+            self.packet_buffer: deque = deque(maxlen=self.max_buffer_packets)
+            self.session_start_time = time.time()
+            self.total_packets_seen = 0
+            self.total_bytes_seen = 0
+            self.last_packet_time: Optional[float] = None
+
+    def add_packet(self, pkt_info: Dict[str, Any]):
+        """Processes and appends a single packet dictionary into the rolling window buffer."""
+        if not pkt_info or pkt_info.get("is_loopback", False):
+            return
+        src = pkt_info.get("src_ip", "0.0.0.0")
+        dst = pkt_info.get("dst_ip", "0.0.0.0")
+        if src.startswith("127.") or dst.startswith("127.") or src == "::1" or dst == "::1":
+            return
+        s_port = int(pkt_info.get("src_port", 0))
+        d_port = int(pkt_info.get("dst_port", 0))
+        if s_port in (5000, 50505) or d_port in (5000, 50505):
+            return
+
+        ts = float(pkt_info.get("timestamp", time.time()))
+        length = int(pkt_info.get("length", 60))
+
+        with self.lock:
+            self.total_packets_seen += 1
+            self.total_bytes_seen += length
+            self.last_packet_time = ts
+            self.packet_buffer.append((ts, pkt_info))
+
+    def prune_old_packets(self, now: Optional[float] = None):
+        """Purges packets older than window_seconds from the front of the deque."""
+        cur_t = now or time.time()
+        cutoff = cur_t - self.window_seconds
+        with self.lock:
+            while self.packet_buffer and self.packet_buffer[0][0] < cutoff:
+                self.packet_buffer.popleft()
+
+    def get_window_snapshot(self, now: Optional[float] = None, min_packets: int = 3) -> Dict[str, Any]:
+        """
+        Extracts a fresh snapshot of the active sliding window:
+        - Prunes expired packets.
+        - Computes instantaneous throughput (KB/s).
+        - Determines dominant protocol.
+        - If window is empty: returns status 'no_traffic'.
+        - If window < min_packets: returns status 'insufficient_traffic'.
+        - If window >= min_packets: builds FlowStatsCollector on windowed packets and computes 77 features.
+        """
+        cur_t = now or time.time()
+        self.prune_old_packets(cur_t)
+
+        with self.lock:
+            active_packets = [pkt for _, pkt in self.packet_buffer]
+            total_seen = self.total_packets_seen
+            total_bytes = self.total_bytes_seen
+            last_pkt = self.last_packet_time
+            session_dur = round(max(0.0, cur_t - self.session_start_time), 2)
+
+        window_count = len(active_packets)
+        window_bytes = sum(int(p.get("length", 60)) for p in active_packets)
+        throughput_bytes_per_s = round(window_bytes / max(0.5, self.window_seconds), 2)
+        throughput_kbps = round(throughput_bytes_per_s / 1024.0, 2)
+
+        # Dominant protocol in active window
+        proto_counts = defaultdict(int)
+        for p in active_packets:
+            proto_counts[int(p.get("protocol", 6))] += 1
+        active_proto = max(proto_counts, key=proto_counts.get) if proto_counts else 6
+
+        base_res = {
+            "session_duration": session_dur,
+            "total_packets": total_seen,
+            "total_bytes": total_bytes,
+            "window_packets": window_count,
+            "window_bytes": window_bytes,
+            "throughput_bytes_per_s": throughput_bytes_per_s,
+            "throughput_kbps": throughput_kbps,
+            "protocol": active_proto,
+            "last_packet_time": last_pkt,
+            "window_seconds": self.window_seconds,
+            "features": None
+        }
+
+        if window_count == 0:
+            base_res["status"] = "no_traffic"
+            base_res["message"] = f"No traffic detected in the last {self.window_seconds}s window."
+            return base_res
+
+        if window_count < min_packets:
+            base_res["status"] = "insufficient_traffic"
+            base_res["message"] = f"Network quiet: only {window_count} packet(s) in active window (min required: {min_packets})."
+            return base_res
+
+        # Build FlowStatsCollector on the active window
+        collector = FlowStatsCollector(target_interface_index=self.target_interface_index)
+        for pkt in active_packets:
+            collector.add_packet(pkt)
+
+        features = collector.compute_77_features()
+        is_valid, reason = validate_flow_features(features, min_packets=min_packets)
+        if not is_valid:
+            base_res["status"] = "invalid_features"
+            base_res["message"] = f"Flow feature validation failed: {reason}"
+            return base_res
+
+        base_res["status"] = "monitoring"
+        base_res["features"] = features
+        base_res["message"] = f"Active traffic: {window_count} packets in current window ({throughput_kbps} KB/s)."
+        return base_res
 
 
 def parse_windivert_packet(packet, target_if_idx: Optional[int] = None) -> Optional[Dict[str, Any]]:

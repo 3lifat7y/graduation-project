@@ -60,7 +60,7 @@ def get_service_logger() -> logging.Logger:
 
 logger = get_service_logger()
 
-from feature_extraction2 import FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES, validate_flow_features
+from feature_extraction2 import FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES, validate_flow_features, RollingFlowStatsCollector
 from network_detector import auto_detect_primary_interface, is_admin_user
 
 try:
@@ -80,20 +80,23 @@ except ImportError:
 
 IPC_HOST = "127.0.0.1"
 IPC_PORT = 50505
-SERVICE_VERSION = "2.2-isolated-traffic"
+SERVICE_VERSION = "2.3-continuous-monitoring"
 PRIMARY_TOKEN_FILE = PROJECT_ROOT / ".ipc_auth.token"
 LEGACY_TOKEN_FILE = PROJECT_ROOT / "scratch" / "ipc_auth.token"
 TOKEN_FILE = PRIMARY_TOKEN_FILE
 
 
 class CaptureWorker:
-    """Manages windowed live packet capture using WinDivert in monitor-only mode."""
+    """Manages windowed and continuous real-time packet capture using WinDivert in monitor-only mode."""
 
     def __init__(self):
         self.lock = threading.Lock()
         self.is_capturing = False
         self.stop_requested = False
         self.active_scan_id = None
+        self.is_continuous = False
+        self.min_packets = 3
+        self.rolling_collector = RollingFlowStatsCollector(window_seconds=2.0)
         self.current_result: Dict[str, Any] = {
             "status": "ready",
             "message": "Capture engine ready."
@@ -107,19 +110,27 @@ class CaptureWorker:
         min_packets: int = 3,
         filter_str: Optional[str] = None,
         interface_name: Optional[str] = None,
-        interface_index: Optional[int] = None
+        interface_index: Optional[int] = None,
+        continuous: bool = True
     ):
         with self.lock:
             if self.is_capturing:
-                # Signal previous window to stop cleanly so new scan can proceed
+                # Signal previous window/session to stop cleanly so new scan can proceed
                 self.stop_requested = True
                 self.is_capturing = False
             self.is_capturing = True
             self.stop_requested = False
             self.active_scan_id = scan_id
+            self.is_continuous = continuous
+            self.min_packets = min_packets
+            self.rolling_collector = RollingFlowStatsCollector(
+                target_interface_index=interface_index,
+                window_seconds=2.0
+            )
             self.current_result = {
-                "status": "scanning",
+                "status": "monitoring" if continuous else "scanning",
                 "scan_id": scan_id,
+                "continuous": continuous,
                 "started_at": time.time(),
                 "duration": duration,
                 "min_packets": min_packets,
@@ -128,24 +139,30 @@ class CaptureWorker:
                 "packets_captured": 0,
                 "last_packet_time": None,
                 "features": None,
-                "message": f"Capturing traffic on [{interface_name or 'Network Adapter'}] for {duration}s in monitor-only mode..."
+                "message": (
+                    f"Monitoring live traffic on [{interface_name or 'Network Adapter'}] in real time..."
+                    if continuous else
+                    f"Capturing traffic on [{interface_name or 'Network Adapter'}] for {duration}s in monitor-only mode..."
+                )
             }
 
         thread = threading.Thread(
             target=self._capture_loop,
-            args=(scan_id, duration, min_packets, filter_str, interface_name, interface_index),
+            args=(scan_id, duration, min_packets, filter_str, interface_name, interface_index, continuous),
             daemon=True
         )
         thread.start()
-        return {"status": "scanning", "scan_id": scan_id}
+        return {"status": "monitoring" if continuous else "scanning", "scan_id": scan_id}
 
     def stop_window(self):
         with self.lock:
             self.stop_requested = True
             self.is_capturing = False
+            total_seen = self.rolling_collector.total_packets_seen if self.is_continuous else self.current_result.get("packets_captured", 0)
             self.current_result["status"] = "stopped"
-            self.current_result["message"] = "Scan cancelled by client."
-        return {"status": "stopped"}
+            self.current_result["packets_captured"] = total_seen
+            self.current_result["message"] = "Monitoring stopped by user."
+        return {"status": "stopped", "scan_id": self.active_scan_id}
 
     def get_status(self, scan_id: Optional[str] = None):
         with self.lock:
@@ -159,6 +176,26 @@ class CaptureWorker:
                         "packets_captured": 0,
                         "message": f"Scan '{scan_id}' has not recorded results yet."
                     }
+
+            if self.is_continuous and self.is_capturing:
+                snap = self.rolling_collector.get_window_snapshot(min_packets=self.min_packets)
+                return {
+                    "status": snap["status"],  # "monitoring", "no_traffic", "insufficient_traffic"
+                    "scan_id": self.active_scan_id,
+                    "is_capturing": True,
+                    "continuous": True,
+                    "session_duration": snap["session_duration"],
+                    "packets_captured": snap["total_packets"],
+                    "window_packets": snap["window_packets"],
+                    "throughput_bytes_per_s": snap["throughput_bytes_per_s"],
+                    "throughput_kbps": snap["throughput_kbps"],
+                    "protocol": snap["protocol"],
+                    "interface_name": self.current_result.get("interface_name"),
+                    "interface_index": self.current_result.get("interface_index"),
+                    "last_packet_time": snap["last_packet_time"],
+                    "features": snap["features"],
+                    "message": snap["message"]
+                }
             return dict(self.current_result)
 
     def _capture_loop(
@@ -168,7 +205,8 @@ class CaptureWorker:
         min_packets: int,
         filter_str: Optional[str],
         interface_name: Optional[str],
-        interface_index: Optional[int]
+        interface_index: Optional[int],
+        continuous: bool = True
     ):
         collector = FlowStatsCollector(target_interface_index=interface_index)
         start_t = time.time()
@@ -196,8 +234,8 @@ class CaptureWorker:
             effective_filter = filter_str
 
         logger.info(
-            f"[SCAN_START] scan_id={scan_id} | adapter={interface_name} (idx={interface_index}) | "
-            f"duration={duration}s | min_pkts={min_packets} | filter='{effective_filter}'"
+            f"[CAPTURE_START] scan_id={scan_id} | continuous={continuous} | adapter={interface_name} (idx={interface_index}) | "
+            f"duration={duration if not continuous else 'continuous'}s | min_pkts={min_packets} | filter='{effective_filter}'"
         )
 
         try:
@@ -207,21 +245,34 @@ class CaptureWorker:
                     with self.lock:
                         if self.stop_requested or not self.is_capturing or self.active_scan_id != scan_id:
                             break
-                    elapsed = time.time() - start_t
-                    if elapsed >= duration:
-                        break
-                    time_left = max(0.05, duration - elapsed)
+
+                    if not continuous:
+                        elapsed = time.time() - start_t
+                        if elapsed >= duration:
+                            break
+                        time_left = max(0.05, duration - elapsed)
+                        timeout_val = min(time_left, 0.3)
+                    else:
+                        timeout_val = 0.1
+
                     try:
-                        packet = w.recv(timeout=min(time_left, 0.3))
+                        packet = w.recv(timeout=timeout_val)
                         if packet:
                             pkt_dict = parse_windivert_packet(packet, target_if_idx=interface_index)
                             if pkt_dict:
-                                collector.add_packet(pkt_dict)
+                                if continuous:
+                                    self.rolling_collector.add_packet(pkt_dict)
+                                else:
+                                    collector.add_packet(pkt_dict)
                                 self.total_packets_seen += 1
                                 with self.lock:
                                     if self.active_scan_id == scan_id:
-                                        self.current_result["packets_captured"] = collector.packet_count
-                                        self.current_result["last_packet_time"] = collector.last_packet_time
+                                        if continuous:
+                                            self.current_result["packets_captured"] = self.rolling_collector.total_packets_seen
+                                            self.current_result["last_packet_time"] = self.rolling_collector.last_packet_time
+                                        else:
+                                            self.current_result["packets_captured"] = collector.packet_count
+                                            self.current_result["last_packet_time"] = collector.last_packet_time
                     except TimeoutError:
                         continue
                     except Exception:
@@ -252,13 +303,28 @@ class CaptureWorker:
             return
 
         actual_duration = round(time.time() - start_t, 2)
-        pkt_count = collector.packet_count
-        last_pkt_time = collector.last_packet_time
 
         with self.lock:
             if self.active_scan_id != scan_id:
                 return
             self.is_capturing = False
+
+            if continuous:
+                total_pkts = self.rolling_collector.total_packets_seen
+                self.current_result = {
+                    "status": "stopped",
+                    "scan_id": scan_id,
+                    "packets_captured": total_pkts,
+                    "duration": actual_duration,
+                    "interface_name": interface_name,
+                    "message": "Continuous monitoring stopped."
+                }
+                logger.info(f"[MONITORING_END] scan_id={scan_id} | total_pkts={total_pkts} | duration={actual_duration}s")
+                return
+
+            # Discrete single-scan termination logic (legacy/tests)
+            pkt_count = collector.packet_count
+            last_pkt_time = collector.last_packet_time
             if self.stop_requested:
                 self.current_result = {
                     "status": "stopped",
@@ -503,13 +569,15 @@ class SecureIPCServer:
             interface_name = req.get("interface_name")
             interface_index = req.get("interface_index")
             filter_str = req.get("filter_str")
+            continuous = bool(req.get("continuous", True))
             return self.worker.start_window(
                 scan_id=scan_id,
                 duration=duration,
                 min_packets=min_packets,
                 filter_str=filter_str,
                 interface_name=interface_name,
-                interface_index=interface_index
+                interface_index=interface_index,
+                continuous=continuous
             )
 
         elif cmd == "GET_SCAN_STATUS":

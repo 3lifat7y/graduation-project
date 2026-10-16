@@ -23,7 +23,7 @@ import datetime
 import secrets
 
 from network_detector import auto_detect_primary_interface, check_capture_drivers
-from feature_extraction2 import FlowStatsCollector, capture_window_windivert, OFFICIAL_77_FEATURES, validate_flow_features
+from feature_extraction2 import FlowStatsCollector, RollingFlowStatsCollector, capture_window_windivert, OFFICIAL_77_FEATURES, validate_flow_features
 from ipc_client import DDoSGuardIPCClient
 from service_helper import get_service_status, request_service_start, request_service_restart, is_service_online, is_authenticated_service_online
 
@@ -101,12 +101,16 @@ FEATURE_ALIASES = {
 # Thread-safe scan session management
 scan_session_lock = threading.Lock()
 current_scan_session = {
-    "status": "ready",  # ready, scanning, processing, prediction_available, insufficient_traffic, error
+    "status": "ready",  # ready, starting, monitoring, scanning, processing, prediction_available, no_traffic, insufficient_traffic, stopped, error
     "scan_id": None,
+    "continuous": True,
     "started_at": None,
-    "duration": 3.0,
+    "duration": 0.0,
     "min_packets": 3,
     "packets_captured": 0,
+    "window_packets": 0,
+    "throughput_kbps": 0.0,
+    "protocol": "--",
     "interface": None,
     "driver_status": None,
     "prediction": None,
@@ -115,7 +119,7 @@ current_scan_session = {
     "confidence": 0.0,
     "flow_summary": {},
     "error": None,
-    "message": "Ready to scan network traffic."
+    "message": "Ready to monitor network traffic."
 }
 
 # Live packet collector for current session
@@ -308,14 +312,14 @@ def prepare_features(data_dict: Dict[str, Any]) -> np.ndarray:
     return X
 
 
-def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dict[str, Any], duration: float, min_packets: int):
-    """Background worker that conducts the windowed packet capture and model prediction."""
+def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dict[str, Any], duration: float, min_packets: int, continuous: bool = True):
+    """Background worker that conducts continuous or windowed packet capture and model prediction."""
     global current_scan_session, is_monitoring, live_collector, last_result
     start_t = time.time()
     can_capture_physical = driver_info.get("can_capture_live", False)
     extracted_feats = None
 
-    log_diag("SCAN_WORKER", f"Worker started for scan {scan_id} (duration={duration}s, min_packets={min_packets})",
+    log_diag("SCAN_WORKER", f"Worker started for scan {scan_id} (duration={duration}s, min_packets={min_packets}, continuous={continuous})",
              adapter=adapter_info.get("name"), adapter_type=adapter_info.get("type"))
 
     # Check if dedicated Windows Sniffer Service is actively running via IPC
@@ -331,21 +335,22 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
         log_diag(
             "SCAN_START_DETAILS",
             f"scan_id={scan_id} | adapter={adapter_name} | idx={adapter_index} | "
-            f"status={adapter_status} | ip={primary_ip} | connected={is_conn} | duration={duration}s"
+            f"status={adapter_status} | ip={primary_ip} | connected={is_conn} | duration={duration}s | continuous={continuous}"
         )
         filter_str = (
             f"ifIdx == {int(adapter_index)} && !loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
             if (adapter_index is not None and int(adapter_index) > 0)
             else "!loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
         )
-        log_diag("IPC_CMD", f"Sending START_SCAN to Windows Service on [{adapter_name}] (idx={adapter_index}, filter='{filter_str}', duration={duration}s, scan_id={scan_id})")
+        log_diag("IPC_CMD", f"Sending START_SCAN to Windows Service on [{adapter_name}] (idx={adapter_index}, filter='{filter_str}', duration={duration}s, continuous={continuous}, scan_id={scan_id})")
         svc_start = ipc_client.start_scan(
             duration=duration,
             min_packets=min_packets,
             scan_id=scan_id,
             interface_name=adapter_name,
             interface_index=adapter_index,
-            filter_str=filter_str
+            filter_str=filter_str,
+            continuous=continuous
         )
         if svc_start.get("status") == "error":
             err_msg = svc_start.get("message") or "Failed to start capture window on service."
@@ -362,7 +367,136 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
                     is_monitoring = False
             return
 
-        # Poll service for capture window completion
+        if continuous:
+            with scan_session_lock:
+                if current_scan_session.get("scan_id") == scan_id:
+                    current_scan_session["status"] = "monitoring"
+                    current_scan_session["message"] = f"Monitoring live traffic on [{adapter_name}] in real time..."
+
+            last_log_t = 0.0
+            while is_monitoring:
+                with scan_session_lock:
+                    if current_scan_session.get("scan_id") != scan_id or current_scan_session.get("status") in ["stopped", "ready"]:
+                        log_diag("MONITORING_STOP", f"Monitoring {scan_id} stopped.", scan_id=scan_id)
+                        ipc_client.stop_scan()
+                        return
+
+                svc_status = ipc_client.get_scan_status(scan_id)
+                if not svc_status or svc_status.get("status") in ["error", "service_unavailable", "timeout"]:
+                    err_msg = svc_status.get("message") if svc_status else "Communication with service lost."
+                    log_diag("SERVICE_ERROR", f"Monitoring {scan_id} error: {err_msg}", scan_id=scan_id)
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "error",
+                                "label": "Capture Error",
+                                "confidence": 0.0,
+                                "error": err_msg,
+                                "message": f"Service capture error: {err_msg}"
+                            })
+                            is_monitoring = False
+                    return
+
+                curr_st = svc_status.get("status")
+                total_pkts = svc_status.get("packets_captured", 0)
+                win_pkts = svc_status.get("window_packets", 0)
+                throughput = svc_status.get("throughput_kbps", 0.0)
+                proto_num = svc_status.get("protocol", 6)
+                last_pkt = svc_status.get("last_packet_time")
+                elapsed = round(time.time() - start_t, 1)
+
+                proto_map = {6: "TCP (6)", 17: "UDP (17)", 1: "ICMP (1)"}
+                proto_str = proto_map.get(int(proto_num), f"Proto {proto_num}")
+
+                now = time.time()
+                if now - last_log_t >= 1.5:
+                    log_diag("MONITORING_PROGRESS", f"Session {scan_id}: {total_pkts} total pkts, {win_pkts} in window ({throughput} KB/s, {elapsed}s)", scan_id=scan_id)
+                    last_log_t = now
+
+                if curr_st == "monitoring" and svc_status.get("features"):
+                    extracted_feats = svc_status.get("features")
+                    try:
+                        X = prepare_features(extracted_feats)
+                        prediction = int(model.predict(X)[0])
+                        label = CLASS_LABELS.get(prediction, "Unknown")
+                        is_attack = bool(prediction != BENIGN_IDX and str(label).lower() not in ["benign", "normal", "safe"])
+                        confidence = 100.0
+                        if hasattr(model, 'predict_proba'):
+                            try:
+                                proba = model.predict_proba(X)[0]
+                                confidence = round(float(proba[prediction]) * 100, 2)
+                            except Exception:
+                                pass
+
+                        flow_summary = {
+                            "packets_captured": total_pkts,
+                            "window_packets": win_pkts,
+                            "flow_duration_us": float(extracted_feats.get("Flow Duration", 0)),
+                            "flow_bytes_per_s": round(float(extracted_feats.get("Flow Bytes/s", 0)), 2),
+                            "flow_packets_per_s": round(float(extracted_feats.get("Flow Packets/s", 0)), 2),
+                            "protocol": int(proto_num),
+                            "avg_packet_size": round(float(extracted_feats.get("Avg Packet Size", 0)), 2)
+                        }
+
+                        with scan_session_lock:
+                            if current_scan_session.get("scan_id") == scan_id:
+                                current_scan_session.update({
+                                    "status": "monitoring",
+                                    "prediction": prediction,
+                                    "label": label,
+                                    "is_attack": is_attack,
+                                    "confidence": confidence,
+                                    "packets_captured": total_pkts,
+                                    "window_packets": win_pkts,
+                                    "throughput_kbps": throughput,
+                                    "protocol": proto_str,
+                                    "flow_summary": flow_summary,
+                                    "duration": elapsed,
+                                    "last_packet_time": last_pkt,
+                                    "message": "⚠️ Security Alert: Malicious DDoS Traffic Signature Detected!" if is_attack else "✅ Security Status: Normal / Benign Traffic Flow Verified",
+                                    "timestamp": time.strftime("%H:%M:%S")
+                                })
+                    except Exception as inf_err:
+                        log_diag("INFERENCE_ERROR", f"Model inference exception: {inf_err}", scan_id=scan_id)
+
+                elif curr_st == "no_traffic":
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "no_traffic",
+                                "label": "No Traffic Detected",
+                                "is_attack": False,
+                                "prediction": None,
+                                "confidence": 0.0,
+                                "packets_captured": total_pkts,
+                                "window_packets": 0,
+                                "throughput_kbps": 0.0,
+                                "protocol": "--",
+                                "duration": elapsed,
+                                "message": f"No traffic detected on [{adapter_name}]. 0 packets intercepted in active window."
+                            })
+
+                elif curr_st == "insufficient_traffic":
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "insufficient_traffic",
+                                "label": "Insufficient Data",
+                                "is_attack": False,
+                                "prediction": None,
+                                "confidence": 0.0,
+                                "packets_captured": total_pkts,
+                                "window_packets": win_pkts,
+                                "throughput_kbps": throughput,
+                                "protocol": proto_str,
+                                "duration": elapsed,
+                                "message": f"Network quiet: only {win_pkts} packet(s) in active window (min required: {min_packets})."
+                            })
+
+                time.sleep(0.25)
+            return
+
+        # Discrete window mode continues below for continuous=False:
         poll_timeout = duration + 3.5
         poll_start = time.time()
         last_log_t = 0.0
@@ -759,26 +893,36 @@ def start_service_route():
 
 @app.route('/api/scan', methods=['GET', 'POST'])
 def start_scan():
-    """Initiates a discrete live network traffic scan session."""
+    """Initiates a continuous or discrete live network traffic monitoring session."""
     global current_scan_session, is_monitoring, live_collector, last_injected_flow
     with scan_session_lock:
-        if current_scan_session["status"] == "scanning":
-            log_diag("SCAN_REJECT", "Scan request rejected: a scan is already in progress.",
+        if current_scan_session["status"] in ["scanning", "monitoring"]:
+            log_diag("SCAN_REJECT", "Scan request rejected: a monitoring session is already in progress.",
                      scan_id=current_scan_session.get("scan_id"))
             return jsonify({
                 "status": "already_scanning",
-                "message": "A network scan is already in progress.",
+                "message": "A network monitoring session is already in progress.",
                 "scan_id": current_scan_session["scan_id"]
             }), 200
 
         duration = 3.0
         min_packets = 3
+        continuous = True
         if request.is_json and request.get_json():
             req_data = request.get_json(silent=True) or {}
             duration = float(req_data.get("duration", 3.0))
             min_packets = int(req_data.get("min_packets", 3))
+            if "continuous" in req_data:
+                continuous = bool(req_data["continuous"])
+        elif request.args:
+            if "continuous" in request.args:
+                continuous = request.args.get("continuous", "true").lower() in ("true", "1")
+            if "duration" in request.args:
+                duration = float(request.args.get("duration", 3.0))
+            if "min_packets" in request.args:
+                min_packets = int(request.args.get("min_packets", 3))
 
-        log_diag("SCAN_START_REQUEST", f"New scan requested: duration={duration}s, min_packets={min_packets}")
+        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: continuous={continuous}, duration={duration}s, min_packets={min_packets}")
 
         # Wipe previous scan predictions, packet counts, and errors immediately
         current_scan_session.update({
@@ -786,6 +930,9 @@ def start_scan():
             "label": None,
             "confidence": 0.0,
             "packets_captured": 0,
+            "window_packets": 0,
+            "throughput_kbps": 0.0,
+            "protocol": "--",
             "flow_summary": {},
             "error": None
         })
@@ -958,10 +1105,14 @@ def start_scan():
         current_scan_session.update({
             "status": "scanning",
             "scan_id": scan_id,
+            "continuous": continuous,
             "started_at": time.time(),
             "duration": duration,
             "min_packets": min_packets,
             "packets_captured": 0,
+            "window_packets": 0,
+            "throughput_kbps": 0.0,
+            "protocol": "--",
             "interface": adapter_info,
             "driver_status": driver_info,
             "service_state": svc_state,
@@ -972,15 +1123,15 @@ def start_scan():
             "confidence": 0.0,
             "flow_summary": {},
             "error": None,
-            "message": f"Scanning live traffic on [{adapter_info['name']}] ({adapter_info['type']})..."
+            "message": f"Starting live monitoring on [{adapter_info['name']}] ({adapter_info['type']})..." if continuous else f"Scanning live traffic on [{adapter_info['name']}] ({adapter_info['type']})..."
         })
         is_monitoring = True
 
-        log_diag("SCAN_INITIALIZED", f"Scan {scan_id} successfully initiated on [{adapter_info['name']}]", scan_id=scan_id)
+        log_diag("SCAN_INITIALIZED", f"Scan {scan_id} successfully initiated on [{adapter_info['name']}] (continuous={continuous})", scan_id=scan_id)
 
         threading.Thread(
             target=run_scan_worker,
-            args=(scan_id, adapter_info, driver_info, duration, min_packets),
+            args=(scan_id, adapter_info, driver_info, duration, min_packets, continuous),
             daemon=True
         ).start()
 
@@ -998,7 +1149,7 @@ def get_scan_status():
 
 @app.route('/api/scan-stop', methods=['GET', 'POST'])
 def stop_scan():
-    """Cancels/aborts the active scan session."""
+    """Stops the active monitoring session cleanly and releases resources."""
     global current_scan_session, is_monitoring
     try:
         if ipc_client.is_service_running():
@@ -1006,12 +1157,19 @@ def stop_scan():
     except Exception:
         pass
     with scan_session_lock:
+        total_seen = current_scan_session.get("packets_captured", 0)
         current_scan_session.update({
-            "status": "ready",
-            "message": "Scan cancelled by user."
+            "status": "stopped",
+            "label": "Stopped",
+            "confidence": 0.0,
+            "is_attack": False,
+            "prediction": None,
+            "message": f"Monitoring stopped by user ({total_seen} total packets captured).",
+            "window_packets": 0,
+            "throughput_kbps": 0.0
         })
         is_monitoring = False
-    return jsonify({"status": "stopped", "message": "Scan cancelled."}), 200
+    return jsonify({"status": "stopped", "message": "Monitoring stopped."}), 200
 
 
 
