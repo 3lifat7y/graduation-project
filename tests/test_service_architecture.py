@@ -25,11 +25,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import service_helper
-from service_helper import (
+import modules.monitoring.service_helper as service_helper
+from modules.monitoring.service_helper import (
     get_service_status,
     is_service_online,
     tail_service_log,
@@ -37,20 +37,29 @@ from service_helper import (
     SERVICE_NAME,
     ERROR_CANCELLED
 )
-import ipc_client
-from ipc_client import (
+import modules.monitoring.ipc_client as ipc_client
+from modules.monitoring.ipc_client import (
     DDoSGuardIPCClient,
     load_provisioned_token,
     PRIMARY_TOKEN_FILE
 )
-import feature_extraction2
-from feature_extraction2 import FlowStatsCollector, OFFICIAL_77_FEATURES
+import modules.monitoring.capture_engine as feature_extraction2
+from modules.monitoring.capture_engine import FlowStatsCollector, OFFICIAL_77_FEATURES
 import api
 from api import app, prepare_features, model, scaler, CLASS_LABELS
 
 
 class TestServiceArchitectureNonPrivileged(unittest.TestCase):
     """Rigorous non-privileged verification of service architecture and model integrity."""
+
+    def setUp(self):
+        with api.scan_session_lock:
+            api.is_monitoring = False
+            api.current_scan_session.update({
+                "status": "ready",
+                "scan_id": None,
+                "is_live_capture": False
+            })
 
     def test_01_unprivileged_scm_query(self):
         """1. Verify service status can be queried without administrator privileges."""
@@ -217,7 +226,7 @@ class TestServiceArchitectureNonPrivileged(unittest.TestCase):
 
     def test_06_persistent_logging_and_tracebacks(self):
         """6. Verify persistent rotating file logging and traceback formatting."""
-        from ddos_guard_service import get_service_logger, LOG_FILE
+        from modules.monitoring.service import get_service_logger, LOG_FILE
         logger = get_service_logger()
         self.assertIsNotNone(logger)
         
@@ -338,6 +347,7 @@ class TestServiceArchitectureNonPrivileged(unittest.TestCase):
              patch.object(api.ipc_client, "get_scan_status", return_value={
                  "status": "captured",
                  "scan_id": new_scan_id,
+                 "interface_name": "Wi-Fi",
                  "packets_captured": 142,
                  "features": mock_features
              }):
@@ -350,11 +360,12 @@ class TestServiceArchitectureNonPrivileged(unittest.TestCase):
                 current_scan_session.update({
                     "status": "scanning",
                     "scan_id": new_scan_id,
+                    "continuous": False,
                     "packets_captured": 0,
                     "is_live_capture": False
                 })
 
-            run_scan_worker(new_scan_id, adapter_info, driver_info, duration=0.1, min_packets=3)
+            run_scan_worker(new_scan_id, adapter_info, driver_info, duration=0.1, min_packets=3, continuous=False)
 
             with scan_session_lock:
                 self.assertEqual(current_scan_session["scan_id"], new_scan_id)

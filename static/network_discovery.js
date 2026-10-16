@@ -186,6 +186,10 @@
         elements.ndHealthLabel.textContent = 'Adapter: Disconnected / Offline';
         elements.ndHealthDot.className = 'health-dot idle';
       }
+      const ndHealthDotMobile = document.getElementById('ndHealthDotMobile');
+      if (ndHealthDotMobile) {
+        ndHealthDotMobile.className = elements.ndHealthDot.className;
+      }
     }
 
     if (elements.ndSubnetInput && !elements.ndSubnetInput.value) {
@@ -431,7 +435,7 @@
         <tr class="nd-empty-row">
           <td colspan="8">
             <div class="nd-empty-state">
-              <div class="nd-empty-icon"><i class="fas ${isScanActive ? 'fa-spinner fa-spin' : 'fa-radar'}"></i></div>
+              <div class="nd-empty-icon"><i class="fas ${isScanActive ? 'fa-spinner fa-spin' : 'fa-satellite-dish'}"></i></div>
               <h3 class="nd-empty-title">${isScanActive ? 'Probing Subnet...' : 'No Devices Found'}</h3>
               <p class="nd-empty-desc">${
                 isScanActive
@@ -709,14 +713,42 @@
       });
     });
 
-    // Responsive Mobile Menu Toggle
-    if (elements.menuToggle && elements.mainNav) {
-      elements.menuToggle.addEventListener('click', () => {
-        const expanded = elements.menuToggle.getAttribute('aria-expanded') === 'true';
-        elements.menuToggle.setAttribute('aria-expanded', !expanded);
-        elements.mainNav.classList.toggle('nav-open');
+    // Collapsible Sidebar & Mobile Navigation
+    if (localStorage.getItem('nss_sidebar_collapsed') === 'true') {
+      document.body.classList.add('sidebar-collapsed');
+    }
+
+    const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+    if (sidebarToggleBtn) {
+      sidebarToggleBtn.addEventListener('click', () => {
+        const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('nss_sidebar_collapsed', isCollapsed ? 'true' : 'false');
       });
     }
+
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+    if (mobileMenuBtn) {
+      mobileMenuBtn.addEventListener('click', () => {
+        const isOpen = document.body.classList.toggle('mobile-sidebar-open');
+        mobileMenuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+    }
+
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener('click', () => {
+        document.body.classList.remove('mobile-sidebar-open');
+        if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    document.querySelectorAll('.sidebar-nav-item').forEach(link => {
+      link.addEventListener('click', () => {
+        document.body.classList.remove('mobile-sidebar-open');
+        if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
+      });
+    });
   }
 
   // 9. Initialize Page

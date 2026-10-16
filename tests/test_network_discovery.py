@@ -5,6 +5,12 @@ concurrent async scan lifecycle, cooperative cancellation, duplicate scan reject
 CIDR input boundaries, and Flask REST API endpoints.
 """
 
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import unittest
 from unittest.mock import patch, MagicMock
 import ipaddress
@@ -12,8 +18,8 @@ import json
 import time
 
 # Feature Backend Module Under Test
-import network_discovery
-from network_discovery import (
+import modules.network_discovery.discovery as network_discovery
+from modules.network_discovery.discovery import (
     lookup_mac_vendor,
     infer_device_type,
     resolve_hostname,

@@ -131,6 +131,11 @@ document.addEventListener("DOMContentLoaded", () => {
       headerHealthDot.className = `health-dot ${healthClass}`;
       headerHealthLabel.textContent = healthText;
     }
+
+    const headerHealthDotMobile = document.getElementById("headerHealthDotMobile");
+    if (headerHealthDotMobile) {
+      headerHealthDotMobile.className = `health-dot ${healthClass}`;
+    }
   }
 
   async function loadAdapterInfo() {
@@ -820,25 +825,230 @@ document.addEventListener("DOMContentLoaded", () => {
   updateSliderCounter();
 
   // ============================================================================
-  // 7. General Navigation & Interactive Features
+  // 7. General Navigation, Collapsible Sidebar & Dedicated View Coordinator
   // ============================================================================
-  // Mobile Hamburger Menu
-  if (menuToggle && mainNav) {
-    menuToggle.addEventListener("click", () => {
-      const isOpen = mainNav.classList.toggle("mobile-open");
-      menuToggle.setAttribute("aria-expanded", isOpen);
-      menuToggle.innerHTML = isOpen ? '<i class="fas fa-times"></i>' : '<i class="fas fa-bars"></i>';
-    });
+  const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+  const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+  const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+  const sidebarNavItems = document.querySelectorAll(".sidebar-nav-item");
 
-    // Close menu when clicking navigation link
-    mainNav.querySelectorAll("a").forEach(link => {
-      link.addEventListener("click", () => {
-        mainNav.classList.remove("mobile-open");
-        menuToggle.setAttribute("aria-expanded", "false");
-        menuToggle.innerHTML = '<i class="fas fa-bars"></i>';
-      });
+  const dedicatedToolBar = document.getElementById("dedicatedToolBar");
+  const dedicatedToolTitle = document.getElementById("dedicatedToolTitle");
+  const dedicatedViewToggleBtn = document.getElementById("dedicatedViewToggleBtn");
+  const breadcrumbHomeLink = document.getElementById("breadcrumbHomeLink");
+  const launchDedicatedMonitorBtn = document.getElementById("launchDedicatedMonitorBtn");
+  const launchDedicatedPortScannerBtn = document.getElementById("launchDedicatedPortScannerBtn");
+
+  const heroSection = document.getElementById("overview");
+  const monitorSection = document.getElementById("check-connection");
+  const portScannerSection = document.getElementById("port-scanner");
+  const ndLandingSection = document.getElementById("network-discovery-section");
+  const threatSection = document.getElementById("threat-intelligence");
+  const preventionSection = document.getElementById("prevention");
+  const teamSection = document.getElementById("team");
+  const footerEl = document.querySelector(".site-footer");
+
+  // Restore Sidebar Collapsed State from localStorage
+  if (localStorage.getItem("nss_sidebar_collapsed") === "true") {
+    document.body.classList.add("sidebar-collapsed");
+  }
+
+  // Toggle Sidebar on Desktop
+  if (sidebarToggleBtn) {
+    sidebarToggleBtn.addEventListener("click", () => {
+      const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+      localStorage.setItem("nss_sidebar_collapsed", isCollapsed ? "true" : "false");
     });
   }
+
+  // Mobile Drawer Toggle
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener("click", () => {
+      const isOpen = document.body.classList.toggle("mobile-sidebar-open");
+      mobileMenuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    });
+  }
+
+  // Mobile Backdrop Click
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener("click", () => {
+      document.body.classList.remove("mobile-sidebar-open");
+      if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  // Update Active Link in Sidebar
+  function setSidebarActive(navName) {
+    sidebarNavItems.forEach(item => {
+      if (item.getAttribute("data-nav") === navName) {
+        item.classList.add("active");
+      } else {
+        item.classList.remove("active");
+      }
+    });
+  }
+
+  // Get Requested View from URL or Hash
+  function getQueryView() {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    if (view === "monitoring" || view === "live-monitoring") return "monitoring";
+    if (view === "port-scanner" || view === "scanner") return "port-scanner";
+
+    const hash = window.location.hash;
+    if (hash === "#live-monitoring" || hash === "#monitoring") return "monitoring";
+    if (hash === "#port-scanner-page") return "port-scanner";
+
+    return "landing";
+  }
+
+  // Switch View: Dedicated Workspace vs Full Landing Page
+  function switchView(targetView, updateHistory = true) {
+    // Close mobile drawer on navigation
+    document.body.classList.remove("mobile-sidebar-open");
+    if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+
+    if (targetView === "monitoring") {
+      document.body.classList.add("dedicated-mode-monitoring");
+      document.body.classList.remove("dedicated-mode-port-scanner", "home-view");
+
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
+      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Live Network Monitoring & Intrusion Detection";
+
+      if (heroSection) heroSection.style.display = "none";
+      if (monitorSection) monitorSection.style.display = "block";
+      if (portScannerSection) portScannerSection.style.display = "none";
+      if (ndLandingSection) ndLandingSection.style.display = "none";
+      if (threatSection) threatSection.style.display = "none";
+      if (preventionSection) preventionSection.style.display = "none";
+      if (teamSection) teamSection.style.display = "none";
+      if (footerEl) footerEl.style.display = "none";
+
+      setSidebarActive("monitoring");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      if (updateHistory) {
+        history.pushState({ view: "monitoring" }, "", "?view=monitoring");
+      }
+    } else if (targetView === "port-scanner") {
+      document.body.classList.add("dedicated-mode-port-scanner");
+      document.body.classList.remove("dedicated-mode-monitoring", "home-view");
+
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
+      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Port & Network Reconnaissance Scanner";
+
+      if (heroSection) heroSection.style.display = "none";
+      if (monitorSection) monitorSection.style.display = "none";
+      if (portScannerSection) portScannerSection.style.display = "block";
+      if (ndLandingSection) ndLandingSection.style.display = "none";
+      if (threatSection) threatSection.style.display = "none";
+      if (preventionSection) preventionSection.style.display = "none";
+      if (teamSection) teamSection.style.display = "none";
+      if (footerEl) footerEl.style.display = "none";
+
+      setSidebarActive("port-scanner");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      if (updateHistory) {
+        history.pushState({ view: "port-scanner" }, "", "?view=port-scanner");
+      }
+    } else {
+      // Home Page Mode: Live Monitoring and Port Scanner are NEVER displayed on Home!
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner");
+      document.body.classList.add("home-view");
+
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "none";
+
+      if (heroSection) heroSection.style.display = "block";
+      if (monitorSection) monitorSection.style.display = "none"; // NEVER on Home
+      if (portScannerSection) portScannerSection.style.display = "none"; // NEVER on Home
+      if (ndLandingSection) ndLandingSection.style.display = "block";
+      if (threatSection) threatSection.style.display = "block";
+      if (preventionSection) preventionSection.style.display = "block";
+      if (teamSection) teamSection.style.display = "block";
+      if (footerEl) footerEl.style.display = "block";
+
+      setSidebarActive("home");
+
+      if (updateHistory && window.location.search) {
+        history.pushState({ view: "landing" }, "", window.location.pathname + (window.location.hash || ""));
+      }
+    }
+  }
+
+  // Intercept Navigation Link Clicks
+  sidebarNavItems.forEach(item => {
+    item.addEventListener("click", (e) => {
+      const navTarget = item.getAttribute("data-nav");
+      if (navTarget === "monitoring") {
+        e.preventDefault();
+        switchView("monitoring");
+      } else if (navTarget === "port-scanner") {
+        e.preventDefault();
+        switchView("port-scanner");
+      } else if (navTarget === "home") {
+        if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner")) {
+          e.preventDefault();
+          switchView("landing");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          document.body.classList.remove("mobile-sidebar-open");
+          if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+          setSidebarActive("home");
+        }
+      }
+    });
+  });
+
+  if (breadcrumbHomeLink) {
+    breadcrumbHomeLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchView("landing");
+    });
+  }
+
+  if (dedicatedViewToggleBtn) {
+    dedicatedViewToggleBtn.addEventListener("click", () => {
+      switchView("landing");
+    });
+  }
+
+  const heroStartScanBtn = document.getElementById("heroStartScanBtn");
+  const heroPortScanBtn = document.getElementById("heroPortScanBtn");
+
+  if (heroStartScanBtn) {
+    heroStartScanBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchView("monitoring");
+    });
+  }
+
+  if (heroPortScanBtn) {
+    heroPortScanBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchView("port-scanner");
+    });
+  }
+
+  if (launchDedicatedMonitorBtn) {
+    launchDedicatedMonitorBtn.addEventListener("click", () => {
+      switchView("monitoring");
+    });
+  }
+
+  if (launchDedicatedPortScannerBtn) {
+    launchDedicatedPortScannerBtn.addEventListener("click", () => {
+      switchView("port-scanner");
+    });
+  }
+
+  // Listen to popstate (browser back/forward)
+  window.addEventListener("popstate", () => {
+    switchView(getQueryView(), false);
+  });
+
+  // Initialize view from URL
+  switchView(getQueryView(), false);
 
   // Back To Top Button
   if (backToTopBtn) {
@@ -855,37 +1065,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Header Quick Check CTA
-  if (headerQuickCheckBtn) {
-    headerQuickCheckBtn.addEventListener("click", () => {
-      const scanSection = document.getElementById("check-connection");
-      if (scanSection) {
-        scanSection.scrollIntoView({ behavior: "smooth" });
-        if (checkBtn) checkBtn.focus();
-      }
-    });
-  }
-
-  // ScrollSpy for Active Navigation Links
+  // ScrollSpy for Active Navigation Links on Landing Page
   const navSections = document.querySelectorAll("section[id]");
-  const navLinks = document.querySelectorAll(".main-nav .nav-link");
 
   function highlightNavOnScroll() {
-    const scrollPos = window.scrollY + 120;
-    navSections.forEach(section => {
-      const top = section.offsetTop;
-      const height = section.offsetHeight;
-      const id = section.getAttribute("id");
-
-      if (scrollPos >= top && scrollPos < top + height) {
-        navLinks.forEach(link => {
-          link.classList.remove("active");
-          if (link.getAttribute("href") === `#${id}`) {
-            link.classList.add("active");
-          }
-        });
-      }
-    });
+    if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner")) {
+      return;
+    }
+    setSidebarActive("home");
   }
 
   window.addEventListener("scroll", highlightNavOnScroll, { passive: true });

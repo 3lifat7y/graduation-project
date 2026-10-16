@@ -17,6 +17,6 @@ if "%PY_EXE%"=="" (
     exit /b 1
 )
 
-"%PY_EXE%" send_traffic.py
+"%PY_EXE%" scripts\send_traffic.py
 pause
 

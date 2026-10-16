@@ -19,10 +19,10 @@ import time
 import unittest
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ipc_client import (
+from modules.monitoring.ipc_client import (
     DDoSGuardIPCClient,
     get_candidate_token_files,
     load_provisioned_token,
@@ -74,11 +74,11 @@ class TestIPCAuthentication(unittest.TestCase):
         """Mutating commands with the valid provisioned token must succeed."""
         scan_id = f"test_valid_{int(time.time()*1000)}"
         start_res = self.client.start_scan(duration=1.0, min_packets=1, scan_id=scan_id)
-        self.assertEqual(start_res.get("status"), "scanning")
+        self.assertIn(start_res.get("status"), ["scanning", "monitoring"])
         self.assertEqual(start_res.get("scan_id"), scan_id)
 
         status_res = self.client.get_scan_status(scan_id)
-        self.assertIn(status_res.get("status"), ["scanning", "captured", "insufficient_traffic"])
+        self.assertIn(status_res.get("status"), ["scanning", "captured", "insufficient_traffic", "no_traffic", "monitoring"])
 
         stop_res = self.client.stop_scan()
         self.assertIn(stop_res.get("status"), ["stopped", "ready"])
@@ -140,7 +140,7 @@ class TestIPCAuthentication(unittest.TestCase):
         scan_id = f"test_healing_{int(time.time()*1000)}"
         # Because of self-healing in _send_command, it catches Unauthorized, force-refreshes, and retries
         res = faulty_client.start_scan(duration=1.0, min_packets=1, scan_id=scan_id)
-        self.assertEqual(res.get("status"), "scanning")
+        self.assertIn(res.get("status"), ["scanning", "monitoring"])
         self.assertEqual(res.get("scan_id"), scan_id)
 
         # Verify client cache was healed

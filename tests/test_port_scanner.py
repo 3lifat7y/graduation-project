@@ -17,11 +17,11 @@ import socket
 import unittest
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import port_scanner
-from port_scanner import (
+import modules.port_scanner.scanner as port_scanner
+from modules.port_scanner.scanner import (
     parse_port_selection,
     validate_and_resolve_target,
     probe_single_port,

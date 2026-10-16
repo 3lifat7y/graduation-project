@@ -63,8 +63,15 @@ def build_package():
 
     assert windivert_staged, "Could not locate WinDivert64 binaries for staging"
 
-    # 5. Stage Python source modules
-    print("  • Staging Core Python Modules & Scripts...")
+    # 5. Stage Python source modules and packages
+    print("  • Staging Core Python Modules & Packages...")
+    core_dirs = ["modules", "ml_engine", "scripts"]
+    for cd in core_dirs:
+        src_d = PROJECT_ROOT / cd
+        if src_d.exists():
+            shutil.copytree(src_d, DIST_DIR / cd, dirs_exist_ok=True)
+            print(f"    ✅ Staged package directory: {cd}")
+
     core_files = [
         "api.py",
         "ddos_guard_service.py",
@@ -73,7 +80,8 @@ def build_package():
         "ipc_client.py",
         "send_traffic.py",
         "service_manager.ps1",
-        "run_ddos_guard.bat"
+        "run_ddos_guard.bat",
+        "simulate_attack.bat"
     ]
     for cf in core_files:
         src = PROJECT_ROOT / cf

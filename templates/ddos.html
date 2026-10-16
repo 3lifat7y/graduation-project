@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="DDoS-Guard: AI-Powered Real-Time Intrusion & DDoS Detection System with 77-Feature Flow Telemetry and Multi-Class Classification." />
-  <meta name="theme-color" content="#070913" />
-  <title>DDoS-Guard — AI-Based Real-Time Intrusion & DDoS Detection</title>
+  <meta name="description" content="Network Security System: Autonomous Real-Time Traffic Inspection, Multi-Class Intrusion Detection, Port Enumeration & Subnet Reconnaissance." />
+  <meta name="theme-color" content="#F7F5EF" />
+  <title>Network Security System — Autonomous Cyber Threat Defense & Telemetry</title>
 
   <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,1058 +15,1199 @@
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-  <!-- DDoS-Guard Design System -->
+  <!-- Network Security System Design System -->
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body>
-  <!-- Ambient Backdrop Glows -->
-  <div class="ambient-glow glow-top" aria-hidden="true"></div>
-  <div class="ambient-glow glow-scanner" aria-hidden="true"></div>
-
-  <!-- Sticky Cyber Header / Navigation -->
-  <header class="site-header" id="top">
-    <div class="header-inner">
-      <a class="logo" href="#top" aria-label="DDoS-Guard Homepage">
-        <div class="logo-shield">
-          <i class="fas fa-shield-halved"></i>
-          <span class="logo-core-pulse"></span>
-        </div>
-        <span class="logo-text">DDoS<span class="logo-accent">-Guard</span></span>
-        <span class="logo-badge">SOC v2.5</span>
-      </a>
-
-      <nav class="main-nav" id="mainNav" aria-label="Main Navigation">
-        <a href="#overview" class="nav-link active">Overview</a>
-        <a href="#check-connection" class="nav-link">Live Scanner</a>
-        <a href="#port-scanner" class="nav-link">Port Scanner</a>
-        <a href="/network-discovery" class="nav-link">Network Discovery</a>
-        <a href="#threat-intelligence" class="nav-link">Threat Vectors</a>
-        <a href="#prevention" class="nav-link">Mitigation</a>
-        <a href="#team" class="nav-link">Team</a>
-      </nav>
-
-      <div class="header-actions">
-        <div class="system-health-pill" id="systemHealthPill" title="Windows Sniffer Service Status">
-          <span class="health-dot" id="headerHealthDot"></span>
-          <span class="health-label" id="headerHealthLabel">Service Checking...</span>
-        </div>
-
-        <button class="header-cta" id="headerQuickCheckBtn" type="button" aria-label="Jump to Live Scanner">
-          <i class="fas fa-satellite-dish"></i>
-          <span>Launch Scanner</span>
-        </button>
-
-        <button class="menu-toggle" id="menuToggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mainNav">
-          <i class="fas fa-bars"></i>
-        </button>
-      </div>
+<body class="app-layout">
+  <!-- Mobile Top Bar (< 992px) -->
+  <header class="mobile-top-bar" id="mobileTopBar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="appSidebar">
+      <i class="fas fa-bars"></i>
+    </button>
+    <a href="/" class="mobile-brand">
+      <div class="brand-shield"><i class="fas fa-shield-halved"></i></div>
+      <span class="brand-text">Network Security System</span>
+    </a>
+    <div class="system-health-pill compact" id="systemHealthPillMobile" title="Engine Status">
+      <span class="health-dot" id="headerHealthDotMobile"></span>
     </div>
   </header>
 
-  <main>
-    <!-- Section 1: Hero Overview -->
-    <section class="hero-section" id="overview">
-      <div class="hero-container">
-        <div class="hero-content">
-          <div class="hero-eyebrow">
-            <span class="eyebrow-pill"><i class="fas fa-brain"></i> Machine Learning Engine</span>
-            <span class="eyebrow-divider">•</span>
-            <span class="eyebrow-text">CIC-IDS2017 Benchmark Verified</span>
-          </div>
+  <!-- Sidebar Backdrop (for Mobile Drawer) -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
-          <h1 class="hero-title">
-            Enterprise <span class="gradient-text">AI-Driven DDoS</span> Detection & Threat Telemetry
-          </h1>
-
-          <p class="hero-description">
-            Autonomous real-time network traffic inspection powered by kernel packet capture and 77-feature bidirectional flow extraction. Detects 14 distinct cyber attack vectors alongside verified benign baseline traffic with sub-second AI inference.
-          </p>
-
-          <div class="hero-stats-grid">
-            <div class="hero-stat-card">
-              <span class="stat-number">15</span>
-              <span class="stat-label">Trained Classes</span>
-            </div>
-            <div class="hero-stat-card">
-              <span class="stat-number">77</span>
-              <span class="stat-label">Flow Features</span>
-            </div>
-            <div class="hero-stat-card">
-              <span class="stat-number">99.86%</span>
-              <span class="stat-label">Threat Recall</span>
-            </div>
-            <div class="hero-stat-card">
-              <span class="stat-number">&lt; 1.0s</span>
-              <span class="stat-label">Inference Time</span>
-            </div>
-          </div>
-
-          <div class="hero-cta-group">
-            <button class="btn-primary" id="heroStartScanBtn" type="button" onclick="document.getElementById('check-connection').scrollIntoView({behavior:'smooth'})">
-              <i class="fas fa-satellite-dish"></i> Start Live Scan
-            </button>
-            <a href="#threat-intelligence" class="btn-secondary">
-              <i class="fas fa-shield-virus"></i> Threat Knowledgebase
-            </a>
-          </div>
+  <!-- Collapsible Sidebar Navigation -->
+  <aside class="app-sidebar" id="appSidebar" aria-label="Main Navigation">
+    <div class="sidebar-header">
+      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="Network Security System Home">
+        <div class="brand-shield">
+          <i class="fas fa-shield-halved"></i>
         </div>
-
-        <div class="hero-visual">
-          <div class="cyber-console-card">
-            <div class="console-card-header">
-              <div class="console-card-dots">
-                <span class="dot dot-red"></span>
-                <span class="dot dot-amber"></span>
-                <span class="dot dot-green"></span>
-              </div>
-              <span class="console-card-title">ddos_guard_core.sys</span>
-              <span class="console-badge-active">ACTIVE DEFENSE</span>
-            </div>
-
-            <div class="console-pipeline">
-              <div class="pipeline-node">
-                <div class="node-icon"><i class="fas fa-network-wired"></i></div>
-                <div class="node-meta">
-                  <span class="node-title">Kernel Sniffer</span>
-                  <span class="node-desc">WinDivert Flag.SNIFF</span>
-                </div>
-                <span class="node-badge-ok">ACTIVE</span>
-              </div>
-              <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
-
-              <div class="pipeline-node">
-                <div class="node-icon"><i class="fas fa-layer-group"></i></div>
-                <div class="node-meta">
-                  <span class="node-title">Feature Engine</span>
-                  <span class="node-desc">77 Bidirectional Metrics</span>
-                </div>
-                <span class="node-badge-ok">STREAMING</span>
-              </div>
-              <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
-
-              <div class="pipeline-node highlight">
-                <div class="node-icon"><i class="fas fa-microchip"></i></div>
-                <div class="node-meta">
-                  <span class="node-title">XGBoost Classifier</span>
-                  <span class="node-desc">Champion Multi-Class Model</span>
-                </div>
-                <span class="node-badge-ai">INFERENCE</span>
-              </div>
-            </div>
-
-            <div class="console-footer-telemetry">
-              <div class="telemetry-pill">
-                <span class="lbl">IPC Port:</span>
-                <span class="val">127.0.0.1:50505</span>
-              </div>
-              <div class="telemetry-pill">
-                <span class="lbl">Auth:</span>
-                <span class="val">HMAC-SHA256</span>
-              </div>
-            </div>
-          </div>
+        <div class="brand-text-wrap">
+          <span class="brand-title">Network Security</span>
+          <span class="brand-subtitle">System Console</span>
         </div>
-      </div>
-    </section>
+      </a>
+      <button class="sidebar-toggle-btn" id="sidebarToggleBtn" type="button" aria-label="Collapse sidebar navigation" title="Toggle Sidebar">
+        <i class="fas fa-chevron-left" id="sidebarToggleIcon"></i>
+      </button>
+    </div>
 
-    <!-- Section 2: Live Network Scanner & Telemetry Command Center -->
-    <section class="scanner-section" id="check-connection">
-      <div class="section-container">
-        <div class="section-header text-center">
-          <div class="section-badge">
-            <i class="fas fa-radar"></i> Live Threat Telemetry
-          </div>
-          <h2 class="section-title">Live Network Traffic & DDoS Scanner</h2>
-          <p class="section-subtitle">
-            Real-time packet inspection across physical and wireless adapters with sub-second AI inference across 15 verified network traffic categories.
-          </p>
-        </div>
+    <!-- Navigation Links -->
+    <nav class="sidebar-nav" id="mainNav" role="navigation">
+      <div class="sidebar-section-label">OVERVIEW</div>
+      <a href="/#overview" class="sidebar-nav-item active" data-nav="home" data-tooltip="Home">
+        <i class="fas fa-house-chimney nav-icon"></i>
+        <span class="nav-text">Home</span>
+      </a>
 
-        <!-- Real-Time Multi-Class Classification Capabilities -->
-        <div class="monitor-capabilities-banner">
-          <div class="cap-header">
-            <i class="fas fa-layer-group"></i>
-            <span>Supported Detection Scope: 15 Verified Traffic Classes (14 Hostile Vectors + Benign Baseline)</span>
-          </div>
-          <div class="cap-tags-row">
-            <span class="cap-tag benign" title="Class 0: Legitimate everyday network traffic"><i class="fas fa-shield-heart"></i> Benign</span>
-            <span class="cap-tag dos" title="Class 2: Volumetric Distributed DoS"><i class="fas fa-biohazard"></i> DDoS</span>
-            <span class="cap-tag dos" title="Class 4: HTTP Unbearable Load King"><i class="fas fa-biohazard"></i> DoS Hulk</span>
-            <span class="cap-tag dos" title="Class 3: Layer-7 Keep-Alive exhaustion"><i class="fas fa-biohazard"></i> DoS GoldenEye</span>
-            <span class="cap-tag dos" title="Class 6: Slow header starvation"><i class="fas fa-biohazard"></i> DoS slowloris</span>
-            <span class="cap-tag dos" title="Class 5: Slow POST/read starvation"><i class="fas fa-biohazard"></i> DoS Slowhttptest</span>
-            <span class="cap-tag web" title="Class 13: SQL database query injection"><i class="fas fa-database"></i> SQL Injection</span>
-            <span class="cap-tag web" title="Class 14: Client-side script injection"><i class="fas fa-code"></i> XSS</span>
-            <span class="cap-tag web" title="Class 12: Automated login credential guessing"><i class="fas fa-key"></i> Web Brute Force</span>
-            <span class="cap-tag brute" title="Class 11: SSH service dictionary attack"><i class="fas fa-terminal"></i> SSH-Patator</span>
-            <span class="cap-tag brute" title="Class 7: FTP service dictionary attack"><i class="fas fa-folder-open"></i> FTP-Patator</span>
-            <span class="cap-tag brute" title="Class 8: OpenSSL TLS buffer over-read (CVE-2014-0160)"><i class="fas fa-heart-pulse"></i> Heartbleed</span>
-            <span class="cap-tag recon" title="Class 10: Host service & port sweep"><i class="fas fa-satellite-dish"></i> PortScan</span>
-            <span class="cap-tag recon" title="Class 1: Botnet C2 communication"><i class="fas fa-robot"></i> Bot</span>
-            <span class="cap-tag recon" title="Class 9: Internal lateral penetration"><i class="fas fa-user-secret"></i> Infiltration</span>
-          </div>
-          <p class="cap-note">
-            <i class="fas fa-circle-info"></i> Packets are extracted into 77 bidirectional flow features and evaluated by the deployed XGBoost classifier in real time.
-          </p>
-        </div>
+      <div class="sidebar-section-label">OPERATIONAL TOOLS</div>
+      <a href="/?view=monitoring" class="sidebar-nav-item" data-nav="monitoring" data-tooltip="Live Network Monitoring">
+        <i class="fas fa-satellite-dish nav-icon"></i>
+        <span class="nav-text">Live Network Monitoring</span>
+        <span class="nav-badge-pill">Live</span>
+      </a>
+      <a href="/?view=port-scanner" class="sidebar-nav-item" data-nav="port-scanner" data-tooltip="Port Scanner">
+        <i class="fas fa-bullseye nav-icon"></i>
+        <span class="nav-text">Port Scanner</span>
+      </a>
+      <a href="/network-discovery" class="sidebar-nav-item" data-nav="network-discovery" data-tooltip="Network Discovery">
+        <i class="fas fa-sitemap nav-icon"></i>
+        <span class="nav-text">Network Discovery</span>
+      </a>
+    </nav>
 
-        <!-- Adapter Discovery & Driver HUD -->
-        <div class="adapter-chip-container">
-          <div class="adapter-chip" id="adapterChip" role="status" aria-live="polite">
-            <div class="chip-segment">
-              <i class="fas fa-wifi" id="adapterIcon" aria-hidden="true"></i>
-              <span id="adapterName">Detecting Network Adapter...</span>
-            </div>
-            <span class="chip-divider" aria-hidden="true">|</span>
-            <div class="chip-segment">
-              <i class="fas fa-network-wired" aria-hidden="true"></i>
-              <span id="adapterIp">IPv4: Checking...</span>
-            </div>
-            <span class="chip-divider" aria-hidden="true">|</span>
-            <div class="chip-segment">
-              <span id="driverStatusBadge" class="driver-badge">Driver: Checking...</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Central Scanner Workstation -->
-        <div class="connection-wrapper">
-          <!-- Control Console -->
-          <div class="connection-box" id="scannerConsole">
-            <div class="box-top-bar">
-              <span class="panel-eyebrow"><i class="fas fa-terminal"></i> Scan Controller</span>
-              <div class="status-indicator-badge state-ready" id="stateBadge" aria-live="polite">Ready</div>
-            </div>
-
-            <!-- Radar Graphic (Visual Feedback) -->
-            <div class="radar-box" id="radarBox" aria-hidden="true">
-              <div class="radar-sweep"></div>
-              <div class="radar-ring ring-1"></div>
-              <div class="radar-ring ring-2"></div>
-              <div class="radar-ring ring-3"></div>
-              <div class="radar-crosshair-h"></div>
-              <div class="radar-crosshair-v"></div>
-              <div class="radar-center-icon">
-                <i class="fas fa-crosshairs"></i>
-              </div>
-            </div>
-
-            <div class="btn-group-scan">
-              <button id="checkBtn" class="check-btn" type="button">
-                <i class="fas fa-play"></i>
-                <span class="btn-text">Start Monitoring</span>
-              </button>
-              <button id="stopBtn" class="stop-btn" type="button" aria-live="polite" style="display:none;">
-                <i class="fas fa-stop"></i>
-                <span class="btn-text">Stop Monitoring</span>
-              </button>
-            </div>
-
-            <p id="connectionStatus" class="connection-status" aria-live="polite">
-              System ready. Click 'Start Monitoring' to inspect live traffic in real time.
-            </p>
-
-            <div class="scanner-hint">
-              <i class="fas fa-shield-heart"></i>
-              <span>Live capture sniffs non-intrusively without dropping legitimate packets.</span>
-            </div>
-          </div>
-
-          <!-- Result & Telemetry Console -->
-          <div class="connection-result" id="resultsConsole" role="region" aria-label="Scan Results Panel">
-            <div class="result-top-bar">
-              <span class="panel-eyebrow"><i class="fas fa-chart-line"></i> Inference Output</span>
-              <span class="result-chip-state" id="resultChipState">Awaiting Scan</span>
-            </div>
-
-            <div class="result-hero-row">
-              <div class="result-icon-wrap" id="resultIconWrap">
-                <i class="fas fa-shield-alt result-icon" id="resultIcon" aria-hidden="true"></i>
-              </div>
-              <div class="result-header">
-                <span class="result-sub-label">Classification Result:</span>
-                <div id="connectionStatusText" class="result-label" aria-live="assertive">Waiting for scan...</div>
-              </div>
-            </div>
-
-            <!-- Confidence Meter -->
-            <div class="confidence-container" id="confidenceContainer">
-              <div class="confidence-labels">
-                <span class="conf-title">Model Confidence</span>
-                <span id="connectionRate" class="conf-value">Confidence: --%</span>
-              </div>
-              <div class="confidence-bar-track">
-                <div class="confidence-bar-fill" id="confidenceBarFill" style="width: 0%"></div>
-              </div>
-            </div>
-
-            <!-- Telemetry Metrics Grid -->
-            <div class="telemetry-grid" id="telemetryGrid" style="display:none;" aria-live="polite">
-              <div class="telemetry-item">
-                <div class="t-icon"><i class="fas fa-cubes"></i></div>
-                <div class="t-meta">
-                  <span class="t-label">Packets</span>
-                  <span class="t-value" id="telemetryPkts">0</span>
-                </div>
-              </div>
-              <div class="telemetry-item">
-                <div class="t-icon"><i class="fas fa-stopwatch"></i></div>
-                <div class="t-meta">
-                  <span class="t-label">Duration</span>
-                  <span class="t-value" id="telemetryDuration">0.0 ms</span>
-                </div>
-              </div>
-              <div class="telemetry-item">
-                <div class="t-icon"><i class="fas fa-gauge-high"></i></div>
-                <div class="t-meta">
-                  <span class="t-label">Throughput</span>
-                  <span class="t-value" id="telemetryThroughput">0.0 KB/s</span>
-                </div>
-              </div>
-              <div class="telemetry-item">
-                <div class="t-icon"><i class="fas fa-layer-group"></i></div>
-                <div class="t-meta">
-                  <span class="t-label">Protocol</span>
-                  <span class="t-value" id="telemetryProtocol">--</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Diagnostic Alert -->
-            <div class="diagnostic-alert" id="diagnosticAlert" style="display:none;" role="alert">
-              <i class="fas fa-triangle-exclamation diagnostic-icon" aria-hidden="true"></i>
-              <div class="diagnostic-content">
-                <strong class="diagnostic-title">System Guidance:</strong>
-                <span id="diagnosticMsg"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section: Independent Port & Network Scanner -->
-    <section class="port-scanner-section" id="port-scanner">
-      <div class="section-container">
-        <div class="section-header text-center">
-          <div class="section-badge">
-            <i class="fas fa-network-wired"></i> Network Reconnaissance
-          </div>
-          <h2 class="section-title">Port &amp; Network Scanner</h2>
-          <p class="section-subtitle">
-            Autonomous multi-mode host discovery and service port enumeration powered by internal asynchronous Python engine.
-          </p>
-        </div>
-
-        <!-- Mode Switcher Tabs -->
-        <div class="ps-mode-bar" role="tablist" aria-label="Port Scanner Mode Selector">
-          <button class="ps-mode-tab active" id="psTabLocalhost" data-mode="localhost" type="button" role="tab" aria-selected="true">
-            <i class="fas fa-desktop"></i>
-            <span>Localhost Scan</span>
-            <span class="ps-mode-pill">127.0.0.1</span>
-          </button>
-          <button class="ps-mode-tab" id="psTabTargetIp" data-mode="target_ip" type="button" role="tab" aria-selected="false">
-            <i class="fas fa-bullseye"></i>
-            <span>Target IP Scan</span>
-            <span class="ps-mode-pill">Single Host</span>
-          </button>
-          <button class="ps-mode-tab" id="psTabNetwork" data-mode="network" type="button" role="tab" aria-selected="false">
-            <i class="fas fa-diagram-project"></i>
-            <span>Network Subnet Scan</span>
-            <span class="ps-mode-pill">CIDR /24</span>
-          </button>
-        </div>
-
-        <!-- Port Scanner Control Console -->
-        <div class="ps-console-card">
-          <div class="ps-card-header">
-            <div class="ps-header-left">
-              <span class="ps-console-title"><i class="fas fa-terminal"></i> Scan Configuration &amp; Parameters</span>
-              <span class="ps-status-pill ps-state-ready" id="psStateBadge">Ready</span>
-            </div>
-            <div class="ps-header-right">
-              <span class="ps-local-ip-badge" id="psLocalIpBadge">
-                <i class="fas fa-circle-dot"></i> Local IP: Detecting...
-              </span>
-            </div>
-          </div>
-
-          <div class="ps-card-body">
-            <div class="ps-config-grid">
-              <!-- Left Column: Target Configuration -->
-              <div class="ps-config-group">
-                <label class="ps-label" for="psTargetInput">
-                  <span>Target Address / Subnet:</span>
-                  <span class="ps-label-hint" id="psTargetHint">Loopback interface strictly locked for local inspection.</span>
-                </label>
-                <div class="ps-input-wrap">
-                  <i class="fas fa-server ps-input-icon"></i>
-                  <input type="text" id="psTargetInput" class="ps-input" value="127.0.0.1" readonly placeholder="127.0.0.1" autocomplete="off" />
-                  <button type="button" id="psAutoSubnetBtn" class="ps-inline-btn" style="display:none;" title="Use Auto-Detected Subnet">
-                    <i class="fas fa-magic"></i> Auto
-                  </button>
-                </div>
-
-                <div class="ps-auth-wrap" id="psAuthWrap" style="display:none;">
-                  <label class="ps-checkbox-label">
-                    <input type="checkbox" id="psAuthCheck" checked />
-                    <span>I confirm authorization to perform port discovery on this target network.</span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Right Column: Port Selection & Concurrency -->
-              <div class="ps-config-group">
-                <label class="ps-label">
-                  <span>Port Selection Range:</span>
-                  <span class="ps-label-hint">Choose preset or customize ports</span>
-                </label>
-                <div class="ps-port-presets">
-                  <button type="button" class="ps-preset-btn active" data-preset="top20">Top 20 Ports</button>
-                  <button type="button" class="ps-preset-btn" data-preset="top100">Top 100</button>
-                  <button type="button" class="ps-preset-btn" data-preset="wellknown">Well-Known (1-1024)</button>
-                  <button type="button" class="ps-preset-btn" data-preset="custom">Custom Ports</button>
-                </div>
-
-                <div class="ps-custom-port-wrap" id="psCustomPortWrap" style="display:none;">
-                  <input type="text" id="psCustomPortInput" class="ps-input" placeholder="e.g. 80, 443, 8080, 3000-3005" />
-                </div>
-              </div>
-            </div>
-
-            <!-- Advanced Toggles (Timeout & Concurrency) -->
-            <div class="ps-advanced-bar">
-              <div class="ps-adv-item">
-                <label for="psTimeoutSelect">Socket Timeout:</label>
-                <select id="psTimeoutSelect" class="ps-select">
-                  <option value="0.2">Fast (0.2s - LAN only)</option>
-                  <option value="0.5" selected>Normal (0.5s - Recommended)</option>
-                  <option value="1.0">Thorough (1.0s - High Latency)</option>
-                </select>
-              </div>
-              <div class="ps-adv-item">
-                <label for="psConcurrencySelect">Concurrency Limit:</label>
-                <select id="psConcurrencySelect" class="ps-select">
-                  <option value="50">Conservative (50 connections)</option>
-                  <option value="150" selected>Balanced (150 connections)</option>
-                  <option value="250">Aggressive (250 connections)</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Action Controls -->
-            <div class="ps-actions-row">
-              <div class="ps-btn-group">
-                <button type="button" id="psStartBtn" class="ps-btn-primary">
-                  <i class="fas fa-play"></i>
-                  <span>Start Port Scan</span>
-                </button>
-                <button type="button" id="psStopBtn" class="ps-btn-danger" style="display:none;">
-                  <i class="fas fa-stop"></i>
-                  <span>Cancel Scan</span>
-                </button>
-              </div>
-
-              <div class="ps-export-group" id="psExportGroup" style="display:none;">
-                <button type="button" id="psExportJsonBtn" class="ps-btn-secondary" title="Export JSON">
-                  <i class="fas fa-file-code"></i> JSON
-                </button>
-                <button type="button" id="psExportCsvBtn" class="ps-btn-secondary" title="Export CSV">
-                  <i class="fas fa-file-csv"></i> CSV
-                </button>
-              </div>
-            </div>
-
-            <!-- Progress & Telemetry Bar -->
-            <div class="ps-progress-box" id="psProgressBox" style="display:none;">
-              <div class="ps-progress-header">
-                <span class="ps-progress-status" id="psProgressStatusText">Scanning targets...</span>
-                <span class="ps-progress-pct" id="psProgressPct">0%</span>
-              </div>
-              <div class="ps-progress-track">
-                <div class="ps-progress-bar" id="psProgressBar" style="width: 0%;"></div>
-              </div>
-            </div>
-
-            <!-- KPI Summary Counters -->
-            <div class="ps-kpi-grid" id="psKpiGrid" style="display:none;">
-              <div class="ps-kpi-card">
-                <span class="ps-kpi-val" id="psKpiHosts">0</span>
-                <span class="ps-kpi-lbl">Active Hosts</span>
-              </div>
-              <div class="ps-kpi-card">
-                <span class="ps-kpi-val" id="psKpiScanned">0</span>
-                <span class="ps-kpi-lbl">Scanned Ports</span>
-              </div>
-              <div class="ps-kpi-card highlight-kpi">
-                <span class="ps-kpi-val" id="psKpiOpen">0</span>
-                <span class="ps-kpi-lbl">Open Ports Found</span>
-              </div>
-              <div class="ps-kpi-card">
-                <span class="ps-kpi-val" id="psKpiDuration">0.0s</span>
-                <span class="ps-kpi-lbl">Scan Time</span>
-              </div>
-            </div>
-
-            <!-- Error Banner -->
-            <div class="ps-error-banner" id="psErrorBanner" style="display:none;" role="alert">
-              <i class="fas fa-circle-exclamation"></i>
-              <span id="psErrorText"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scan Results Workstation -->
-        <div class="ps-results-wrapper" id="psResultsWrapper" style="display:none;">
-          <div class="ps-results-toolbar">
-            <div class="ps-filter-tabs">
-              <button type="button" class="ps-filter-pill active" data-filter="open">
-                Open Ports Only <span class="ps-count-badge" id="psFilterOpenCount">0</span>
-              </button>
-              <button type="button" class="ps-filter-pill" data-filter="all">
-                All Scanned Ports <span class="ps-count-badge" id="psFilterAllCount">0</span>
-              </button>
-            </div>
-            <div class="ps-search-box">
-              <i class="fas fa-magnifying-glass"></i>
-              <input type="text" id="psSearchInput" placeholder="Filter by port or service..." />
-            </div>
-          </div>
-
-          <!-- Dynamic Results Container: Single Host Table or Multi-Host Cards -->
-          <div id="psResultsContent" class="ps-results-content">
-            <!-- Injected dynamically via PortScannerUI in main.js -->
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 3: Threat Intelligence & Attack Vectors -->
-    <section class="threat-intel-section" id="threat-intelligence">
-      <div class="section-container">
-        <div class="section-header text-center">
-          <div class="section-badge">
-            <i class="fas fa-shield-virus"></i> Verified Threat Intelligence
-          </div>
-          <h2 class="section-title">Common DDoS Attack Vectors & Signatures</h2>
-          <p class="section-subtitle">
-            DDoS-Guard's deployed AI champion model is trained and validated on 15 distinct network traffic classes from the benchmark CIC-IDS2017 dataset, covering 14 hostile attack vectors alongside a verified benign baseline.
-          </p>
-        </div>
-
-        <!-- Verified Normal / Benign Traffic Baseline (Class 0 Showcase) -->
-        <div class="benign-baseline-card">
-          <div class="benign-card-inner">
-            <div class="benign-icon-col">
-              <div class="benign-icon-ring">
-                <i class="fas fa-shield-heart"></i>
-              </div>
-              <span class="benign-class-badge">Class 0: Benign</span>
-            </div>
-            <div class="benign-content-col">
-              <div class="benign-title-row">
-                <h3>Normal Network Traffic (Verified Baseline)</h3>
-                <span class="benign-status-pill"><span class="pulse-dot"></span> Legitimate Flow Verified</span>
-              </div>
-              <p>
-                Represents everyday, non-hostile network traffic including authorized HTTPS web sessions, DNS lookups, streaming media, and authenticated database transactions. DDoS-Guard continuously models normal bidirectional flow dynamics across 77 statistical features, ensuring genuine traffic passes seamlessly without false alarms.
-              </p>
-              <div class="benign-metrics-row">
-                <div class="benign-metric">
-                  <span class="bm-label">Test Precision</span>
-                  <span class="bm-val">99.97%</span>
-                </div>
-                <div class="benign-metric">
-                  <span class="bm-label">Test Recall</span>
-                  <span class="bm-val">99.85%</span>
-                </div>
-                <div class="benign-metric">
-                  <span class="bm-label">Evaluated Flows</span>
-                  <span class="bm-val">64,039 Samples</span>
-                </div>
-                <div class="benign-metric">
-                  <span class="bm-label">Model Classification</span>
-                  <span class="bm-val">Non-Hostile Baseline</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Category Filter Tabs -->
-        <div class="category-filter-bar" role="tablist" aria-label="Attack Category Filters">
-          <button class="filter-tab active" data-filter="all" role="tab" aria-selected="true">
-            All Attack Vectors <span class="tab-count">14</span>
-          </button>
-          <button class="filter-tab" data-filter="dos" role="tab" aria-selected="false">
-            Denial of Service (DoS/DDoS) <span class="tab-count">5</span>
-          </button>
-          <button class="filter-tab" data-filter="web" role="tab" aria-selected="false">
-            Web Applications <span class="tab-count">3</span>
-          </button>
-          <button class="filter-tab" data-filter="brute" role="tab" aria-selected="false">
-            Brute Force &amp; Exploits <span class="tab-count">3</span>
-          </button>
-          <button class="filter-tab" data-filter="recon" role="tab" aria-selected="false">
-            Recon &amp; Infiltration <span class="tab-count">3</span>
-          </button>
-        </div>
-
-        <!-- Slider Navigation Controls -->
-        <div class="slider-controls-wrap">
-          <div class="slider-counter">
-            <span id="sliderCurrentIndex">1</span> / <span id="sliderTotalCount">14</span>
-          </div>
-          <div class="slider-arrows">
-            <button class="nav-btn prev" id="sliderPrevBtn" aria-label="Previous attack card">
-              <i class="fas fa-chevron-left"></i>
-            </button>
-            <button class="nav-btn next" id="sliderNextBtn" aria-label="Next attack card">
-              <i class="fas fa-chevron-right"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Attack Cards Container -->
-        <div class="slider" id="info">
-          <div class="card-container" id="attackCardContainer">
-            <!-- 1. DDoS (Class 2) -->
-            <div class="card attack-card-item" data-category="dos">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-dos">Denial of Service</span>
-                <span class="protocol-tag">Class: DDoS</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos0.jpg" alt="DDoS Attack Diagram" loading="lazy" />
-              </div>
-              <h3>DDoS (Distributed DoS)</h3>
-              <p>Volumetric flood launched concurrently from multiple distributed botnets to exhaust bandwidth, deplete routing buffers, and disrupt service availability.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-network-wired"></i> TCP / UDP Multi-Vector</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.93%</span>
-              </div>
-            </div>
-
-            <!-- 2. DoS Hulk (Class 4) -->
-            <div class="card attack-card-item" data-category="dos">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-dos">Denial of Service</span>
-                <span class="protocol-tag">Class: DoS Hulk</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos1.jpg" alt="DoS Hulk Attack Diagram" loading="lazy" />
-              </div>
-              <h3>DoS Hulk</h3>
-              <p>Generates high-rate, obfuscated HTTP GET requests with randomized user-agents and URLs to bypass caching servers and crash backend worker pools.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.78%</span>
-              </div>
-            </div>
-
-            <!-- 3. DoS GoldenEye (Class 3) -->
-            <div class="card attack-card-item" data-category="dos">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-dos">Denial of Service</span>
-                <span class="protocol-tag">Class: DoS GoldenEye</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos2.jpg" alt="DoS GoldenEye Attack Diagram" loading="lazy" />
-              </div>
-              <h3>DoS GoldenEye</h3>
-              <p>Layer-7 application exhaustion attack that holds HTTP Keep-Alive and No-Cache connections open indefinitely until server socket pools are depleted.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.76%</span>
-              </div>
-            </div>
-
-            <!-- 4. DoS slowloris (Class 6) -->
-            <div class="card attack-card-item" data-category="dos">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-dos">Denial of Service</span>
-                <span class="protocol-tag">Class: DoS slowloris</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos3.jpg" alt="DoS Slowloris Attack Diagram" loading="lazy" />
-              </div>
-              <h3>DoS Slowloris</h3>
-              <p>Low-and-slow HTTP starvation attack that transmits partial, incomplete request headers at slow intervals, locking connection tables with minimal bandwidth.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.72%</span>
-              </div>
-            </div>
-
-            <!-- 5. DoS Slowhttptest (Class 5) -->
-            <div class="card attack-card-item" data-category="dos">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-dos">Denial of Service</span>
-                <span class="protocol-tag">Class: DoS Slowhttptest</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos4.jpg" alt="DoS Slowhttptest Attack Diagram" loading="lazy" />
-              </div>
-              <h3>DoS Slowhttptest</h3>
-              <p>Exploits web server concurrency limits by slowly sending HTTP POST message bodies or reading response data one byte at a time to tie up threads.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.33%</span>
-              </div>
-            </div>
-
-            <!-- 6. Web Attack - SQL Injection (Class 13) -->
-            <div class="card attack-card-item" data-category="web">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-web">Web Application</span>
-                <span class="protocol-tag">Class: Web Attack - SQL Injection</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos8.jpg" alt="SQL Injection Attack Diagram" loading="lazy" />
-              </div>
-              <h3>Web Attack — SQL Injection</h3>
-              <p>Injects malicious SQL query fragments into web form inputs or query parameters to subvert application logic, bypass auth, or extract database records.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-database"></i> Database Layer</span>
-                <span class="recall-rate" title="Model precision on test set">Precision: 100%</span>
-              </div>
-            </div>
-
-            <!-- 7. Web Attack - XSS (Class 14) -->
-            <div class="card attack-card-item" data-category="web">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-web">Web Application</span>
-                <span class="protocol-tag">Class: Web Attack - XSS</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos9.jpg" alt="Cross-Site Scripting Attack Diagram" loading="lazy" />
-              </div>
-              <h3>Web Attack — XSS</h3>
-              <p>Injects unauthorized JavaScript scripts into web application parameters, executing within end-user browsers to steal session tokens and credentials.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-code"></i> Client Script</span>
-                <span class="recall-rate" title="Model precision on test set">Precision: 49.5%</span>
-              </div>
-            </div>
-
-            <!-- 8. Web Attack - Brute Force (Class 12) -->
-            <div class="card attack-card-item" data-category="web">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-web">Web Application</span>
-                <span class="protocol-tag">Class: Web Attack - Brute Force</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos10.jpg" alt="Web Brute Force Attack Diagram" loading="lazy" />
-              </div>
-              <h3>Web Attack — Brute Force</h3>
-              <p>Automated credential-guessing and password-spraying submissions targeted at web login interfaces and administrative authentication portals.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-key"></i> Web Auth Portals</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 80.95%</span>
-              </div>
-            </div>
-
-            <!-- 9. SSH-Patator (Class 11) -->
-            <div class="card attack-card-item" data-category="brute">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-brute">Brute Force</span>
-                <span class="protocol-tag">Class: SSH-Patator</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos11.jpg" alt="SSH-Patator Attack Diagram" loading="lazy" />
-              </div>
-              <h3>SSH-Patator</h3>
-              <p>Targeted multi-threaded dictionary brute force directed against Secure Shell (SSH) daemons to discover valid user credentials and gain shell access.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-terminal"></i> TCP : 22 (SSH)</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.53%</span>
-              </div>
-            </div>
-
-            <!-- 10. FTP-Patator (Class 7) -->
-            <div class="card attack-card-item" data-category="brute">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-brute">Brute Force</span>
-                <span class="protocol-tag">Class: FTP-Patator</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos12.jpg" alt="FTP-Patator Attack Diagram" loading="lazy" />
-              </div>
-              <h3>FTP-Patator</h3>
-              <p>Automated high-velocity credential brute force against File Transfer Protocol (FTP) listeners, attempting thousands of dictionary combinations.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-folder-open"></i> TCP : 21 (FTP)</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 99.83%</span>
-              </div>
-            </div>
-
-            <!-- 11. Heartbleed (Class 8) -->
-            <div class="card attack-card-item" data-category="brute">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-brute">Vulnerability Exploit</span>
-                <span class="protocol-tag">Class: Heartbleed</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos13.jpg" alt="Heartbleed Exploit Diagram" loading="lazy" />
-              </div>
-              <h3>Heartbleed (CVE-2014-0160)</h3>
-              <p>Exploits OpenSSL TLS heartbeat extension buffer over-read flaw to leak up to 64KB of server memory containing private encryption keys and passwords.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-shield-virus"></i> TLS/SSL : 443</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 100.0%</span>
-              </div>
-            </div>
-
-            <!-- 12. PortScan (Class 10) -->
-            <div class="card attack-card-item" data-category="recon">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-recon">Reconnaissance</span>
-                <span class="protocol-tag">Class: PortScan</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos5.jpg" alt="PortScan Diagram" loading="lazy" />
-              </div>
-              <h3>PortScan Reconnaissance</h3>
-              <p>Systematic TCP/UDP port enumeration across network hosts to identify listening services, banner versions, and attack surfaces prior to exploitation.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-satellite-dish"></i> TCP / UDP Sweep</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 98.72%</span>
-              </div>
-            </div>
-
-            <!-- 13. Bot (Class 1) -->
-            <div class="card attack-card-item" data-category="recon">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-recon">Botnet Activity</span>
-                <span class="protocol-tag">Class: Bot</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos6.jpg" alt="Botnet Diagram" loading="lazy" />
-              </div>
-              <h3>Botnet Traffic (ARES / C2)</h3>
-              <p>Autonomous command-and-control communication and payload synchronization between compromised zombie hosts and centralized botmaster servers.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-robot"></i> C2 Channels</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 98.61%</span>
-              </div>
-            </div>
-
-            <!-- 14. Infiltration (Class 9) -->
-            <div class="card attack-card-item" data-category="recon">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-recon">Intrusion</span>
-                <span class="protocol-tag">Class: Infiltration</span>
-              </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos7.jpg" alt="Infiltration Diagram" loading="lazy" />
-              </div>
-              <h3>Network Infiltration</h3>
-              <p>Internal network intrusion following initial compromise, involving privilege escalation, network mapping, and lateral movement across private subnets.</p>
-              <div class="card-footer-meta">
-                <span><i class="fas fa-user-secret"></i> Lateral Movement</span>
-                <span class="recall-rate" title="Model recall on test set">Recall: 100.0%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 4: DDoS Prevention & Mitigation Architecture -->
-    <section class="prevention-section" id="prevention">
-      <div class="section-container">
-        <div class="section-header text-center">
-          <div class="section-badge">
-            <i class="fas fa-shield-halved"></i> Defensive Architecture
-          </div>
-          <h2 class="section-title">DDoS Prevention & Defense-In-Depth</h2>
-          <p class="section-subtitle">
-            Essential operational practices and multi-layered controls to safeguard enterprise infrastructure against coordinated attacks.
-          </p>
-        </div>
-
-        <div class="tips-container">
-          <div class="tip-card">
-            <div class="tip-icon-box">
-              <i class="fas fa-network-wired tip-icon"></i>
-            </div>
-            <h3>Continuous Traffic Inspection</h3>
-            <p>Deploy continuous flow telemetry to monitor ingress packet rates, TCP flag ratios, and anomalous packet burst signatures before disruption occurs.</p>
-          </div>
-
-          <div class="tip-card">
-            <div class="tip-icon-box">
-              <i class="fas fa-filter tip-icon"></i>
-            </div>
-            <h3>Intelligent Rate Limiting & Firewalls</h3>
-            <p>Implement adaptive SYN cookies, connection velocity limits, and upstream BGP Flowspec filtering to drop malicious traffic at perimeter routers.</p>
-          </div>
-
-          <div class="tip-card highlight-tip">
-            <div class="tip-icon-box">
-              <i class="fas fa-brain tip-icon"></i>
-            </div>
-            <h3>AI-Powered Anomaly Detection</h3>
-            <p>Leverage machine learning classifiers to distinguish legitimate traffic spikes from distributed multi-vector attacks with high precision.</p>
-          </div>
-
-          <div class="tip-card">
-            <div class="tip-icon-box">
-              <i class="fas fa-cloud-arrow-up tip-icon"></i>
-            </div>
-            <h3>Anycast Cloud Scrubbing</h3>
-            <p>Distribute traffic globally via Anycast routing, redirecting volumetric floods to high-capacity cloud scrubbing centers for packet sanitization.</p>
-          </div>
-
-          <div class="tip-card">
-            <div class="tip-icon-box">
-              <i class="fas fa-screwdriver-wrench tip-icon"></i>
-            </div>
-            <h3>Endpoint & Service Hardening</h3>
-            <p>Close open recursive resolvers, disable NTP monlist, block vulnerable NetBIOS/RPC ports (111, 137, 1434), and keep network stacks patched.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 5: Engineering Team -->
-    <section class="team-section" id="team">
-      <div class="section-container">
-        <div class="section-header text-center">
-          <div class="section-badge">
-            <i class="fas fa-users-gear"></i> Project Contributors
-          </div>
-          <h2 class="section-title">Project Engineering Team</h2>
-          <p class="section-subtitle">
-            Faculty of Computers and Artificial Intelligence Graduation Project — AI-Powered Cybersecurity Research Team.
-          </p>
-        </div>
-
-        <div class="team-container">
-          <!-- Member 1: Ali Fathy -->
-          <div class="team-card">
-            <div class="team-avatar">
-              <span class="avatar-initials">AF</span>
-              <div class="avatar-role-icon"><i class="fas fa-brain"></i></div>
-            </div>
-            <h4>Ali Fathy</h4>
-            <span class="team-role-pill">AI Engineer</span>
-            <p class="team-role-desc">AI Model Architecture &amp; ML Training Pipeline</p>
-          </div>
-
-          <!-- Member 2: Shahd Amr -->
-          <div class="team-card">
-            <div class="team-avatar">
-              <span class="avatar-initials">SA</span>
-              <div class="avatar-role-icon"><i class="fas fa-chart-pie"></i></div>
-            </div>
-            <h4>Shahd Amr</h4>
-            <span class="team-role-pill">AI Engineer</span>
-            <p class="team-role-desc">Feature Engineering &amp; Model Optimization</p>
-          </div>
-
-          <!-- Member 3: Mohamed Abo-Alezz -->
-          <div class="team-card">
-            <div class="team-avatar">
-              <span class="avatar-initials">MA</span>
-              <div class="avatar-role-icon"><i class="fas fa-shield-virus"></i></div>
-            </div>
-            <h4>Mohamed Abo-Alezz</h4>
-            <span class="team-role-pill">SOC Analyst</span>
-            <p class="team-role-desc">Threat Intelligence &amp; Attack Vector Modeling</p>
-          </div>
-
-          <!-- Member 4: Mohamed EL-Nagar -->
-          <div class="team-card">
-            <div class="team-avatar">
-              <span class="avatar-initials">MN</span>
-              <div class="avatar-role-icon"><i class="fas fa-server"></i></div>
-            </div>
-            <h4>Mohamed EL-Nagar</h4>
-            <span class="team-role-pill">Backend Engineer</span>
-            <p class="team-role-desc">Windows Service &amp; Local IPC Architecture</p>
-          </div>
-
-          <!-- Member 5: Mennaallah Azmi -->
-          <div class="team-card">
-            <div class="team-avatar">
-              <span class="avatar-initials">MA</span>
-              <div class="avatar-role-icon"><i class="fas fa-network-wired"></i></div>
-            </div>
-            <h4>Mennaallah Azmi</h4>
-            <span class="team-role-pill">Backend Engineer</span>
-            <p class="team-role-desc">REST API Engine &amp; Traffic Ingestion</p>
-          </div>
-
-          <!-- Member 6: Eman Tag -->
-          <div class="team-card">
-            <div class="team-avatar">
-              <span class="avatar-initials">ET</span>
-              <div class="avatar-role-icon"><i class="fas fa-code"></i></div>
-            </div>
-            <h4>Eman Tag</h4>
-            <span class="team-role-pill">Frontend Engineer</span>
-            <p class="team-role-desc">Dashboard Architecture &amp; UI Systems</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Site Footer -->
-  <footer class="site-footer">
-    <div class="footer-container">
-      <div class="footer-main-row">
-        <div class="footer-brand">
-          <div class="footer-logo">
-            <i class="fas fa-shield-halved"></i>
-            <span>DDoS-Guard</span>
-          </div>
-          <p class="footer-tagline">
-            Autonomous intrusion and DDoS defense system powered by 77-feature network flow telemetry and machine learning.
-          </p>
-          <div class="footer-status-indicator">
-            <span class="status-live-dot"></span>
-            <span class="status-live-text">Kernel Engine: WinDivert Active</span>
-          </div>
-        </div>
-
-        <div class="footer-links-group">
-          <span class="footer-group-title">Navigation</span>
-          <a href="#overview">Overview</a>
-          <a href="#check-connection">Live Scanner</a>
-          <a href="#port-scanner">Port Scanner</a>
-          <a href="/network-discovery">Network Discovery</a>
-          <a href="#threat-intelligence">Threat Vectors</a>
-          <a href="#prevention">Mitigation</a>
-          <a href="#team">Team</a>
-        </div>
-
-        <div class="footer-links-group">
-          <span class="footer-group-title">Model Benchmarks</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> XGBoost Multi-Class</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 99.86% Recall Rate</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 15 Trained Classes (14 Attacks + Benign)</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 77 Bidirectional Features</span>
-        </div>
-      </div>
-
-      <div class="footer-bottom-row">
-        <p class="footer-note">© 2025–2026 DDoS-Guard Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
-        <div class="footer-badges">
-          <span class="cert-pill">SOC v2.5</span>
-          <span class="cert-pill">CIC-IDS2017</span>
+    <!-- Sidebar Footer / System Engine Status -->
+    <div class="sidebar-footer">
+      <div class="system-health-pill" id="systemHealthPill" title="Windows Sniffer Service Status">
+        <span class="health-dot" id="headerHealthDot"></span>
+        <div class="health-text-wrap">
+          <span class="health-service-title">Engine Core</span>
+          <span class="health-label" id="headerHealthLabel">Service Checking...</span>
         </div>
       </div>
     </div>
-  </footer>
+  </aside>
+
+  <!-- Main Content Wrapper -->
+  <div class="main-content-wrapper" id="mainContentWrapper">
+    <!-- Dedicated Tool Breadcrumb Bar (Visible when in dedicated view) -->
+    <div class="dedicated-tool-bar" id="dedicatedToolBar" style="display:none;">
+      <div class="breadcrumb-trail">
+        <a href="/" class="breadcrumb-link" id="breadcrumbHomeLink"><i class="fas fa-arrow-left"></i> Back to Overview</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current" id="dedicatedToolTitle">Live Network Monitoring</span>
+      </div>
+      <div class="dedicated-tool-actions">
+        <button type="button" class="btn-subtle" id="dedicatedViewToggleBtn" title="Return to Home Page">
+          <i class="fas fa-house-chimney"></i> Home Page
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Scrolling Body -->
+    <main>
+      <!-- Section 1: Hero — Network Security System -->
+      <section class="hero-section" id="overview">
+        <div class="hero-container">
+          <div class="hero-content">
+            <div class="hero-eyebrow">
+              <span class="eyebrow-pill"><i class="fas fa-shield-halved"></i> Enterprise Security Platform</span>
+              <span class="eyebrow-divider">•</span>
+              <span class="eyebrow-text">CIC-IDS2017 Benchmark Verified</span>
+            </div>
+
+            <h1 class="hero-title">
+              Comprehensive <span class="gradient-text">Network Security System</span>
+            </h1>
+
+            <p class="hero-description">
+              Unified cybersecurity defense platform combining real-time bidirectional flow telemetry, sub-second machine learning intrusion detection across 15 traffic categories, autonomous local subnet reconnaissance, and active service port enumeration.
+            </p>
+
+            <div class="hero-stats-grid">
+              <div class="hero-stat-card">
+                <span class="stat-number">15</span>
+                <span class="stat-label">Verified Classes</span>
+              </div>
+              <div class="hero-stat-card">
+                <span class="stat-number">77</span>
+                <span class="stat-label">Flow Features</span>
+              </div>
+              <div class="hero-stat-card">
+                <span class="stat-number">99.86%</span>
+                <span class="stat-label">Detection Recall</span>
+              </div>
+              <div class="hero-stat-card">
+                <span class="stat-number">&lt; 1.0s</span>
+                <span class="stat-label">Inference Time</span>
+              </div>
+            </div>
+
+            <div class="hero-cta-group">
+              <a href="/?view=monitoring" class="btn-primary" id="heroStartScanBtn">
+                <i class="fas fa-satellite-dish"></i> Launch Live Monitoring
+              </a>
+              <a href="/?view=port-scanner" class="btn-secondary" id="heroPortScanBtn">
+                <i class="fas fa-bullseye"></i> Port Scanner
+              </a>
+              <a href="/network-discovery" class="btn-secondary" id="heroDiscoveryBtn">
+                <i class="fas fa-sitemap"></i> Network Discovery
+              </a>
+            </div>
+          </div>
+
+          <div class="hero-visual">
+            <div class="cyber-console-card">
+              <div class="console-card-header">
+                <div class="console-card-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-amber"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="console-card-title">security_core.engine</span>
+                <span class="console-badge-active">ACTIVE DEFENSE</span>
+              </div>
+
+              <div class="console-pipeline">
+                <div class="pipeline-node">
+                  <div class="node-icon"><i class="fas fa-network-wired"></i></div>
+                  <div class="node-meta">
+                    <span class="node-title">Kernel Sniffer</span>
+                    <span class="node-desc">WinDivert Flag.SNIFF</span>
+                  </div>
+                  <span class="node-badge-ok">ACTIVE</span>
+                </div>
+                <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
+
+                <div class="pipeline-node">
+                  <div class="node-icon"><i class="fas fa-layer-group"></i></div>
+                  <div class="node-meta">
+                    <span class="node-title">Telemetry Engine</span>
+                    <span class="node-desc">77 Bidirectional Flow Metrics</span>
+                  </div>
+                  <span class="node-badge-ok">STREAMING</span>
+                </div>
+                <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
+
+                <div class="pipeline-node highlight">
+                  <div class="node-icon"><i class="fas fa-microchip"></i></div>
+                  <div class="node-meta">
+                    <span class="node-title">XGBoost Classifier</span>
+                    <span class="node-desc">Champion Multi-Class Model</span>
+                  </div>
+                  <span class="node-badge-ai">INFERENCE</span>
+                </div>
+              </div>
+
+              <div class="console-footer-telemetry">
+                <div class="telemetry-pill">
+                  <span class="lbl">IPC Port:</span>
+                  <span class="val">127.0.0.1:50505</span>
+                </div>
+                <div class="telemetry-pill">
+                  <span class="lbl">Auth:</span>
+                  <span class="val">HMAC-SHA256</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Live Network Monitoring (Dedicated Tool Page) -->
+      <section class="scanner-section" id="check-connection" style="display:none;">
+        <div class="section-container">
+          <div class="section-header">
+            <div class="section-badge">
+              <i class="fas fa-satellite-dish"></i> Live Threat Telemetry
+            </div>
+            <h2 class="section-title">Live Network Traffic & Threat Monitoring</h2>
+            <p class="section-subtitle">
+              Autonomous packet inspection across physical and wireless adapters with sub-second AI inference across 15 verified network traffic categories.
+            </p>
+          </div>
+
+          <!-- Multi-Class Classification Scope -->
+          <div class="monitor-capabilities-banner">
+            <div class="cap-header">
+              <i class="fas fa-layer-group"></i>
+              <span>Supported Detection Scope: 15 Verified Traffic Classes (14 Hostile Vectors + Benign Baseline)</span>
+            </div>
+            <div class="cap-tags-row">
+              <span class="cap-tag benign" title="Class 0: Legitimate everyday network traffic"><i class="fas fa-shield-heart"></i> Benign</span>
+              <span class="cap-tag dos" title="Class 2: Volumetric Distributed DoS"><i class="fas fa-biohazard"></i> DDoS</span>
+              <span class="cap-tag dos" title="Class 4: HTTP Unbearable Load King"><i class="fas fa-biohazard"></i> DoS Hulk</span>
+              <span class="cap-tag dos" title="Class 3: Layer-7 Keep-Alive exhaustion"><i class="fas fa-biohazard"></i> DoS GoldenEye</span>
+              <span class="cap-tag dos" title="Class 6: Slow header starvation"><i class="fas fa-biohazard"></i> DoS slowloris</span>
+              <span class="cap-tag dos" title="Class 5: Slow POST/read starvation"><i class="fas fa-biohazard"></i> DoS Slowhttptest</span>
+              <span class="cap-tag web" title="Class 13: SQL database query injection"><i class="fas fa-database"></i> SQL Injection</span>
+              <span class="cap-tag web" title="Class 14: Client-side script injection"><i class="fas fa-code"></i> XSS</span>
+              <span class="cap-tag web" title="Class 12: Automated login credential guessing"><i class="fas fa-key"></i> Web Brute Force</span>
+              <span class="cap-tag brute" title="Class 11: SSH service dictionary attack"><i class="fas fa-terminal"></i> SSH-Patator</span>
+              <span class="cap-tag brute" title="Class 7: FTP service dictionary attack"><i class="fas fa-folder-open"></i> FTP-Patator</span>
+              <span class="cap-tag brute" title="Class 8: OpenSSL TLS buffer over-read (CVE-2014-0160)"><i class="fas fa-heart-pulse"></i> Heartbleed</span>
+              <span class="cap-tag recon" title="Class 10: Host service & port sweep"><i class="fas fa-bullseye"></i> PortScan</span>
+              <span class="cap-tag recon" title="Class 1: Botnet C2 communication"><i class="fas fa-robot"></i> Bot</span>
+              <span class="cap-tag recon" title="Class 9: Internal lateral penetration"><i class="fas fa-user-secret"></i> Infiltration</span>
+            </div>
+            <p class="cap-note">
+              <i class="fas fa-circle-info"></i> Packets are extracted into 77 bidirectional flow features and evaluated by the deployed XGBoost classifier in real time.
+            </p>
+          </div>
+
+          <!-- Adapter Discovery & Driver HUD -->
+          <div class="adapter-chip-container">
+            <div class="adapter-chip" id="adapterChip" role="status" aria-live="polite">
+              <div class="chip-segment">
+                <i class="fas fa-wifi" id="adapterIcon" aria-hidden="true"></i>
+                <span id="adapterName">Detecting Network Adapter...</span>
+              </div>
+              <span class="chip-divider" aria-hidden="true">|</span>
+              <div class="chip-segment">
+                <i class="fas fa-network-wired" aria-hidden="true"></i>
+                <span id="adapterIp">IPv4: Checking...</span>
+              </div>
+              <span class="chip-divider" aria-hidden="true">|</span>
+              <div class="chip-segment">
+                <span id="driverStatusBadge" class="driver-badge">Driver: Checking...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Central Scanner Workstation -->
+          <div class="connection-wrapper">
+            <!-- Control Console -->
+            <div class="connection-box" id="scannerConsole">
+              <div class="box-top-bar">
+                <span class="panel-eyebrow"><i class="fas fa-terminal"></i> Scan Controller</span>
+                <div class="status-indicator-badge state-ready" id="stateBadge" aria-live="polite">Ready</div>
+              </div>
+
+              <!-- Radar Graphic (Minimalist, Crisp) -->
+              <div class="radar-box" id="radarBox" aria-hidden="true">
+                <div class="radar-sweep"></div>
+                <div class="radar-ring ring-1"></div>
+                <div class="radar-ring ring-2"></div>
+                <div class="radar-ring ring-3"></div>
+                <div class="radar-crosshair-h"></div>
+                <div class="radar-crosshair-v"></div>
+                <div class="radar-center-icon">
+                  <i class="fas fa-crosshairs"></i>
+                </div>
+              </div>
+
+              <div class="btn-group-scan">
+                <button id="checkBtn" class="check-btn" type="button">
+                  <i class="fas fa-play"></i>
+                  <span class="btn-text">Start Monitoring</span>
+                </button>
+                <button id="stopBtn" class="stop-btn" type="button" aria-live="polite" style="display:none;">
+                  <i class="fas fa-stop"></i>
+                  <span class="btn-text">Stop Monitoring</span>
+                </button>
+              </div>
+
+              <p id="connectionStatus" class="connection-status" aria-live="polite">
+                System ready. Click 'Start Monitoring' to inspect live traffic in real time.
+              </p>
+
+              <div class="scanner-hint">
+                <i class="fas fa-shield-heart"></i>
+                <span>Live capture sniffs non-intrusively without dropping legitimate packets.</span>
+              </div>
+            </div>
+
+            <!-- Result & Telemetry Console -->
+            <div class="connection-result" id="resultsConsole" role="region" aria-label="Scan Results Panel">
+              <div class="result-top-bar">
+                <span class="panel-eyebrow"><i class="fas fa-chart-line"></i> Inference Output</span>
+                <span class="result-chip-state" id="resultChipState">Awaiting Scan</span>
+              </div>
+
+              <div class="result-hero-row">
+                <div class="result-icon-wrap" id="resultIconWrap">
+                  <i class="fas fa-shield-alt result-icon" id="resultIcon" aria-hidden="true"></i>
+                </div>
+                <div class="result-header">
+                  <span class="result-sub-label">Classification Result:</span>
+                  <div id="connectionStatusText" class="result-label" aria-live="assertive">Waiting for scan...</div>
+                </div>
+              </div>
+
+              <!-- Confidence Meter -->
+              <div class="confidence-container" id="confidenceContainer">
+                <div class="confidence-labels">
+                  <span class="conf-title">Model Confidence</span>
+                  <span id="connectionRate" class="conf-value">Confidence: --%</span>
+                </div>
+                <div class="confidence-bar-track">
+                  <div class="confidence-bar-fill" id="confidenceBarFill" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <!-- Telemetry Metrics Grid -->
+              <div class="telemetry-grid" id="telemetryGrid" style="display:none;" aria-live="polite">
+                <div class="telemetry-item">
+                  <div class="t-icon"><i class="fas fa-cubes"></i></div>
+                  <div class="t-meta">
+                    <span class="t-label">Packets</span>
+                    <span class="t-value" id="telemetryPkts">0</span>
+                  </div>
+                </div>
+                <div class="telemetry-item">
+                  <div class="t-icon"><i class="fas fa-stopwatch"></i></div>
+                  <div class="t-meta">
+                    <span class="t-label">Duration</span>
+                    <span class="t-value" id="telemetryDuration">0.0 ms</span>
+                  </div>
+                </div>
+                <div class="telemetry-item">
+                  <div class="t-icon"><i class="fas fa-gauge-high"></i></div>
+                  <div class="t-meta">
+                    <span class="t-label">Throughput</span>
+                    <span class="t-value" id="telemetryThroughput">0.0 KB/s</span>
+                  </div>
+                </div>
+                <div class="telemetry-item">
+                  <div class="t-icon"><i class="fas fa-layer-group"></i></div>
+                  <div class="t-meta">
+                    <span class="t-label">Protocol</span>
+                    <span class="t-value" id="telemetryProtocol">--</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Diagnostic Alert -->
+              <div class="diagnostic-alert" id="diagnosticAlert" style="display:none;" role="alert">
+                <i class="fas fa-triangle-exclamation diagnostic-icon" aria-hidden="true"></i>
+                <div class="diagnostic-content">
+                  <strong class="diagnostic-title">System Guidance:</strong>
+                  <span id="diagnosticMsg"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Port Scanner (Dedicated Tool Page) -->
+      <section class="port-scanner-section" id="port-scanner" style="display:none;">
+        <div class="section-container">
+          <div class="section-header">
+            <div class="section-badge">
+              <i class="fas fa-bullseye"></i> Network Reconnaissance
+            </div>
+            <h2 class="section-title">Port & Network Reconnaissance Scanner</h2>
+            <p class="section-subtitle">
+              Autonomous multi-mode host discovery and service port enumeration powered by internal asynchronous Python engine.
+            </p>
+          </div>
+
+          <!-- Mode Switcher Tabs -->
+          <div class="ps-mode-bar" role="tablist" aria-label="Port Scanner Mode Selector">
+            <button class="ps-mode-tab active" id="psTabLocalhost" data-mode="localhost" type="button" role="tab" aria-selected="true">
+              <i class="fas fa-desktop"></i>
+              <span>Localhost Scan</span>
+              <span class="ps-mode-pill">127.0.0.1</span>
+            </button>
+            <button class="ps-mode-tab" id="psTabTargetIp" data-mode="target_ip" type="button" role="tab" aria-selected="false">
+              <i class="fas fa-bullseye"></i>
+              <span>Target IP Scan</span>
+              <span class="ps-mode-pill">Single Host</span>
+            </button>
+            <button class="ps-mode-tab" id="psTabNetwork" data-mode="network" type="button" role="tab" aria-selected="false">
+              <i class="fas fa-diagram-project"></i>
+              <span>Network Subnet Scan</span>
+              <span class="ps-mode-pill">CIDR /24</span>
+            </button>
+          </div>
+
+          <!-- Port Scanner Control Console -->
+          <div class="ps-console-card">
+            <div class="ps-card-header">
+              <div class="ps-header-left">
+                <span class="ps-console-title"><i class="fas fa-terminal"></i> Scan Configuration & Parameters</span>
+                <span class="ps-status-pill ps-state-ready" id="psStateBadge">Ready</span>
+              </div>
+              <div class="ps-header-right">
+                <span class="ps-local-ip-badge" id="psLocalIpBadge">
+                  <i class="fas fa-circle-dot"></i> Local IP: Detecting...
+                </span>
+              </div>
+            </div>
+
+            <div class="ps-card-body">
+              <div class="ps-config-grid">
+                <!-- Target Address Configuration -->
+                <div class="ps-config-group">
+                  <label class="ps-label" for="psTargetInput">
+                    <span>Target Address / Subnet:</span>
+                    <span class="ps-label-hint" id="psTargetHint">Loopback interface strictly locked for local inspection.</span>
+                  </label>
+                  <div class="ps-input-wrap">
+                    <i class="fas fa-server ps-input-icon"></i>
+                    <input type="text" id="psTargetInput" class="ps-input" value="127.0.0.1" readonly placeholder="127.0.0.1" autocomplete="off" />
+                    <button type="button" id="psAutoSubnetBtn" class="ps-inline-btn" style="display:none;" title="Use Auto-Detected Subnet">
+                      <i class="fas fa-magic"></i> Auto
+                    </button>
+                  </div>
+
+                  <div class="ps-auth-wrap" id="psAuthWrap" style="display:none;">
+                    <label class="ps-checkbox-label">
+                      <input type="checkbox" id="psAuthCheck" checked />
+                      <span>I confirm authorization to perform port discovery on this target network.</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Port Selection & Concurrency -->
+                <div class="ps-config-group">
+                  <label class="ps-label">
+                    <span>Port Selection Range:</span>
+                    <span class="ps-label-hint">Choose preset or customize ports</span>
+                  </label>
+                  <div class="ps-port-presets">
+                    <button type="button" class="ps-preset-btn active" data-preset="top20">Top 20 Ports</button>
+                    <button type="button" class="ps-preset-btn" data-preset="top100">Top 100</button>
+                    <button type="button" class="ps-preset-btn" data-preset="wellknown">Well-Known (1-1024)</button>
+                    <button type="button" class="ps-preset-btn" data-preset="custom">Custom Ports</button>
+                  </div>
+
+                  <div class="ps-custom-port-wrap" id="psCustomPortWrap" style="display:none;">
+                    <input type="text" id="psCustomPortInput" class="ps-input" placeholder="e.g. 80, 443, 8080, 3000-3005" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Advanced Toggles (Timeout & Concurrency) -->
+              <div class="ps-advanced-bar">
+                <div class="ps-adv-item">
+                  <label for="psTimeoutSelect">Socket Timeout:</label>
+                  <select id="psTimeoutSelect" class="ps-select">
+                    <option value="0.2">Fast (0.2s - LAN only)</option>
+                    <option value="0.5" selected>Normal (0.5s - Recommended)</option>
+                    <option value="1.0">Thorough (1.0s - High Latency)</option>
+                  </select>
+                </div>
+                <div class="ps-adv-item">
+                  <label for="psConcurrencySelect">Concurrency Limit:</label>
+                  <select id="psConcurrencySelect" class="ps-select">
+                    <option value="50">Conservative (50 connections)</option>
+                    <option value="150" selected>Balanced (150 connections)</option>
+                    <option value="250">Aggressive (250 connections)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Action Controls -->
+              <div class="ps-actions-row">
+                <div class="ps-btn-group">
+                  <button type="button" id="psStartBtn" class="ps-btn-primary">
+                    <i class="fas fa-play"></i>
+                    <span>Start Port Scan</span>
+                  </button>
+                  <button type="button" id="psStopBtn" class="ps-btn-danger" style="display:none;">
+                    <i class="fas fa-stop"></i>
+                    <span>Cancel Scan</span>
+                  </button>
+                </div>
+
+                <div class="ps-export-group" id="psExportGroup" style="display:none;">
+                  <button type="button" id="psExportJsonBtn" class="ps-btn-secondary" title="Export JSON">
+                    <i class="fas fa-file-code"></i> JSON
+                  </button>
+                  <button type="button" id="psExportCsvBtn" class="ps-btn-secondary" title="Export CSV">
+                    <i class="fas fa-file-csv"></i> CSV
+                  </button>
+                </div>
+              </div>
+
+              <!-- Progress & Telemetry Bar -->
+              <div class="ps-progress-box" id="psProgressBox" style="display:none;">
+                <div class="ps-progress-header">
+                  <span class="ps-progress-status" id="psProgressStatusText">Scanning targets...</span>
+                  <span class="ps-progress-pct" id="psProgressPct">0%</span>
+                </div>
+                <div class="ps-progress-track">
+                  <div class="ps-progress-bar" id="psProgressBar" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <!-- KPI Summary Counters -->
+              <div class="ps-kpi-grid" id="psKpiGrid" style="display:none;">
+                <div class="ps-kpi-card">
+                  <span class="ps-kpi-val" id="psKpiHosts">0</span>
+                  <span class="ps-kpi-lbl">Active Hosts</span>
+                </div>
+                <div class="ps-kpi-card">
+                  <span class="ps-kpi-val" id="psKpiScanned">0</span>
+                  <span class="ps-kpi-lbl">Scanned Ports</span>
+                </div>
+                <div class="ps-kpi-card highlight-kpi">
+                  <span class="ps-kpi-val" id="psKpiOpen">0</span>
+                  <span class="ps-kpi-lbl">Open Ports Found</span>
+                </div>
+                <div class="ps-kpi-card">
+                  <span class="ps-kpi-val" id="psKpiDuration">0.0s</span>
+                  <span class="ps-kpi-lbl">Scan Time</span>
+                </div>
+              </div>
+
+              <!-- Error Banner -->
+              <div class="ps-error-banner" id="psErrorBanner" style="display:none;" role="alert">
+                <i class="fas fa-circle-exclamation"></i>
+                <span id="psErrorText"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scan Results Workstation -->
+          <div class="ps-results-wrapper" id="psResultsWrapper" style="display:none;">
+            <div class="ps-results-toolbar">
+              <div class="ps-filter-tabs">
+                <button type="button" class="ps-filter-pill active" data-filter="open">
+                  Open Ports Only <span class="ps-count-badge" id="psFilterOpenCount">0</span>
+                </button>
+                <button type="button" class="ps-filter-pill" data-filter="all">
+                  All Scanned Ports <span class="ps-count-badge" id="psFilterAllCount">0</span>
+                </button>
+              </div>
+              <div class="ps-search-box">
+                <i class="fas fa-magnifying-glass"></i>
+                <input type="text" id="psSearchInput" placeholder="Filter by port or service..." />
+              </div>
+            </div>
+
+            <!-- Dynamic Results Container -->
+            <div id="psResultsContent" class="ps-results-content">
+              <!-- Injected dynamically via PortScannerUI in main.js -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Network Discovery (Landing Feature Intro) -->
+      <section class="nd-landing-section" id="network-discovery-section">
+        <div class="section-container">
+          <div class="section-header text-center">
+            <div class="section-badge">
+              <i class="fas fa-sitemap"></i> Subnet Reconnaissance & Inventory
+            </div>
+            <h2 class="section-title">Autonomous Local Network Discovery</h2>
+            <p class="section-subtitle">
+              Comprehensive local network reconnaissance and hardware asset inventory engine. Probes connected hosts via ARP and ICMP, resolves hardware MAC addresses and OUI manufacturers, and maps active subnet devices.
+            </p>
+          </div>
+
+          <div class="nd-landing-card">
+            <div class="nd-landing-grid">
+              <div class="nd-landing-info">
+                <div class="nd-pill-group">
+                  <span class="nd-feature-pill"><i class="fas fa-microchip"></i> Win32 SendARP</span>
+                  <span class="nd-feature-pill"><i class="fas fa-network-wired"></i> ICMP Echo Sweeper</span>
+                  <span class="nd-feature-pill"><i class="fas fa-building"></i> 150+ OUI Vendor Database</span>
+                  <span class="nd-feature-pill"><i class="fas fa-fingerprint"></i> Hardware Fingerprinting</span>
+                </div>
+
+                <h3 class="nd-landing-feature-title">Real-Time Asset Inventory & Subnet Topology</h3>
+                <p class="nd-landing-feature-desc">
+                  Inspect every active endpoint on your local subnet without generating intrusive traffic. Automatically classifies devices into routers, host computers, mobile devices, and IoT peripherals based on vendor signatures and network telemetry.
+                </p>
+
+                <div class="nd-landing-stats">
+                  <div class="nd-landing-stat">
+                    <span class="stat-num">/24</span>
+                    <span class="stat-lbl">Full Subnet Scan</span>
+                  </div>
+                  <div class="nd-landing-stat">
+                    <span class="stat-num">&lt; 3.0s</span>
+                    <span class="stat-lbl">Concurrent Sweep</span>
+                  </div>
+                  <div class="nd-landing-stat">
+                    <span class="stat-num">100%</span>
+                    <span class="stat-lbl">Non-Intrusive</span>
+                  </div>
+                </div>
+
+                <div class="nd-landing-cta">
+                  <a href="/network-discovery" class="btn-primary">
+                    <i class="fas fa-arrow-up-right-from-square"></i> Open Dedicated Network Discovery Tool
+                  </a>
+                </div>
+              </div>
+
+              <div class="nd-landing-preview">
+                <div class="nd-preview-console">
+                  <div class="nd-preview-header">
+                    <div class="console-card-dots">
+                      <span class="dot dot-red"></span>
+                      <span class="dot dot-amber"></span>
+                      <span class="dot dot-green"></span>
+                    </div>
+                    <span class="console-title">subnet_inventory.arp</span>
+                    <span class="status-badge-inline">ACTIVE</span>
+                  </div>
+                  <div class="nd-preview-table-mock">
+                    <div class="nd-mock-row header">
+                      <span>DEVICE / HOST</span>
+                      <span>IP ADDRESS</span>
+                      <span>MAC ADDRESS</span>
+                      <span>MANUFACTURER</span>
+                    </div>
+                    <div class="nd-mock-row">
+                      <span><i class="fas fa-route"></i> Gateway Router</span>
+                      <span class="mono">192.168.1.1</span>
+                      <span class="mono">00:1A:2B:3C:4D:5E</span>
+                      <span>Cisco Systems</span>
+                    </div>
+                    <div class="nd-mock-row">
+                      <span><i class="fas fa-laptop"></i> Host Workstation</span>
+                      <span class="mono">192.168.1.9</span>
+                      <span class="mono">A4:BB:6D:E1:22:90</span>
+                      <span>Intel Corporate</span>
+                    </div>
+                    <div class="nd-mock-row">
+                      <span><i class="fas fa-server"></i> Local Server</span>
+                      <span class="mono">192.168.1.50</span>
+                      <span class="mono">52:54:00:12:34:56</span>
+                      <span>Dell Technologies</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 5: Attack Classification -->
+      <section class="threat-intel-section" id="threat-intelligence">
+        <div class="section-container">
+          <div class="section-header text-center">
+            <div class="section-badge">
+              <i class="fas fa-shield-virus"></i> Verified Threat Intelligence
+            </div>
+            <h2 class="section-title">Attack Classification & Signatures</h2>
+            <p class="section-subtitle">
+              The deployed AI champion model is trained and validated on 15 distinct network traffic classes from the benchmark CIC-IDS2017 dataset, covering 14 hostile attack vectors alongside a verified benign baseline.
+            </p>
+          </div>
+
+          <!-- Verified Normal / Benign Traffic Baseline (Class 0 Showcase) -->
+          <div class="benign-baseline-card">
+            <div class="benign-card-inner">
+              <div class="benign-icon-col">
+                <div class="benign-icon-ring">
+                  <i class="fas fa-shield-heart"></i>
+                </div>
+                <span class="benign-class-badge">Class 0: Benign</span>
+              </div>
+              <div class="benign-content-col">
+                <div class="benign-title-row">
+                  <h3>Normal Network Traffic (Verified Baseline)</h3>
+                  <span class="benign-status-pill"><span class="pulse-dot"></span> Legitimate Flow Verified</span>
+                </div>
+                <p>
+                  Represents everyday, non-hostile network traffic including authorized HTTPS web sessions, DNS lookups, streaming media, and authenticated database transactions. The Network Security System continuously models normal bidirectional flow dynamics across 77 statistical features, ensuring genuine traffic passes seamlessly without false alarms.
+                </p>
+                <div class="benign-metrics-row">
+                  <div class="benign-metric">
+                    <span class="bm-label">Test Precision</span>
+                    <span class="bm-val">99.97%</span>
+                  </div>
+                  <div class="benign-metric">
+                    <span class="bm-label">Test Recall</span>
+                    <span class="bm-val">99.85%</span>
+                  </div>
+                  <div class="benign-metric">
+                    <span class="bm-label">Evaluated Flows</span>
+                    <span class="bm-val">64,039 Samples</span>
+                  </div>
+                  <div class="benign-metric">
+                    <span class="bm-label">Model Classification</span>
+                    <span class="bm-val">Non-Hostile Baseline</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Category Filter Tabs -->
+          <div class="category-filter-bar" role="tablist" aria-label="Attack Category Filters">
+            <button class="filter-tab active" data-filter="all" role="tab" aria-selected="true">
+              All Attack Vectors <span class="tab-count">14</span>
+            </button>
+            <button class="filter-tab" data-filter="dos" role="tab" aria-selected="false">
+              Denial of Service (DoS/DDoS) <span class="tab-count">5</span>
+            </button>
+            <button class="filter-tab" data-filter="web" role="tab" aria-selected="false">
+              Web Applications <span class="tab-count">3</span>
+            </button>
+            <button class="filter-tab" data-filter="brute" role="tab" aria-selected="false">
+              Brute Force & Exploits <span class="tab-count">3</span>
+            </button>
+            <button class="filter-tab" data-filter="recon" role="tab" aria-selected="false">
+              Recon & Infiltration <span class="tab-count">3</span>
+            </button>
+          </div>
+
+          <!-- Slider Navigation Controls -->
+          <div class="slider-controls-wrap">
+            <div class="slider-counter">
+              <span id="sliderCurrentIndex">1</span> / <span id="sliderTotalCount">14</span>
+            </div>
+            <div class="slider-arrows">
+              <button class="nav-btn prev" id="sliderPrevBtn" aria-label="Previous attack card">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <button class="nav-btn next" id="sliderNextBtn" aria-label="Next attack card">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Attack Cards Container -->
+          <div class="slider" id="info">
+            <div class="card-container" id="attackCardContainer">
+              <!-- 1. DDoS (Class 2) -->
+              <div class="card attack-card-item" data-category="dos">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-dos">Denial of Service</span>
+                  <span class="protocol-tag">Class: DDoS</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos0.jpg" alt="DDoS Attack Diagram" loading="lazy" />
+                </div>
+                <h3>DDoS (Distributed DoS)</h3>
+                <p>Volumetric flood launched concurrently from multiple distributed botnets to exhaust bandwidth, deplete routing buffers, and disrupt service availability.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-network-wired"></i> TCP / UDP Multi-Vector</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.93%</span>
+                </div>
+              </div>
+
+              <!-- 2. DoS Hulk (Class 4) -->
+              <div class="card attack-card-item" data-category="dos">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-dos">Denial of Service</span>
+                  <span class="protocol-tag">Class: DoS Hulk</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos1.jpg" alt="DoS Hulk Attack Diagram" loading="lazy" />
+                </div>
+                <h3>DoS Hulk</h3>
+                <p>Generates high-rate, obfuscated HTTP GET requests with randomized user-agents and URLs to bypass caching servers and crash backend worker pools.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.78%</span>
+                </div>
+              </div>
+
+              <!-- 3. DoS GoldenEye (Class 3) -->
+              <div class="card attack-card-item" data-category="dos">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-dos">Denial of Service</span>
+                  <span class="protocol-tag">Class: DoS GoldenEye</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos2.jpg" alt="DoS GoldenEye Attack Diagram" loading="lazy" />
+                </div>
+                <h3>DoS GoldenEye</h3>
+                <p>Layer-7 application exhaustion attack that holds HTTP Keep-Alive and No-Cache connections open indefinitely until server socket pools are depleted.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.76%</span>
+                </div>
+              </div>
+
+              <!-- 4. DoS slowloris (Class 6) -->
+              <div class="card attack-card-item" data-category="dos">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-dos">Denial of Service</span>
+                  <span class="protocol-tag">Class: DoS slowloris</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos3.jpg" alt="DoS Slowloris Attack Diagram" loading="lazy" />
+                </div>
+                <h3>DoS Slowloris</h3>
+                <p>Low-and-slow HTTP starvation attack that transmits partial, incomplete request headers at slow intervals, locking connection tables with minimal bandwidth.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.72%</span>
+                </div>
+              </div>
+
+              <!-- 5. DoS Slowhttptest (Class 5) -->
+              <div class="card attack-card-item" data-category="dos">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-dos">Denial of Service</span>
+                  <span class="protocol-tag">Class: DoS Slowhttptest</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos4.jpg" alt="DoS Slowhttptest Attack Diagram" loading="lazy" />
+                </div>
+                <h3>DoS Slowhttptest</h3>
+                <p>Exploits web server concurrency limits by slowly sending HTTP POST message bodies or reading response data one byte at a time to tie up threads.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.33%</span>
+                </div>
+              </div>
+
+              <!-- 6. Web Attack - SQL Injection (Class 13) -->
+              <div class="card attack-card-item" data-category="web">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-web">Web Application</span>
+                  <span class="protocol-tag">Class: Web Attack - SQL Injection</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos8.jpg" alt="SQL Injection Attack Diagram" loading="lazy" />
+                </div>
+                <h3>Web Attack — SQL Injection</h3>
+                <p>Injects malicious SQL query fragments into web form inputs or query parameters to subvert application logic, bypass auth, or extract database records.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-database"></i> Database Layer</span>
+                  <span class="recall-rate" title="Model precision on test set">Precision: 100%</span>
+                </div>
+              </div>
+
+              <!-- 7. Web Attack - XSS (Class 14) -->
+              <div class="card attack-card-item" data-category="web">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-web">Web Application</span>
+                  <span class="protocol-tag">Class: Web Attack - XSS</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos9.jpg" alt="Cross-Site Scripting Attack Diagram" loading="lazy" />
+                </div>
+                <h3>Web Attack — XSS</h3>
+                <p>Injects unauthorized JavaScript scripts into web application parameters, executing within end-user browsers to steal session tokens and credentials.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-code"></i> Client Script</span>
+                  <span class="recall-rate" title="Model precision on test set">Precision: 49.5%</span>
+                </div>
+              </div>
+
+              <!-- 8. Web Attack - Brute Force (Class 12) -->
+              <div class="card attack-card-item" data-category="web">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-web">Web Application</span>
+                  <span class="protocol-tag">Class: Web Attack - Brute Force</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos10.jpg" alt="Web Brute Force Attack Diagram" loading="lazy" />
+                </div>
+                <h3>Web Attack — Brute Force</h3>
+                <p>Automated credential-guessing and password-spraying submissions targeted at web login interfaces and administrative authentication portals.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-key"></i> Web Auth Portals</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 80.95%</span>
+                </div>
+              </div>
+
+              <!-- 9. SSH-Patator (Class 11) -->
+              <div class="card attack-card-item" data-category="brute">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-brute">Brute Force</span>
+                  <span class="protocol-tag">Class: SSH-Patator</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos11.jpg" alt="SSH-Patator Attack Diagram" loading="lazy" />
+                </div>
+                <h3>SSH-Patator</h3>
+                <p>Targeted multi-threaded dictionary brute force directed against Secure Shell (SSH) daemons to discover valid user credentials and gain shell access.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-terminal"></i> TCP : 22 (SSH)</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.53%</span>
+                </div>
+              </div>
+
+              <!-- 10. FTP-Patator (Class 7) -->
+              <div class="card attack-card-item" data-category="brute">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-brute">Brute Force</span>
+                  <span class="protocol-tag">Class: FTP-Patator</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos12.jpg" alt="FTP-Patator Attack Diagram" loading="lazy" />
+                </div>
+                <h3>FTP-Patator</h3>
+                <p>Automated high-velocity credential brute force against File Transfer Protocol (FTP) listeners, attempting thousands of dictionary combinations.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-folder-open"></i> TCP : 21 (FTP)</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 99.83%</span>
+                </div>
+              </div>
+
+              <!-- 11. Heartbleed (Class 8) -->
+              <div class="card attack-card-item" data-category="brute">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-brute">Vulnerability Exploit</span>
+                  <span class="protocol-tag">Class: Heartbleed</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos13.jpg" alt="Heartbleed Exploit Diagram" loading="lazy" />
+                </div>
+                <h3>Heartbleed (CVE-2014-0160)</h3>
+                <p>Exploits OpenSSL TLS heartbeat extension buffer over-read flaw to leak up to 64KB of server memory containing private encryption keys and passwords.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-shield-virus"></i> TLS/SSL : 443</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 100.0%</span>
+                </div>
+              </div>
+
+              <!-- 12. PortScan (Class 10) -->
+              <div class="card attack-card-item" data-category="recon">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-recon">Reconnaissance</span>
+                  <span class="protocol-tag">Class: PortScan</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos5.jpg" alt="PortScan Diagram" loading="lazy" />
+                </div>
+                <h3>PortScan Reconnaissance</h3>
+                <p>Systematic TCP/UDP port enumeration across network hosts to identify listening services, banner versions, and attack surfaces prior to exploitation.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-bullseye"></i> TCP / UDP Sweep</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 98.72%</span>
+                </div>
+              </div>
+
+              <!-- 13. Bot (Class 1) -->
+              <div class="card attack-card-item" data-category="recon">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-recon">Botnet Activity</span>
+                  <span class="protocol-tag">Class: Bot</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos6.jpg" alt="Botnet Diagram" loading="lazy" />
+                </div>
+                <h3>Botnet Traffic (ARES / C2)</h3>
+                <p>Autonomous command-and-control communication and payload synchronization between compromised zombie hosts and centralized botmaster servers.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-robot"></i> C2 Channels</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 98.61%</span>
+                </div>
+              </div>
+
+              <!-- 14. Infiltration (Class 9) -->
+              <div class="card attack-card-item" data-category="recon">
+                <div class="card-badge-row">
+                  <span class="attack-type-tag tag-recon">Intrusion</span>
+                  <span class="protocol-tag">Class: Infiltration</span>
+                </div>
+                <div class="img-wrap">
+                  <img src="/static/images/ddos7.jpg" alt="Infiltration Diagram" loading="lazy" />
+                </div>
+                <h3>Network Infiltration</h3>
+                <p>Internal network intrusion following initial compromise, involving privilege escalation, network mapping, and lateral movement across private subnets.</p>
+                <div class="card-footer-meta">
+                  <span><i class="fas fa-user-secret"></i> Lateral Movement</span>
+                  <span class="recall-rate" title="Model recall on test set">Recall: 100.0%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 6: Defensive Architecture -->
+      <section class="prevention-section" id="prevention">
+        <div class="section-container">
+          <div class="section-header text-center">
+            <div class="section-badge">
+              <i class="fas fa-shield-halved"></i> Defensive Architecture
+            </div>
+            <h2 class="section-title">Defensive Architecture & Mitigation Controls</h2>
+            <p class="section-subtitle">
+              Essential operational controls and multi-layered defenses to safeguard enterprise infrastructure against coordinated attacks.
+            </p>
+          </div>
+
+          <div class="tips-container">
+            <div class="tip-card">
+              <div class="tip-icon-box">
+                <i class="fas fa-network-wired tip-icon"></i>
+              </div>
+              <h3>Continuous Traffic Inspection</h3>
+              <p>Deploy continuous flow telemetry to monitor ingress packet rates, TCP flag ratios, and anomalous packet burst signatures before disruption occurs.</p>
+            </div>
+
+            <div class="tip-card">
+              <div class="tip-icon-box">
+                <i class="fas fa-filter tip-icon"></i>
+              </div>
+              <h3>Intelligent Rate Limiting & Firewalls</h3>
+              <p>Implement adaptive SYN cookies, connection velocity limits, and upstream BGP Flowspec filtering to drop malicious traffic at perimeter routers.</p>
+            </div>
+
+            <div class="tip-card highlight-tip">
+              <div class="tip-icon-box">
+                <i class="fas fa-microchip tip-icon"></i>
+              </div>
+              <h3>AI-Powered Anomaly Detection</h3>
+              <p>Leverage machine learning classifiers to distinguish legitimate traffic spikes from distributed multi-vector attacks with high precision.</p>
+            </div>
+
+            <div class="tip-card">
+              <div class="tip-icon-box">
+                <i class="fas fa-cloud-arrow-up tip-icon"></i>
+              </div>
+              <h3>Anycast Cloud Scrubbing</h3>
+              <p>Distribute traffic globally via Anycast routing, redirecting volumetric floods to high-capacity cloud scrubbing centers for packet sanitization.</p>
+            </div>
+
+            <div class="tip-card">
+              <div class="tip-icon-box">
+                <i class="fas fa-screwdriver-wrench tip-icon"></i>
+              </div>
+              <h3>Endpoint & Service Hardening</h3>
+              <p>Close open recursive resolvers, disable NTP monlist, block vulnerable NetBIOS/RPC ports (111, 137, 1434), and keep network stacks patched.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 7: Engineering Team & Contributors -->
+      <section class="team-section" id="team">
+        <div class="section-container">
+          <div class="section-header text-center">
+            <div class="section-badge">
+              <i class="fas fa-users-gear"></i> Project Contributors
+            </div>
+            <h2 class="section-title">Project Engineering Team</h2>
+            <p class="section-subtitle">
+              Faculty of Computers and Artificial Intelligence Graduation Project — AI-Powered Cybersecurity Research Team.
+            </p>
+          </div>
+
+          <div class="team-container">
+            <!-- Member 1: Ali Fathy -->
+            <div class="team-card">
+              <div class="team-avatar">
+                <span class="avatar-initials">AF</span>
+                <div class="avatar-role-icon"><i class="fas fa-brain"></i></div>
+              </div>
+              <h4>Ali Fathy</h4>
+              <span class="team-role-pill">AI Engineer</span>
+              <p class="team-role-desc">AI Model Architecture & ML Training Pipeline</p>
+            </div>
+
+            <!-- Member 2: Shahd Amr -->
+            <div class="team-card">
+              <div class="team-avatar">
+                <span class="avatar-initials">SA</span>
+                <div class="avatar-role-icon"><i class="fas fa-chart-pie"></i></div>
+              </div>
+              <h4>Shahd Amr</h4>
+              <span class="team-role-pill">AI Engineer</span>
+              <p class="team-role-desc">Feature Engineering & Model Optimization</p>
+            </div>
+
+            <!-- Member 3: Mohamed Abo-Alezz -->
+            <div class="team-card">
+              <div class="team-avatar">
+                <span class="avatar-initials">MA</span>
+                <div class="avatar-role-icon"><i class="fas fa-shield-virus"></i></div>
+              </div>
+              <h4>Mohamed Abo-Alezz</h4>
+              <span class="team-role-pill">SOC Analyst</span>
+              <p class="team-role-desc">Threat Intelligence & Attack Vector Modeling</p>
+            </div>
+
+            <!-- Member 4: Mohamed EL-Nagar -->
+            <div class="team-card">
+              <div class="team-avatar">
+                <span class="avatar-initials">MN</span>
+                <div class="avatar-role-icon"><i class="fas fa-server"></i></div>
+              </div>
+              <h4>Mohamed EL-Nagar</h4>
+              <span class="team-role-pill">Backend Engineer</span>
+              <p class="team-role-desc">Windows Service & Local IPC Architecture</p>
+            </div>
+
+            <!-- Member 5: Mennaallah Azmi -->
+            <div class="team-card">
+              <div class="team-avatar">
+                <span class="avatar-initials">MA</span>
+                <div class="avatar-role-icon"><i class="fas fa-network-wired"></i></div>
+              </div>
+              <h4>Mennaallah Azmi</h4>
+              <span class="team-role-pill">Backend Engineer</span>
+              <p class="team-role-desc">REST API Engine & Traffic Ingestion</p>
+            </div>
+
+            <!-- Member 6: Eman Tag -->
+            <div class="team-card">
+              <div class="team-avatar">
+                <span class="avatar-initials">ET</span>
+                <div class="avatar-role-icon"><i class="fas fa-code"></i></div>
+              </div>
+              <h4>Eman Tag</h4>
+              <span class="team-role-pill">Frontend Engineer</span>
+              <p class="team-role-desc">Dashboard Architecture & UI Systems</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Site Footer -->
+    <footer class="site-footer">
+      <div class="footer-container">
+        <div class="footer-main-row">
+          <div class="footer-brand">
+            <div class="footer-logo">
+              <i class="fas fa-shield-halved"></i>
+              <span>Network Security System</span>
+            </div>
+            <p class="footer-tagline">
+              Autonomous multi-vector cyber defense, real-time ML traffic telemetry, active port enumeration, and high-performance network reconnaissance.
+            </p>
+            <div class="footer-status-indicator">
+              <span class="status-live-dot"></span>
+              <span class="status-live-text">Kernel Engine: WinDivert Active</span>
+            </div>
+          </div>
+
+          <div class="footer-links-group">
+            <span class="footer-group-title">Navigation</span>
+            <a href="/#overview">Home</a>
+            <a href="/?view=monitoring">Live Network Monitoring</a>
+            <a href="/?view=port-scanner">Port Scanner</a>
+            <a href="/network-discovery">Network Discovery</a>
+            <a href="/#threat-intelligence">Attack Classification</a>
+            <a href="/#prevention">Defensive Architecture</a>
+            <a href="/#team">Project Team</a>
+          </div>
+
+          <div class="footer-links-group">
+            <span class="footer-group-title">System Benchmarks</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> XGBoost Multi-Class Engine</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 99.86% Threat Recall Rate</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 15 Trained Classes (14 Hostile + Benign)</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 77 Bidirectional Features</span>
+          </div>
+        </div>
+
+        <div class="footer-bottom-row">
+          <p class="footer-note">© 2025–2026 Network Security System Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
+          <div class="footer-badges">
+            <span class="cert-pill">SOC v2.5</span>
+            <span class="cert-pill">CIC-IDS2017</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
 
   <!-- Floating Back to Top Button -->
   <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top of page">
     <i class="fas fa-arrow-up"></i>
   </button>
 
-  <!-- DDoS-Guard Scripts -->
+  <!-- Network Security System Client Controller -->
   <script src="/static/main.js"></script>
 </body>
 </html>

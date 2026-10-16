@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="DDoS-Guard: Autonomous Local Network Discovery & Hardware Device Asset Inventory with ARP, ICMP, and OUI Manufacturer Detection." />
-  <meta name="theme-color" content="#070913" />
-  <title>DDoS-Guard — Local Network Discovery & Asset Inventory</title>
+  <meta name="description" content="Network Security System: Autonomous Local Network Discovery & Hardware Device Asset Inventory with ARP, ICMP, and OUI Manufacturer Detection." />
+  <meta name="theme-color" content="#F7F5EF" />
+  <title>Network Security System — Local Network Discovery & Asset Inventory</title>
 
   <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,253 +15,338 @@
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-  <!-- DDoS-Guard Design System -->
+  <!-- Network Security System Design System -->
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body class="network-discovery-page">
-  <!-- Ambient Backdrop Glows -->
-  <div class="ambient-glow glow-top" aria-hidden="true"></div>
-  <div class="ambient-glow glow-scanner" aria-hidden="true"></div>
-
-  <!-- Sticky Cyber Header / Navigation -->
-  <header class="site-header" id="top">
-    <div class="header-inner">
-      <a class="logo" href="/" aria-label="DDoS-Guard Homepage">
-        <div class="logo-shield">
-          <i class="fas fa-shield-halved"></i>
-          <span class="logo-core-pulse"></span>
-        </div>
-        <span class="logo-text">DDoS<span class="logo-accent">-Guard</span></span>
-        <span class="logo-badge">SOC v2.5</span>
-      </a>
-
-      <nav class="main-nav" id="mainNav" aria-label="Main Navigation">
-        <a href="/" class="nav-link">Overview</a>
-        <a href="/#check-connection" class="nav-link">Live Scanner</a>
-        <a href="/#port-scanner" class="nav-link">Port Scanner</a>
-        <a href="/network-discovery" class="nav-link active">Network Discovery</a>
-        <a href="/#threat-intelligence" class="nav-link">Threat Vectors</a>
-      </nav>
-
-      <div class="header-actions">
-        <div class="system-health-pill" id="systemHealthPill" title="Local Network Adapter Status">
-          <span class="health-dot running" id="ndHealthDot"></span>
-          <span class="health-label" id="ndHealthLabel">Adapter: Detecting...</span>
-        </div>
-
-        <button class="header-cta" id="ndHeaderCtaBtn" type="button" aria-label="Trigger Discovery Scan">
-          <i class="fas fa-satellite-dish"></i>
-          <span>Scan Subnet</span>
-        </button>
-
-        <button class="menu-toggle" id="menuToggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mainNav">
-          <i class="fas fa-bars"></i>
-        </button>
-      </div>
+<body class="app-layout network-discovery-page">
+  <!-- Mobile Top Bar (< 992px) -->
+  <header class="mobile-top-bar" id="mobileTopBar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="appSidebar">
+      <i class="fas fa-bars"></i>
+    </button>
+    <a href="/" class="mobile-brand">
+      <div class="brand-shield"><i class="fas fa-shield-halved"></i></div>
+      <span class="brand-text">Network Security System</span>
+    </a>
+    <div class="system-health-pill compact" id="systemHealthPillMobile" title="Adapter Status">
+      <span class="health-dot running" id="ndHealthDotMobile"></span>
     </div>
   </header>
 
-  <main class="nd-main-container">
-    <!-- Hero Header -->
-    <section class="nd-hero-section">
-      <div class="nd-hero-badge">
-        <i class="fas fa-network-wired"></i>
-        <span>Autonomous Local Network Reconnaissance • ARP, ICMP & OUI Multi-Engine</span>
-      </div>
-      <h1 class="nd-hero-title">
-        Local <span class="gradient-text">Network Discovery</span> & Asset Inventory
-      </h1>
-      <p class="nd-hero-subtitle">
-        Inspect your active local subnet in real time using non-intrusive ARP and ICMP probing. Identify connected hosts, hardware MAC addresses, OUI manufacturers, hostnames, and verified network infrastructure without impacting traffic.
-      </p>
-    </section>
+  <!-- Sidebar Backdrop (for Mobile Drawer) -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
-    <!-- Summary KPI Cards -->
-    <section class="nd-kpi-grid">
-      <div class="nd-kpi-card">
-        <div class="nd-kpi-icon"><i class="fas fa-server"></i></div>
-        <div class="nd-kpi-info">
-          <span class="nd-kpi-value" id="kpiTotalDevices">0</span>
-          <span class="nd-kpi-label">Discovered Devices</span>
+  <!-- Collapsible Sidebar Navigation -->
+  <aside class="app-sidebar" id="appSidebar" aria-label="Main Navigation">
+    <div class="sidebar-header">
+      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="Network Security System Home">
+        <div class="brand-shield">
+          <i class="fas fa-shield-halved"></i>
+        </div>
+        <div class="brand-text-wrap">
+          <span class="brand-title">Network Security</span>
+          <span class="brand-subtitle">System Console</span>
+        </div>
+      </a>
+      <button class="sidebar-toggle-btn" id="sidebarToggleBtn" type="button" aria-label="Collapse sidebar navigation" title="Toggle Sidebar">
+        <i class="fas fa-chevron-left" id="sidebarToggleIcon"></i>
+      </button>
+    </div>
+
+    <!-- Navigation Links -->
+    <nav class="sidebar-nav" id="mainNav" role="navigation">
+      <div class="sidebar-section-label">OVERVIEW</div>
+      <a href="/#overview" class="sidebar-nav-item" data-nav="home" data-tooltip="Home">
+        <i class="fas fa-house-chimney nav-icon"></i>
+        <span class="nav-text">Home</span>
+      </a>
+
+      <div class="sidebar-section-label">OPERATIONAL TOOLS</div>
+      <a href="/?view=monitoring" class="sidebar-nav-item" data-nav="monitoring" data-tooltip="Live Network Monitoring">
+        <i class="fas fa-satellite-dish nav-icon"></i>
+        <span class="nav-text">Live Network Monitoring</span>
+        <span class="nav-badge-pill">Live</span>
+      </a>
+      <a href="/?view=port-scanner" class="sidebar-nav-item" data-nav="port-scanner" data-tooltip="Port Scanner">
+        <i class="fas fa-bullseye nav-icon"></i>
+        <span class="nav-text">Port Scanner</span>
+      </a>
+      <a href="/network-discovery" class="sidebar-nav-item active" data-nav="network-discovery" data-tooltip="Network Discovery">
+        <i class="fas fa-sitemap nav-icon"></i>
+        <span class="nav-text">Network Discovery</span>
+      </a>
+    </nav>
+
+    <!-- Sidebar Footer / Adapter Status -->
+    <div class="sidebar-footer">
+      <div class="system-health-pill" id="systemHealthPill" title="Local Network Adapter Status">
+        <span class="health-dot running" id="ndHealthDot"></span>
+        <div class="health-text-wrap">
+          <span class="health-service-title">Active Adapter</span>
+          <span class="health-label" id="ndHealthLabel">Adapter: Detecting...</span>
         </div>
       </div>
+    </div>
+  </aside>
 
-      <div class="nd-kpi-card highlight-green">
-        <div class="nd-kpi-icon"><i class="fas fa-signal"></i></div>
-        <div class="nd-kpi-info">
-          <span class="nd-kpi-value" id="kpiOnlineDevices">0</span>
-          <span class="nd-kpi-label">Online / Active</span>
-        </div>
+  <!-- Main Content Wrapper -->
+  <div class="main-content-wrapper" id="mainContentWrapper">
+    <!-- Dedicated Tool Breadcrumb Bar -->
+    <div class="dedicated-tool-bar">
+      <div class="breadcrumb-trail">
+        <a href="/" class="breadcrumb-link"><i class="fas fa-arrow-left"></i> Back to Overview</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">Network Discovery & Asset Inventory</span>
       </div>
-
-      <div class="nd-kpi-card highlight-cyan">
-        <div class="nd-kpi-icon"><i class="fas fa-route"></i></div>
-        <div class="nd-kpi-info">
-          <span class="nd-kpi-value" id="kpiGatewayDevice">--</span>
-          <span class="nd-kpi-label">Default Gateway</span>
-        </div>
+      <div class="dedicated-tool-actions">
+        <button class="btn-subtle" id="ndHeaderCtaBtn" type="button" aria-label="Trigger Discovery Scan">
+          <i class="fas fa-satellite-dish"></i> Scan Subnet
+        </button>
       </div>
+    </div>
 
-      <div class="nd-kpi-card highlight-violet">
-        <div class="nd-kpi-icon"><i class="fas fa-stopwatch"></i></div>
-        <div class="nd-kpi-info">
-          <span class="nd-kpi-value" id="kpiScanDuration">0.0s</span>
-          <span class="nd-kpi-label">Scan Duration</span>
+    <!-- Main Container -->
+    <main class="nd-main-container">
+      <!-- Hero Header -->
+      <section class="nd-hero-section">
+        <div class="nd-hero-badge">
+          <i class="fas fa-sitemap"></i>
+          <span>Autonomous Local Network Reconnaissance • ARP, ICMP & OUI Multi-Engine</span>
         </div>
-      </div>
-    </section>
+        <h1 class="nd-hero-title">
+          Local <span class="gradient-text">Network Discovery</span> & Asset Inventory
+        </h1>
+        <p class="nd-hero-subtitle">
+          Inspect your active local subnet in real time using non-intrusive ARP and ICMP probing. Identify connected hosts, hardware MAC addresses, OUI manufacturers, hostnames, and verified network infrastructure without impacting traffic.
+        </p>
+      </section>
 
-    <!-- Subnet & Adapter Control Panel -->
-    <section class="nd-control-card">
-      <div class="nd-panel-header">
-        <div class="nd-panel-title-wrap">
-          <i class="fas fa-sliders nd-panel-icon"></i>
-          <div>
-            <h2 class="nd-panel-title">Network Subnet & Discovery Controls</h2>
-            <p class="nd-panel-desc">Auto-detected adapter, routing parameters, and asynchronous discovery parameters.</p>
+      <!-- Summary KPI Cards -->
+      <section class="nd-kpi-grid">
+        <div class="nd-kpi-card">
+          <div class="nd-kpi-icon"><i class="fas fa-server"></i></div>
+          <div class="nd-kpi-info">
+            <span class="nd-kpi-value" id="kpiTotalDevices">0</span>
+            <span class="nd-kpi-label">Discovered Devices</span>
           </div>
         </div>
-        <div class="nd-badge-state" id="ndStateBadge">Ready</div>
-      </div>
 
-      <!-- Network Details Ribbon -->
-      <div class="nd-network-ribbon">
-        <div class="nd-ribbon-item">
-          <span class="nd-ribbon-label"><i class="fas fa-ethernet"></i> Active Adapter</span>
-          <span class="nd-ribbon-val" id="ndAdapterName">Detecting...</span>
+        <div class="nd-kpi-card highlight-green">
+          <div class="nd-kpi-icon"><i class="fas fa-signal"></i></div>
+          <div class="nd-kpi-info">
+            <span class="nd-kpi-value" id="kpiOnlineDevices">0</span>
+            <span class="nd-kpi-label">Online / Active</span>
+          </div>
         </div>
-        <div class="nd-ribbon-item">
-          <span class="nd-ribbon-label"><i class="fas fa-laptop"></i> Local Host IPv4</span>
-          <span class="nd-ribbon-val highlight" id="ndLocalIp">--</span>
-        </div>
-        <div class="nd-ribbon-item">
-          <span class="nd-ribbon-label"><i class="fas fa-fingerprint"></i> Host MAC Address</span>
-          <span class="nd-ribbon-val mono" id="ndLocalMac">--</span>
-        </div>
-        <div class="nd-ribbon-item">
-          <span class="nd-ribbon-label"><i class="fas fa-sitemap"></i> Subnet Mask</span>
-          <span class="nd-ribbon-val mono" id="ndSubnetMask">--</span>
-        </div>
-        <div class="nd-ribbon-item">
-          <span class="nd-ribbon-label"><i class="fas fa-shield-alt"></i> Gateway Router</span>
-          <span class="nd-ribbon-val highlight-gw" id="ndDefaultGateway">--</span>
-        </div>
-      </div>
 
-      <!-- Input & Action Bar -->
-      <div class="nd-form-row">
-        <div class="nd-input-group flex-grow">
-          <label for="ndSubnetInput" class="nd-input-label">Target Subnet (CIDR)</label>
-          <div class="nd-input-wrap">
-            <i class="fas fa-network-wired nd-input-icon"></i>
-            <input type="text" id="ndSubnetInput" class="nd-text-input" placeholder="e.g. 192.168.1.0/24" value="" />
-            <button type="button" class="nd-quick-fill-btn" id="ndUseLocalSubnetBtn" title="Reset to auto-detected local subnet">
-              <i class="fas fa-crosshairs"></i> Local Subnet
+        <div class="nd-kpi-card highlight-cyan">
+          <div class="nd-kpi-icon"><i class="fas fa-route"></i></div>
+          <div class="nd-kpi-info">
+            <span class="nd-kpi-value" id="kpiGatewayDevice">--</span>
+            <span class="nd-kpi-label">Default Gateway</span>
+          </div>
+        </div>
+
+        <div class="nd-kpi-card highlight-violet">
+          <div class="nd-kpi-icon"><i class="fas fa-stopwatch"></i></div>
+          <div class="nd-kpi-info">
+            <span class="nd-kpi-value" id="kpiScanDuration">0.0s</span>
+            <span class="nd-kpi-label">Scan Duration</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Subnet & Adapter Control Panel -->
+      <section class="nd-control-card">
+        <div class="nd-panel-header">
+          <div class="nd-panel-title-wrap">
+            <i class="fas fa-sliders nd-panel-icon"></i>
+            <div>
+              <h2 class="nd-panel-title">Network Subnet & Discovery Controls</h2>
+              <p class="nd-panel-desc">Auto-detected adapter, routing parameters, and asynchronous discovery parameters.</p>
+            </div>
+          </div>
+          <div class="nd-badge-state" id="ndStateBadge">Ready</div>
+        </div>
+
+        <!-- Network Details Ribbon -->
+        <div class="nd-network-ribbon">
+          <div class="nd-ribbon-item">
+            <span class="nd-ribbon-label"><i class="fas fa-ethernet"></i> Active Adapter</span>
+            <span class="nd-ribbon-val" id="ndAdapterName">Detecting...</span>
+          </div>
+          <div class="nd-ribbon-item">
+            <span class="nd-ribbon-label"><i class="fas fa-laptop"></i> Local Host IPv4</span>
+            <span class="nd-ribbon-val highlight" id="ndLocalIp">--</span>
+          </div>
+          <div class="nd-ribbon-item">
+            <span class="nd-ribbon-label"><i class="fas fa-fingerprint"></i> Host MAC Address</span>
+            <span class="nd-ribbon-val mono" id="ndLocalMac">--</span>
+          </div>
+          <div class="nd-ribbon-item">
+            <span class="nd-ribbon-label"><i class="fas fa-sitemap"></i> Subnet Mask</span>
+            <span class="nd-ribbon-val mono" id="ndSubnetMask">--</span>
+          </div>
+          <div class="nd-ribbon-item">
+            <span class="nd-ribbon-label"><i class="fas fa-route"></i> Gateway Router</span>
+            <span class="nd-ribbon-val highlight-gw" id="ndDefaultGateway">--</span>
+          </div>
+        </div>
+
+        <!-- Input & Action Bar -->
+        <div class="nd-form-row">
+          <div class="nd-input-group flex-grow">
+            <label for="ndSubnetInput" class="nd-input-label">Target Subnet (CIDR)</label>
+            <div class="nd-input-wrap">
+              <i class="fas fa-network-wired nd-input-icon"></i>
+              <input type="text" id="ndSubnetInput" class="nd-text-input" placeholder="e.g. 192.168.1.0/24" value="" />
+              <button type="button" class="nd-quick-fill-btn" id="ndUseLocalSubnetBtn" title="Reset to auto-detected local subnet">
+                <i class="fas fa-crosshairs"></i> Local Subnet
+              </button>
+            </div>
+          </div>
+
+          <div class="nd-input-group">
+            <label for="ndTimeoutSelect" class="nd-input-label">Probe Timeout</label>
+            <select id="ndTimeoutSelect" class="nd-select-input">
+              <option value="0.3">Fast (300 ms)</option>
+              <option value="0.6" selected>Balanced (600 ms)</option>
+              <option value="1.0">Thorough (1000 ms)</option>
+            </select>
+          </div>
+
+          <div class="nd-input-group">
+            <label for="ndConcurrencySelect" class="nd-input-label">Concurrency</label>
+            <select id="ndConcurrencySelect" class="nd-select-input">
+              <option value="25">25 Threads</option>
+              <option value="50" selected>50 Threads (Recommended)</option>
+              <option value="100">100 Threads (Fast)</option>
+            </select>
+          </div>
+
+          <div class="nd-btn-group">
+            <button type="button" class="nd-btn nd-btn-primary" id="ndStartBtn">
+              <i class="fas fa-satellite-dish"></i>
+              <span class="btn-text">Start Discovery</span>
+            </button>
+            <button type="button" class="nd-btn nd-btn-danger" id="ndStopBtn" style="display:none;">
+              <i class="fas fa-stop"></i>
+              <span class="btn-text">Stop Scan</span>
+            </button>
+            <button type="button" class="nd-btn nd-btn-secondary" id="ndRescanBtn" title="Perform a fresh discovery scan">
+              <i class="fas fa-rotate-right"></i>
+              <span class="btn-text">Rescan</span>
             </button>
           </div>
         </div>
 
-        <div class="nd-input-group">
-          <label for="ndTimeoutSelect" class="nd-input-label">Probe Timeout</label>
-          <select id="ndTimeoutSelect" class="nd-select-input">
-            <option value="0.3">Fast (300 ms)</option>
-            <option value="0.6" selected>Balanced (600 ms)</option>
-            <option value="1.0">Thorough (1000 ms)</option>
-          </select>
+        <!-- Live Progress Bar -->
+        <div class="nd-progress-container" id="ndProgressBox" style="display:none;">
+          <div class="nd-progress-bar-wrap">
+            <div class="nd-progress-fill" id="ndProgressBar" style="width: 0%;"></div>
+          </div>
+          <div class="nd-progress-labels">
+            <span class="nd-progress-status" id="ndProgressStatus">Probing local subnet addresses...</span>
+            <span class="nd-progress-pct" id="ndProgressPct">0%</span>
+          </div>
         </div>
 
-        <div class="nd-input-group">
-          <label for="ndConcurrencySelect" class="nd-input-label">Concurrency</label>
-          <select id="ndConcurrencySelect" class="nd-select-input">
-            <option value="25">25 Threads</option>
-            <option value="50" selected>50 Threads (Recommended)</option>
-            <option value="100">100 Threads (Fast)</option>
-          </select>
+        <!-- Error / Diagnostic Banner -->
+        <div class="nd-alert-banner" id="ndAlertBanner" style="display:none;">
+          <i class="fas fa-triangle-exclamation nd-alert-icon"></i>
+          <div class="nd-alert-content" id="ndAlertMessage">Error occurred.</div>
+        </div>
+      </section>
+
+      <!-- Discovered Devices Inventory Section -->
+      <section class="nd-table-section">
+        <div class="nd-table-toolbar">
+          <div class="nd-filter-tabs">
+            <button type="button" class="nd-filter-tab active" data-filter="all">All (<span id="countAll">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="online">Online (<span id="countOnline">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="router">Routers (<span id="countRouters">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="computer">Computers (<span id="countComputers">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="mobile">Mobile (<span id="countMobile">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="iot">IoT / Printers (<span id="countIot">0</span>)</button>
+          </div>
+
+          <div class="nd-search-wrap">
+            <i class="fas fa-search nd-search-icon"></i>
+            <input type="text" id="ndSearchInput" class="nd-search-input" placeholder="Search IP, Hostname, MAC, Vendor, or Category..." />
+          </div>
         </div>
 
-        <div class="nd-btn-group">
-          <button type="button" class="nd-btn nd-btn-primary" id="ndStartBtn">
-            <i class="fas fa-radar"></i>
-            <span class="btn-text">Start Discovery</span>
-          </button>
-          <button type="button" class="nd-btn nd-btn-danger" id="ndStopBtn" style="display:none;">
-            <i class="fas fa-stop"></i>
-            <span class="btn-text">Stop Scan</span>
-          </button>
-          <button type="button" class="nd-btn nd-btn-secondary" id="ndRescanBtn" title="Perform a fresh discovery scan">
-            <i class="fas fa-rotate-right"></i>
-            <span class="btn-text">Rescan</span>
-          </button>
+        <!-- Responsive Table Container -->
+        <div class="nd-table-wrapper">
+          <table class="nd-device-table" id="ndDeviceTable">
+            <thead>
+              <tr>
+                <th data-sort="hostname">Device Name / Hostname <i class="fas fa-sort"></i></th>
+                <th data-sort="ip">IPv4 Address <i class="fas fa-sort"></i></th>
+                <th data-sort="mac">MAC Address <i class="fas fa-sort"></i></th>
+                <th data-sort="vendor">Manufacturer (OUI) <i class="fas fa-sort"></i></th>
+                <th data-sort="type">Device Category <i class="fas fa-sort"></i></th>
+                <th data-sort="status">Status <i class="fas fa-sort"></i></th>
+                <th>Discovery Method</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="ndTableBody">
+              <!-- Standby Empty State by Default -->
+              <tr class="nd-empty-row">
+                <td colspan="8">
+                  <div class="nd-empty-state">
+                    <div class="nd-empty-icon"><i class="fas fa-satellite-dish"></i></div>
+                    <h3 class="nd-empty-title">Ready for Network Reconnaissance</h3>
+                    <p class="nd-empty-desc">Click 'Start Discovery' above to sweep your local subnet and populate the device asset inventory.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="footer-container">
+        <div class="footer-top-row">
+          <div class="footer-brand-col">
+            <div class="footer-logo">
+              <i class="fas fa-shield-halved logo-icon"></i>
+              <span class="logo-name">Network Security System</span>
+            </div>
+            <p class="footer-tagline">
+              Autonomous multi-vector cyber defense, real-time ML traffic telemetry, active port enumeration, and high-performance network reconnaissance.
+            </p>
+          </div>
+
+          <div class="footer-links-group">
+            <span class="footer-group-title">Navigation</span>
+            <a href="/#overview">Home</a>
+            <a href="/?view=monitoring">Live Network Monitoring</a>
+            <a href="/?view=port-scanner">Port Scanner</a>
+            <a href="/network-discovery">Network Discovery</a>
+            <a href="/#threat-intelligence">Attack Classification</a>
+            <a href="/#prevention">Defensive Architecture</a>
+          </div>
+
+          <div class="footer-links-group">
+            <span class="footer-group-title">Discovery Capabilities</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> Win32 SendARP Direct Probing</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> ICMP Echo Concurrent Sweeper</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 150+ Vendor OUI Database</span>
+            <span class="footer-meta-item"><i class="fas fa-check-circle"></i> NetBIOS & Reverse DNS Resolution</span>
+          </div>
+        </div>
+
+        <div class="footer-bottom-row">
+          <p class="footer-note">© 2025–2026 Network Security System Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
         </div>
       </div>
-
-      <!-- Live Progress Bar -->
-      <div class="nd-progress-container" id="ndProgressBox" style="display:none;">
-        <div class="nd-progress-bar-wrap">
-          <div class="nd-progress-fill" id="ndProgressBar" style="width: 0%;"></div>
-        </div>
-        <div class="nd-progress-labels">
-          <span class="nd-progress-status" id="ndProgressStatus">Probing local subnet addresses...</span>
-          <span class="nd-progress-pct" id="ndProgressPct">0%</span>
-        </div>
-      </div>
-
-      <!-- Error / Diagnostic Banner -->
-      <div class="nd-alert-banner" id="ndAlertBanner" style="display:none;">
-        <i class="fas fa-triangle-exclamation nd-alert-icon"></i>
-        <div class="nd-alert-content" id="ndAlertMessage">Error occurred.</div>
-      </div>
-    </section>
-
-    <!-- Discovered Devices Inventory Section -->
-    <section class="nd-table-section">
-      <div class="nd-table-toolbar">
-        <div class="nd-filter-tabs">
-          <button type="button" class="nd-filter-tab active" data-filter="all">All (<span id="countAll">0</span>)</button>
-          <button type="button" class="nd-filter-tab" data-filter="online">Online (<span id="countOnline">0</span>)</button>
-          <button type="button" class="nd-filter-tab" data-filter="router">Routers (<span id="countRouters">0</span>)</button>
-          <button type="button" class="nd-filter-tab" data-filter="computer">Computers (<span id="countComputers">0</span>)</button>
-          <button type="button" class="nd-filter-tab" data-filter="mobile">Mobile (<span id="countMobile">0</span>)</button>
-          <button type="button" class="nd-filter-tab" data-filter="iot">IoT / Printers (<span id="countIot">0</span>)</button>
-        </div>
-
-        <div class="nd-search-wrap">
-          <i class="fas fa-search nd-search-icon"></i>
-          <input type="text" id="ndSearchInput" class="nd-search-input" placeholder="Search IP, Hostname, MAC, Vendor, or Category..." />
-        </div>
-      </div>
-
-      <!-- Responsive Table Container -->
-      <div class="nd-table-wrapper">
-        <table class="nd-device-table" id="ndDeviceTable">
-          <thead>
-            <tr>
-              <th data-sort="hostname">Device Name / Hostname <i class="fas fa-sort"></i></th>
-              <th data-sort="ip">IPv4 Address <i class="fas fa-sort"></i></th>
-              <th data-sort="mac">MAC Address <i class="fas fa-sort"></i></th>
-              <th data-sort="vendor">Manufacturer (OUI) <i class="fas fa-sort"></i></th>
-              <th data-sort="type">Device Category <i class="fas fa-sort"></i></th>
-              <th data-sort="status">Status <i class="fas fa-sort"></i></th>
-              <th>Discovery Method</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="ndTableBody">
-            <!-- Standby Empty State by Default -->
-            <tr class="nd-empty-row">
-              <td colspan="8">
-                <div class="nd-empty-state">
-                  <div class="nd-empty-icon"><i class="fas fa-satellite-dish"></i></div>
-                  <h3 class="nd-empty-title">Ready for Network Reconnaissance</h3>
-                  <p class="nd-empty-desc">Click 'Start Discovery' above to sweep your local subnet and populate the device asset inventory.</p>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+    </footer>
+  </div>
 
   <!-- Device Detail Slide-Over Drawer / Modal -->
   <div class="nd-modal-backdrop" id="ndDeviceModalBackdrop">
@@ -328,7 +413,7 @@
           </div>
 
           <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-radar"></i> Discovery Techniques</span>
+            <span class="field-label"><i class="fas fa-satellite-dish"></i> Discovery Techniques</span>
             <div class="field-badges" id="modalMethods">
               <span class="nd-method-chip">ARP</span>
             </div>
@@ -337,52 +422,14 @@
 
         <!-- Quick Actions Row -->
         <div class="nd-modal-actions">
-          <a href="#" id="modalPortScanLink" class="nd-btn nd-btn-primary" target="_blank">
-            <i class="fas fa-search"></i>
+          <a href="#" id="modalPortScanLink" class="btn-primary" target="_blank">
+            <i class="fas fa-bullseye"></i>
             <span>Inspect Ports on this Host</span>
           </a>
         </div>
       </div>
     </div>
   </div>
-
-  <!-- Footer -->
-  <footer class="site-footer">
-    <div class="footer-container">
-      <div class="footer-top-row">
-        <div class="footer-brand-col">
-          <div class="footer-logo">
-            <i class="fas fa-shield-halved logo-icon"></i>
-            <span class="logo-name">DDoS<span class="logo-accent">-Guard</span></span>
-          </div>
-          <p class="footer-tagline">
-            Autonomous multi-vector cyber defense, real-time ML traffic telemetry, and high-performance network reconnaissance.
-          </p>
-        </div>
-
-        <div class="footer-links-group">
-          <span class="footer-group-title">Navigation</span>
-          <a href="/">Overview</a>
-          <a href="/#check-connection">Live Scanner</a>
-          <a href="/#port-scanner">Port Scanner</a>
-          <a href="/network-discovery">Network Discovery</a>
-          <a href="/#threat-intelligence">Threat Vectors</a>
-        </div>
-
-        <div class="footer-links-group">
-          <span class="footer-group-title">Discovery Capabilities</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> Win32 SendARP</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> ICMP Echo Sweeper</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 150+ Vendor OUI Database</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> NetBIOS & Reverse DNS</span>
-        </div>
-      </div>
-
-      <div class="footer-bottom-row">
-        <p class="footer-note">© 2025–2026 DDoS-Guard Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
-      </div>
-    </div>
-  </footer>
 
   <!-- Network Discovery Engine Script -->
   <script src="/static/network_discovery.js"></script>

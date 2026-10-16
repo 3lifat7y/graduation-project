@@ -84,43 +84,70 @@ powershell -ExecutionPolicy Bypass -File .\service_manager.ps1 Status
 
 ```text
 Grad project/
-├── api.py                      # Flask REST API & Web Dashboard backend
-├── ddos_guard_service.py       # Windows Sniffer Service & Secure Local IPC capture engine
-├── service_helper.py           # Unprivileged SCM query helper & scoped UAC elevation manager
-├── ipc_client.py               # Resilient local IPC client with auto-reconnect & token auth
-├── feature_extraction2.py      # Real-time 77 network flow feature extractor
-├── network_detector.py         # Network interface discovery & driver validation
-├── Train.py                    # Complete AI model training pipeline & benchmark suite
-├── send_traffic.py             # Realistic attack and benign traffic flow simulator
-├── read_features.py            # Feature extractor & JSON dataset generator
-├── service_manager.ps1         # Windows Service lifecycle manager (Install/Start/Stop)
-├── test_service_architecture.py # Non-privileged service architecture & pipeline verification suite
-├── run_ddos_guard.bat          # One-click Windows launcher for Web UI
-├── simulate_attack.bat         # One-click Windows launcher for attack simulator
-├── requirements.txt            # Python dependencies
-├── final_output_new_dataset/   # Active champion model, scaler, configs & evaluation reports
-│   ├── models/                 # Serialized XGBoost model (best_model.joblib) & scaler
-│   ├── configs/                # Exact 77 feature schema & label mappings
-│   ├── reports/                # Classification reports, confusion matrices, audit logs
-│   └── datasets/               # Isolated test set
-├── static/                     # Web UI stylesheets, JavaScript, and assets
-└── templates/                  # HTML5 dashboard templates
+├── api.py                          # Flask REST API & Web Dashboard application entry point
+├── modules/                        # Independent feature packages
+│   ├── common/                     # Shared services (network interface detection)
+│   │   ├── __init__.py
+│   │   └── network_detector.py
+│   ├── monitoring/                 # Live network monitoring & capture engine
+│   │   ├── __init__.py
+│   │   ├── capture_engine.py       # 77-feature extraction engine (WinDivert/Rolling window)
+│   │   ├── ipc_client.py           # Authenticated local IPC client
+│   │   ├── service.py              # Windows Sniffer Service implementation
+│   │   └── service_helper.py       # Non-privileged SCM query & UAC elevation helper
+│   ├── port_scanner/               # Independent Port & Network Scanner module
+│   │   ├── __init__.py
+│   │   └── scanner.py              # Pure-Python async socket port scanner
+│   └── network_discovery/          # Independent Local Network Discovery module
+│       ├── __init__.py
+│       └── discovery.py            # Multi-method LAN host discovery (ARP/ICMP/NetBIOS)
+├── ml_engine/                      # Machine learning training & feature preparation
+│   ├── __init__.py
+│   ├── train.py                    # Champion XGBoost training & evaluation pipeline
+│   └── read_features.py            # Feature extractor & JSON dataset generator
+├── scripts/                        # Operational scripts & management tools
+│   ├── __init__.py
+│   ├── send_traffic.py             # Realistic attack and benign traffic flow simulator
+│   └── service_manager.ps1         # Windows Service lifecycle manager (Install/Start/Stop)
+├── tests/                          # Unified test suites (Unit & Integration)
+│   ├── __init__.py
+│   ├── test_scan_flow.py
+│   ├── test_service_architecture.py
+│   ├── test_port_scanner.py
+│   ├── test_network_discovery.py
+│   ├── test_continuous_monitoring.py
+│   ├── test_ipc_auth.py
+│   └── test_service_manager_syntax.py
+├── final_output_new_dataset/       # Active champion model, scaler, configs & evaluation reports
+│   ├── models/                     # Serialized XGBoost model (best_model.joblib) & scaler
+│   ├── configs/                    # Exact 77 feature schema & label mappings
+│   ├── reports/                    # Classification reports, confusion matrices, audit logs
+│   └── datasets/                   # Isolated test set
+├── static/                         # Web UI stylesheets, JavaScript, and assets
+├── templates/                      # HTML5 dashboard templates
+├── run_ddos_guard.bat              # One-click Windows launcher for Web UI
+├── simulate_attack.bat             # One-click Windows launcher for attack simulator
+├── service_manager.ps1             # Root Windows Service launcher
+└── requirements.txt                # Python dependencies
 ```
 
 ---
 
 ## 🧪 Testing
 
-Run the verification test suites:
+Run the comprehensive test suite across all modules:
 ```powershell
-# Non-privileged Service Architecture & Pipeline Verification (7 automated tests)
-python test_service_architecture.py
+python -m unittest discover tests -v
+```
 
-# IPC Authentication and security test suite (requires service running)
-python test_ipc_auth.py
-
-# End-to-end Flask integration test (requires service running)
-python test_flask_ipc_live.py
+Or run individual test suites:
+```powershell
+python -m unittest tests/test_service_architecture.py
+python -m unittest tests/test_scan_flow.py
+python -m unittest tests/test_port_scanner.py
+python -m unittest tests/test_network_discovery.py
+python -m unittest tests/test_continuous_monitoring.py
+python -m unittest tests/test_service_manager_syntax.py
 ```
 
 ---

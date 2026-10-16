@@ -23,18 +23,18 @@ import threading
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import api
 from api import app, current_scan_session, scan_session_lock, run_scan_worker
-from feature_extraction2 import (
+from modules.monitoring.capture_engine import (
     RollingFlowStatsCollector,
     validate_flow_features,
     OFFICIAL_77_FEATURES
 )
-from ddos_guard_service import CaptureWorker
-import ipc_client
+from modules.monitoring.service import CaptureWorker
+import modules.monitoring.ipc_client as ipc_client
 
 
 class TestContinuousMonitoring(unittest.TestCase):

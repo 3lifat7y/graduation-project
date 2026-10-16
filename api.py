@@ -22,10 +22,10 @@ import joblib
 import datetime
 import secrets
 
-from network_detector import auto_detect_primary_interface, check_capture_drivers
-from feature_extraction2 import FlowStatsCollector, RollingFlowStatsCollector, capture_window_windivert, OFFICIAL_77_FEATURES, validate_flow_features
-from ipc_client import DDoSGuardIPCClient
-from service_helper import get_service_status, request_service_start, request_service_restart, is_service_online, is_authenticated_service_online
+from modules.common.network_detector import auto_detect_primary_interface, check_capture_drivers
+from modules.monitoring.capture_engine import FlowStatsCollector, RollingFlowStatsCollector, capture_window_windivert, OFFICIAL_77_FEATURES, validate_flow_features
+from modules.monitoring.ipc_client import DDoSGuardIPCClient
+from modules.monitoring.service_helper import get_service_status, request_service_start, request_service_restart, is_service_online, is_authenticated_service_online
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -62,7 +62,7 @@ TOP3_DIR = BASE_DIR / "final_output_top3"
 OPTIMIZED_DIR = BASE_DIR / "final_output_optimized"
 LEGACY_DIR = BASE_DIR / "final output"
 
-FEATURE_EXTRACTION_SCRIPT = str(BASE_DIR / "feature_extraction2.py")
+FEATURE_EXTRACTION_SCRIPT = str(BASE_DIR / "modules" / "monitoring" / "capture_engine.py")
 TRAFFIC_JSON_PATH = str(BASE_DIR / "extracted_features.json")
 
 CLASS_LABELS = {
@@ -1324,8 +1324,8 @@ def predict_direct():
 # Isolated Port & Network Scanner Endpoints
 # Architecture: Independent async manager, zero interference with DDoS core.
 # ==============================================================================
-from port_scanner import port_scanner_manager
-from network_detector import get_active_routable_ip
+from modules.port_scanner.scanner import port_scanner_manager
+from modules.common.network_detector import get_active_routable_ip
 
 
 @app.route('/api/port-scan/network-info', methods=['GET'])
@@ -1398,7 +1398,7 @@ def stop_port_scan():
 # Isolated Network Discovery Endpoints
 # Architecture: Independent multi-method LAN discovery, zero interference with DDoS core or Port Scanner.
 # ==============================================================================
-from network_discovery import network_discovery_manager, get_network_discovery_info
+from modules.network_discovery.discovery import network_discovery_manager, get_network_discovery_info
 
 
 @app.route('/network-discovery')

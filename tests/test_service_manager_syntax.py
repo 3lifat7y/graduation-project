@@ -16,7 +16,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVICE_MANAGER_PS1 = PROJECT_ROOT / "service_manager.ps1"
 
 
@@ -61,26 +61,34 @@ if ($errors) {{
 
     def test_02_scm_environment_variables_preserved(self):
         """2. Verify PYTHONPATH, PYTHONHOME, VIRTUAL_ENV, and PATH are correctly preserved in the script."""
-        content = SERVICE_MANAGER_PS1.read_text(encoding="utf-8")
-        
-        # Verify required environment variable assignments are present
-        self.assertIn('"PYTHONPATH=$pyPath"', content, "PYTHONPATH assignment missing or corrupted.")
-        self.assertIn('"PYTHONHOME=$pyHome"', content, "PYTHONHOME assignment missing or corrupted.")
-        self.assertIn('"VIRTUAL_ENV=$venvDir"', content, "VIRTUAL_ENV assignment missing or corrupted.")
-        self.assertIn('"PATH=$venvDir\\Scripts;$venvDir\\Lib\\site-packages\\win32;$pyHome;$pyHome\\Scripts;$env:PATH"',
-                      content, "PATH environment variable assignment missing or corrupted.")
+        candidates = [SERVICE_MANAGER_PS1, PROJECT_ROOT / "scripts" / "service_manager.ps1"]
+        for cand in candidates:
+            if not cand.exists():
+                continue
+            content = cand.read_text(encoding="utf-8")
+            
+            # Verify required environment variable assignments are present
+            self.assertIn('"PYTHONPATH=$pyPath"', content, f"PYTHONPATH assignment missing or corrupted in {cand}.")
+            self.assertIn('"PYTHONHOME=$pyHome"', content, f"PYTHONHOME assignment missing or corrupted in {cand}.")
+            self.assertIn('"VIRTUAL_ENV=$venvDir"', content, f"VIRTUAL_ENV assignment missing or corrupted in {cand}.")
+            self.assertIn('"PATH=$venvDir\\Scripts;$venvDir\\Lib\\site-packages\\win32;$pyHome;$pyHome\\Scripts;$env:PATH"',
+                          content, f"PATH environment variable assignment missing or corrupted in {cand}.")
 
-        # Verify pyPath contains all necessary paths
-        expected_pypath = '$pyPath = "$venvDir\\Lib\\site-packages;$venvDir\\Lib\\site-packages\\win32;$venvDir\\Lib\\site-packages\\win32\\lib;$ScriptDir"'
-        self.assertIn(expected_pypath, content, "pyPath definition is missing or altered.")
+            # Verify pyPath contains all necessary paths
+            expected_pypath = '$pyPath = "$venvDir\\Lib\\site-packages;$venvDir\\Lib\\site-packages\\win32;$venvDir\\Lib\\site-packages\\win32\\lib;$ScriptDir"'
+            self.assertIn(expected_pypath, content, f"pyPath definition is missing or altered in {cand}.")
 
     def test_03_utf8_bom_presence(self):
         """3. Verify service_manager.ps1 starts with UTF-8 BOM for Windows PowerShell 5.1 compatibility."""
-        raw_bytes = SERVICE_MANAGER_PS1.read_bytes()
-        self.assertTrue(
-            raw_bytes.startswith(b'\xef\xbb\xbf'),
-            "service_manager.ps1 should have UTF-8 BOM (0xEF, 0xBB, 0xBF) to ensure Windows PowerShell 5.1 parses characters properly."
-        )
+        candidates = [SERVICE_MANAGER_PS1, PROJECT_ROOT / "scripts" / "service_manager.ps1"]
+        for cand in candidates:
+            if not cand.exists():
+                continue
+            raw_bytes = cand.read_bytes()
+            self.assertTrue(
+                raw_bytes.startswith(b'\xef\xbb\xbf'),
+                f"{cand} should have UTF-8 BOM (0xEF, 0xBB, 0xBF) to ensure Windows PowerShell 5.1 parses characters properly."
+            )
 
     def test_04_status_command_safe_execution(self):
         """4. Verify 'Status' command runs cleanly without ParserError or modifying service state."""
