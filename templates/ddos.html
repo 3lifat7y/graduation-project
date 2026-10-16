@@ -39,6 +39,7 @@
         <a href="#overview" class="nav-link active">Overview</a>
         <a href="#check-connection" class="nav-link">Live Scanner</a>
         <a href="#port-scanner" class="nav-link">Port Scanner</a>
+        <a href="/network-discovery" class="nav-link">Network Discovery</a>
         <a href="#threat-intelligence" class="nav-link">Threat Vectors</a>
         <a href="#prevention" class="nav-link">Mitigation</a>
         <a href="#team" class="nav-link">Team</a>
@@ -78,13 +79,13 @@
           </h1>
 
           <p class="hero-description">
-            Autonomous network traffic inspection powered by kernel-level packet sniffing and 77-feature bidirectional flow extraction. Neutralize volumetric floods, reflection attacks, and protocol exploits before service disruption.
+            Autonomous real-time network traffic inspection powered by kernel packet capture and 77-feature bidirectional flow extraction. Detects 14 distinct cyber attack vectors alongside verified benign baseline traffic with sub-second AI inference.
           </p>
 
           <div class="hero-stats-grid">
             <div class="hero-stat-card">
               <span class="stat-number">15</span>
-              <span class="stat-label">Attack Classes</span>
+              <span class="stat-label">Trained Classes</span>
             </div>
             <div class="hero-stat-card">
               <span class="stat-number">77</span>
@@ -177,7 +178,35 @@
           </div>
           <h2 class="section-title">Live Network Traffic & DDoS Scanner</h2>
           <p class="section-subtitle">
-            Real-time packet inspection across physical and wireless adapters with sub-second AI inference.
+            Real-time packet inspection across physical and wireless adapters with sub-second AI inference across 15 verified network traffic categories.
+          </p>
+        </div>
+
+        <!-- Real-Time Multi-Class Classification Capabilities -->
+        <div class="monitor-capabilities-banner">
+          <div class="cap-header">
+            <i class="fas fa-layer-group"></i>
+            <span>Supported Detection Scope: 15 Verified Traffic Classes (14 Hostile Vectors + Benign Baseline)</span>
+          </div>
+          <div class="cap-tags-row">
+            <span class="cap-tag benign" title="Class 0: Legitimate everyday network traffic"><i class="fas fa-shield-heart"></i> Benign</span>
+            <span class="cap-tag dos" title="Class 2: Volumetric Distributed DoS"><i class="fas fa-biohazard"></i> DDoS</span>
+            <span class="cap-tag dos" title="Class 4: HTTP Unbearable Load King"><i class="fas fa-biohazard"></i> DoS Hulk</span>
+            <span class="cap-tag dos" title="Class 3: Layer-7 Keep-Alive exhaustion"><i class="fas fa-biohazard"></i> DoS GoldenEye</span>
+            <span class="cap-tag dos" title="Class 6: Slow header starvation"><i class="fas fa-biohazard"></i> DoS slowloris</span>
+            <span class="cap-tag dos" title="Class 5: Slow POST/read starvation"><i class="fas fa-biohazard"></i> DoS Slowhttptest</span>
+            <span class="cap-tag web" title="Class 13: SQL database query injection"><i class="fas fa-database"></i> SQL Injection</span>
+            <span class="cap-tag web" title="Class 14: Client-side script injection"><i class="fas fa-code"></i> XSS</span>
+            <span class="cap-tag web" title="Class 12: Automated login credential guessing"><i class="fas fa-key"></i> Web Brute Force</span>
+            <span class="cap-tag brute" title="Class 11: SSH service dictionary attack"><i class="fas fa-terminal"></i> SSH-Patator</span>
+            <span class="cap-tag brute" title="Class 7: FTP service dictionary attack"><i class="fas fa-folder-open"></i> FTP-Patator</span>
+            <span class="cap-tag brute" title="Class 8: OpenSSL TLS buffer over-read (CVE-2014-0160)"><i class="fas fa-heart-pulse"></i> Heartbleed</span>
+            <span class="cap-tag recon" title="Class 10: Host service & port sweep"><i class="fas fa-satellite-dish"></i> PortScan</span>
+            <span class="cap-tag recon" title="Class 1: Botnet C2 communication"><i class="fas fa-robot"></i> Bot</span>
+            <span class="cap-tag recon" title="Class 9: Internal lateral penetration"><i class="fas fa-user-secret"></i> Infiltration</span>
+          </div>
+          <p class="cap-note">
+            <i class="fas fa-circle-info"></i> Packets are extracted into 77 bidirectional flow features and evaluated by the deployed XGBoost classifier in real time.
           </p>
         </div>
 
@@ -517,34 +546,76 @@
       <div class="section-container">
         <div class="section-header text-center">
           <div class="section-badge">
-            <i class="fas fa-biohazard"></i> Attack Classification
+            <i class="fas fa-shield-virus"></i> Verified Threat Intelligence
           </div>
           <h2 class="section-title">Common DDoS Attack Vectors & Signatures</h2>
           <p class="section-subtitle">
-            DDoS-Guard's AI model is benchmarked against 15 distinct network traffic profiles, covering volumetric reflection, state exhaustion, and application flooding.
+            DDoS-Guard's deployed AI champion model is trained and validated on 15 distinct network traffic classes from the benchmark CIC-IDS2017 dataset, covering 14 hostile attack vectors alongside a verified benign baseline.
           </p>
+        </div>
+
+        <!-- Verified Normal / Benign Traffic Baseline (Class 0 Showcase) -->
+        <div class="benign-baseline-card">
+          <div class="benign-card-inner">
+            <div class="benign-icon-col">
+              <div class="benign-icon-ring">
+                <i class="fas fa-shield-heart"></i>
+              </div>
+              <span class="benign-class-badge">Class 0: Benign</span>
+            </div>
+            <div class="benign-content-col">
+              <div class="benign-title-row">
+                <h3>Normal Network Traffic (Verified Baseline)</h3>
+                <span class="benign-status-pill"><span class="pulse-dot"></span> Legitimate Flow Verified</span>
+              </div>
+              <p>
+                Represents everyday, non-hostile network traffic including authorized HTTPS web sessions, DNS lookups, streaming media, and authenticated database transactions. DDoS-Guard continuously models normal bidirectional flow dynamics across 77 statistical features, ensuring genuine traffic passes seamlessly without false alarms.
+              </p>
+              <div class="benign-metrics-row">
+                <div class="benign-metric">
+                  <span class="bm-label">Test Precision</span>
+                  <span class="bm-val">99.97%</span>
+                </div>
+                <div class="benign-metric">
+                  <span class="bm-label">Test Recall</span>
+                  <span class="bm-val">99.85%</span>
+                </div>
+                <div class="benign-metric">
+                  <span class="bm-label">Evaluated Flows</span>
+                  <span class="bm-val">64,039 Samples</span>
+                </div>
+                <div class="benign-metric">
+                  <span class="bm-label">Model Classification</span>
+                  <span class="bm-val">Non-Hostile Baseline</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Category Filter Tabs -->
         <div class="category-filter-bar" role="tablist" aria-label="Attack Category Filters">
           <button class="filter-tab active" data-filter="all" role="tab" aria-selected="true">
-            All Vectors <span class="tab-count">15</span>
+            All Attack Vectors <span class="tab-count">14</span>
           </button>
-          <button class="filter-tab" data-filter="drdos" role="tab" aria-selected="false">
-            Reflection (DrDoS) <span class="tab-count">8</span>
+          <button class="filter-tab" data-filter="dos" role="tab" aria-selected="false">
+            Denial of Service (DoS/DDoS) <span class="tab-count">5</span>
           </button>
-          <button class="filter-tab" data-filter="flood" role="tab" aria-selected="false">
-            Direct Floods <span class="tab-count">5</span>
+          <button class="filter-tab" data-filter="web" role="tab" aria-selected="false">
+            Web Applications <span class="tab-count">3</span>
           </button>
-          <button class="filter-tab" data-filter="exploit" role="tab" aria-selected="false">
-            Protocol Exploits <span class="tab-count">2</span>
+          <button class="filter-tab" data-filter="brute" role="tab" aria-selected="false">
+            Brute Force &amp; Exploits <span class="tab-count">3</span>
+          </button>
+          <button class="filter-tab" data-filter="recon" role="tab" aria-selected="false">
+            Recon &amp; Infiltration <span class="tab-count">3</span>
           </button>
         </div>
 
         <!-- Slider Navigation Controls -->
         <div class="slider-controls-wrap">
           <div class="slider-counter">
-            <span id="sliderCurrentIndex">1</span> / <span id="sliderTotalCount">15</span>
+            <span id="sliderCurrentIndex">1</span> / <span id="sliderTotalCount">14</span>
           </div>
           <div class="slider-arrows">
             <button class="nav-btn prev" id="sliderPrevBtn" aria-label="Previous attack card">
@@ -559,199 +630,242 @@
         <!-- Attack Cards Container -->
         <div class="slider" id="info">
           <div class="card-container" id="attackCardContainer">
-            <!-- 1. DrDoS_DNS -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 1. DDoS (Class 2) -->
+            <div class="card attack-card-item" data-category="dos">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 53</span>
+                <span class="attack-type-tag tag-dos">Denial of Service</span>
+                <span class="protocol-tag">Class: DDoS</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos2.jpg" alt="DrDoS_DNS Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos0.jpg" alt="DDoS Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_DNS</h3>
-              <p>DNS-based Distributed Reflection DDoS. Attackers exploit open recursive DNS resolvers with spoofed source IPs to flood target servers with amplified responses.</p>
+              <h3>DDoS (Distributed DoS)</h3>
+              <p>Volumetric flood launched concurrently from multiple distributed botnets to exhaust bandwidth, deplete routing buffers, and disrupt service availability.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-network-wired"></i> TCP / UDP Multi-Vector</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.93%</span>
+              </div>
             </div>
 
-            <!-- 2. DrDoS_LDAP -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 2. DoS Hulk (Class 4) -->
+            <div class="card attack-card-item" data-category="dos">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 389</span>
+                <span class="attack-type-tag tag-dos">Denial of Service</span>
+                <span class="protocol-tag">Class: DoS Hulk</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos3.jpg" alt="DrDoS_LDAP Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos1.jpg" alt="DoS Hulk Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_LDAP</h3>
-              <p>LDAP-based Distributed Reflection DDoS. Abuses exposed Lightweight Directory Access Protocol daemons to generate disproportionate response payloads.</p>
+              <h3>DoS Hulk</h3>
+              <p>Generates high-rate, obfuscated HTTP GET requests with randomized user-agents and URLs to bypass caching servers and crash backend worker pools.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.78%</span>
+              </div>
             </div>
 
-            <!-- 3. DrDoS_MSSQL -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 3. DoS GoldenEye (Class 3) -->
+            <div class="card attack-card-item" data-category="dos">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 1434</span>
+                <span class="attack-type-tag tag-dos">Denial of Service</span>
+                <span class="protocol-tag">Class: DoS GoldenEye</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos4.jpg" alt="DrDoS_MSSQL Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos2.jpg" alt="DoS GoldenEye Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_MSSQL</h3>
-              <p>Microsoft SQL Server resolution reflection. Sends MC-SSTP discovery probes to SQL Server Browser services, reflecting large response flows.</p>
+              <h3>DoS GoldenEye</h3>
+              <p>Layer-7 application exhaustion attack that holds HTTP Keep-Alive and No-Cache connections open indefinitely until server socket pools are depleted.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.76%</span>
+              </div>
             </div>
 
-            <!-- 4. DrDoS_NTP -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 4. DoS slowloris (Class 6) -->
+            <div class="card attack-card-item" data-category="dos">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 123</span>
+                <span class="attack-type-tag tag-dos">Denial of Service</span>
+                <span class="protocol-tag">Class: DoS slowloris</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos5.jpg" alt="DrDoS_NTP Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos3.jpg" alt="DoS Slowloris Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_NTP</h3>
-              <p>Network Time Protocol amplification. Exploits legacy NTP "monlist" commands to achieve up to 556x traffic amplification against the victim.</p>
+              <h3>DoS Slowloris</h3>
+              <p>Low-and-slow HTTP starvation attack that transmits partial, incomplete request headers at slow intervals, locking connection tables with minimal bandwidth.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.72%</span>
+              </div>
             </div>
 
-            <!-- 5. DrDoS_NetBIOS -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 5. DoS Slowhttptest (Class 5) -->
+            <div class="card attack-card-item" data-category="dos">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 137</span>
+                <span class="attack-type-tag tag-dos">Denial of Service</span>
+                <span class="protocol-tag">Class: DoS Slowhttptest</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos6.jpg" alt="DrDoS_NetBIOS Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos4.jpg" alt="DoS Slowhttptest Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_NetBIOS</h3>
-              <p>NetBIOS Name Service reflection. Abuses exposed NBNS services on Windows machines to reflect voluminous name status queries.</p>
+              <h3>DoS Slowhttptest</h3>
+              <p>Exploits web server concurrency limits by slowly sending HTTP POST message bodies or reading response data one byte at a time to tie up threads.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-globe"></i> HTTP : 80 / 443</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.33%</span>
+              </div>
             </div>
 
-            <!-- 6. DrDoS_SNMP -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 6. Web Attack - SQL Injection (Class 13) -->
+            <div class="card attack-card-item" data-category="web">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 161</span>
+                <span class="attack-type-tag tag-web">Web Application</span>
+                <span class="protocol-tag">Class: Web Attack - SQL Injection</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos7.jpg" alt="DrDoS_SNMP Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos8.jpg" alt="SQL Injection Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_SNMP</h3>
-              <p>Simple Network Management Protocol reflection. Sends GetBulk requests with public community strings to flood the target via network hardware.</p>
+              <h3>Web Attack — SQL Injection</h3>
+              <p>Injects malicious SQL query fragments into web form inputs or query parameters to subvert application logic, bypass auth, or extract database records.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-database"></i> Database Layer</span>
+                <span class="recall-rate" title="Model precision on test set">Precision: 100%</span>
+              </div>
             </div>
 
-            <!-- 7. DrDoS_SSDP -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 7. Web Attack - XSS (Class 14) -->
+            <div class="card attack-card-item" data-category="web">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : 1900</span>
+                <span class="attack-type-tag tag-web">Web Application</span>
+                <span class="protocol-tag">Class: Web Attack - XSS</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos8.jpg" alt="DrDoS_SSDP Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos9.jpg" alt="Cross-Site Scripting Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_SSDP</h3>
-              <p>Simple Service Discovery Protocol amplification. Leverages exposed UPnP IoT devices to reflect continuous M-SEARCH discovery responses.</p>
+              <h3>Web Attack — XSS</h3>
+              <p>Injects unauthorized JavaScript scripts into web application parameters, executing within end-user browsers to steal session tokens and credentials.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-code"></i> Client Script</span>
+                <span class="recall-rate" title="Model precision on test set">Precision: 49.5%</span>
+              </div>
             </div>
 
-            <!-- 8. DrDoS_UDP -->
-            <div class="card attack-card-item" data-category="drdos">
+            <!-- 8. Web Attack - Brute Force (Class 12) -->
+            <div class="card attack-card-item" data-category="web">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-drdos">Reflection</span>
-                <span class="protocol-tag">UDP : Variable</span>
+                <span class="attack-type-tag tag-web">Web Application</span>
+                <span class="protocol-tag">Class: Web Attack - Brute Force</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos9.jpg" alt="DrDoS_UDP Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos10.jpg" alt="Web Brute Force Attack Diagram" loading="lazy" />
               </div>
-              <h3>DrDoS_UDP</h3>
-              <p>General UDP reflection attack. Employs miscellaneous connectionless UDP endpoints to saturate inbound network pipeline bandwidth.</p>
+              <h3>Web Attack — Brute Force</h3>
+              <p>Automated credential-guessing and password-spraying submissions targeted at web login interfaces and administrative authentication portals.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-key"></i> Web Auth Portals</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 80.95%</span>
+              </div>
             </div>
 
-            <!-- 9. LDAP Flood -->
-            <div class="card attack-card-item" data-category="flood">
+            <!-- 9. SSH-Patator (Class 11) -->
+            <div class="card attack-card-item" data-category="brute">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-flood">Direct Flood</span>
-                <span class="protocol-tag">TCP/UDP : 389</span>
+                <span class="attack-type-tag tag-brute">Brute Force</span>
+                <span class="protocol-tag">Class: SSH-Patator</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos10.jpg" alt="LDAP Flood Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos11.jpg" alt="SSH-Patator Attack Diagram" loading="lazy" />
               </div>
-              <h3>LDAP Flood</h3>
-              <p>Direct volumetric LDAP flood. Generates overwhelming rates of directory queries, exhausting server CPU, worker threads, and memory.</p>
+              <h3>SSH-Patator</h3>
+              <p>Targeted multi-threaded dictionary brute force directed against Secure Shell (SSH) daemons to discover valid user credentials and gain shell access.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-terminal"></i> TCP : 22 (SSH)</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.53%</span>
+              </div>
             </div>
 
-            <!-- 10. MSSQL Flood -->
-            <div class="card attack-card-item" data-category="flood">
+            <!-- 10. FTP-Patator (Class 7) -->
+            <div class="card attack-card-item" data-category="brute">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-flood">Direct Flood</span>
-                <span class="protocol-tag">TCP : 1433</span>
+                <span class="attack-type-tag tag-brute">Brute Force</span>
+                <span class="protocol-tag">Class: FTP-Patator</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos11.jpg" alt="MSSQL Flood Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos12.jpg" alt="FTP-Patator Attack Diagram" loading="lazy" />
               </div>
-              <h3>MSSQL Flood</h3>
-              <p>Direct database connection flood. Saturates SQL query listener threads with malformed or incomplete connection handshakes.</p>
+              <h3>FTP-Patator</h3>
+              <p>Automated high-velocity credential brute force against File Transfer Protocol (FTP) listeners, attempting thousands of dictionary combinations.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-folder-open"></i> TCP : 21 (FTP)</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 99.83%</span>
+              </div>
             </div>
 
-            <!-- 11. NetBIOS Flood -->
-            <div class="card attack-card-item" data-category="flood">
+            <!-- 11. Heartbleed (Class 8) -->
+            <div class="card attack-card-item" data-category="brute">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-flood">Direct Flood</span>
-                <span class="protocol-tag">TCP/UDP : 139</span>
+                <span class="attack-type-tag tag-brute">Vulnerability Exploit</span>
+                <span class="protocol-tag">Class: Heartbleed</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos12.jpg" alt="NetBIOS Flood Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos13.jpg" alt="Heartbleed Exploit Diagram" loading="lazy" />
               </div>
-              <h3>NetBIOS Flood</h3>
-              <p>Direct NetBIOS session service flooding. Targets file-sharing and domain services on Windows servers to cause denial of service.</p>
+              <h3>Heartbleed (CVE-2014-0160)</h3>
+              <p>Exploits OpenSSL TLS heartbeat extension buffer over-read flaw to leak up to 64KB of server memory containing private encryption keys and passwords.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-shield-virus"></i> TLS/SSL : 443</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 100.0%</span>
+              </div>
             </div>
 
-            <!-- 12. Portmap -->
-            <div class="card attack-card-item" data-category="exploit">
+            <!-- 12. PortScan (Class 10) -->
+            <div class="card attack-card-item" data-category="recon">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-exploit">Protocol Exploit</span>
-                <span class="protocol-tag">UDP : 111</span>
+                <span class="attack-type-tag tag-recon">Reconnaissance</span>
+                <span class="protocol-tag">Class: PortScan</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos13.jpg" alt="Portmap Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos5.jpg" alt="PortScan Diagram" loading="lazy" />
               </div>
-              <h3>Portmap / RPC</h3>
-              <p>Open Network Computing Remote Procedure Call (ONC RPC) flood. Exploits rpcbind daemon tables to cause resource starvation.</p>
+              <h3>PortScan Reconnaissance</h3>
+              <p>Systematic TCP/UDP port enumeration across network hosts to identify listening services, banner versions, and attack surfaces prior to exploitation.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-satellite-dish"></i> TCP / UDP Sweep</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 98.72%</span>
+              </div>
             </div>
 
-            <!-- 13. SYN Flood -->
-            <div class="card attack-card-item" data-category="flood">
+            <!-- 13. Bot (Class 1) -->
+            <div class="card attack-card-item" data-category="recon">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-flood">State Exhaustion</span>
-                <span class="protocol-tag">TCP : Variable</span>
+                <span class="attack-type-tag tag-recon">Botnet Activity</span>
+                <span class="protocol-tag">Class: Bot</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos14.jpg" alt="SYN Flood Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos6.jpg" alt="Botnet Diagram" loading="lazy" />
               </div>
-              <h3>SYN Flood</h3>
-              <p>Classic TCP state-table exhaustion. Sends thousands of TCP SYN packets with spoofed IPs, filling the backlog queue with half-open connections.</p>
+              <h3>Botnet Traffic (ARES / C2)</h3>
+              <p>Autonomous command-and-control communication and payload synchronization between compromised zombie hosts and centralized botmaster servers.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-robot"></i> C2 Channels</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 98.61%</span>
+              </div>
             </div>
 
-            <!-- 14. TFTP -->
-            <div class="card attack-card-item" data-category="exploit">
+            <!-- 14. Infiltration (Class 9) -->
+            <div class="card attack-card-item" data-category="recon">
               <div class="card-badge-row">
-                <span class="attack-type-tag tag-exploit">Protocol Exploit</span>
-                <span class="protocol-tag">UDP : 69</span>
+                <span class="attack-type-tag tag-recon">Intrusion</span>
+                <span class="protocol-tag">Class: Infiltration</span>
               </div>
               <div class="img-wrap">
-                <img src="/static/images/ddos15.jpg" alt="TFTP Attack Diagram" loading="lazy" />
+                <img src="/static/images/ddos7.jpg" alt="Infiltration Diagram" loading="lazy" />
               </div>
-              <h3>TFTP Flood</h3>
-              <p>Trivial File Transfer Protocol flood. Exploits UDP-based file requests to tie up bandwidth and transfer sockets on vulnerable systems.</p>
-            </div>
-
-            <!-- 15. UDP Flood -->
-            <div class="card attack-card-item" data-category="flood">
-              <div class="card-badge-row">
-                <span class="attack-type-tag tag-flood">Volumetric</span>
-                <span class="protocol-tag">UDP : Random</span>
+              <h3>Network Infiltration</h3>
+              <p>Internal network intrusion following initial compromise, involving privilege escalation, network mapping, and lateral movement across private subnets.</p>
+              <div class="card-footer-meta">
+                <span><i class="fas fa-user-secret"></i> Lateral Movement</span>
+                <span class="recall-rate" title="Model recall on test set">Recall: 100.0%</span>
               </div>
-              <div class="img-wrap">
-                <img src="/static/images/ddos16.jpg" alt="UDP Flood Attack Diagram" loading="lazy" />
-              </div>
-              <h3>UDP Flood</h3>
-              <p>Raw Layer 4 volumetric flood. Sends high-velocity random UDP datagrams to force servers into repeatedly issuing ICMP "Destination Unreachable" replies.</p>
             </div>
           </div>
         </div>
@@ -922,6 +1036,7 @@
           <a href="#overview">Overview</a>
           <a href="#check-connection">Live Scanner</a>
           <a href="#port-scanner">Port Scanner</a>
+          <a href="/network-discovery">Network Discovery</a>
           <a href="#threat-intelligence">Threat Vectors</a>
           <a href="#prevention">Mitigation</a>
           <a href="#team">Team</a>
@@ -931,7 +1046,7 @@
           <span class="footer-group-title">Model Benchmarks</span>
           <span class="footer-meta-item"><i class="fas fa-check-circle"></i> XGBoost Multi-Class</span>
           <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 99.86% Recall Rate</span>
-          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 15 Attack Classes</span>
+          <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 15 Trained Classes (14 Attacks + Benign)</span>
           <span class="footer-meta-item"><i class="fas fa-check-circle"></i> 77 Bidirectional Features</span>
         </div>
       </div>

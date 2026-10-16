@@ -1394,6 +1394,84 @@ def stop_port_scan():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ==============================================================================
+# Isolated Network Discovery Endpoints
+# Architecture: Independent multi-method LAN discovery, zero interference with DDoS core or Port Scanner.
+# ==============================================================================
+from network_discovery import network_discovery_manager, get_network_discovery_info
+
+
+@app.route('/network-discovery')
+def network_discovery_page():
+    """Renders the standalone Network Discovery cybersecurity dashboard."""
+    return render_template('network_discovery.html')
+
+
+@app.route('/api/network-discovery/network-info', methods=['GET'])
+def get_network_discovery_info_route():
+    """Returns detected adapter, IP, subnet mask, prefix length, and default gateway."""
+    try:
+        info = get_network_discovery_info()
+        return jsonify({"status": "success", "network": info}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/network-discovery/start', methods=['POST'])
+def start_network_discovery():
+    """Initiates an isolated network discovery sweep across the target local subnet."""
+    try:
+        data = request.get_json(silent=True) or {}
+        subnet_cidr = data.get("subnet")
+        timeout = float(data.get("timeout", 0.6))
+        concurrency = int(data.get("concurrency", 50))
+
+        res = network_discovery_manager.start_scan(
+            subnet_cidr=subnet_cidr,
+            timeout=timeout,
+            concurrency=concurrency
+        )
+        return jsonify(res), 200
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/network-discovery/status', methods=['GET'])
+def get_network_discovery_status():
+    """Polls real-time progress, metrics, and accumulated discovered devices."""
+    try:
+        state = network_discovery_manager.get_status()
+        return jsonify(state), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/network-discovery/stop', methods=['POST'])
+def stop_network_discovery():
+    """Cooperatively cancels the active network discovery sweep immediately."""
+    try:
+        res = network_discovery_manager.stop_scan()
+        return jsonify(res), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/network-discovery/device/<ip>', methods=['GET'])
+def get_network_discovery_device(ip: str):
+    """Retrieves deep details for a single discovered device by IP address."""
+    try:
+        state = network_discovery_manager.get_status()
+        devices = state.get("devices", [])
+        for dev in devices:
+            if dev.get("ip") == ip:
+                return jsonify({"status": "success", "device": dev}), 200
+        return jsonify({"status": "not_found", "message": f"Device {ip} not found in current scan results."}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 def check_port_availability(port: int = 5000):
     """Detects and alerts if port is already bound."""
     import socket
