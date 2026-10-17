@@ -828,8 +828,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   // 6. Threat Vectors Continuous Horizontal Marquee & Category Filtering
   // ============================================================================
+  const originalCardsOrder = [...allCards];
   let visibleCards = [...allCards];
-  let currentIndex = 0;
+  let marqueeOffset = 0;
+  let isMarqueePaused = false;
+  let isMarqueeOffscreen = false;
+  let marqueeRafId = null;
+  let lastTimestamp = null;
+  const MARQUEE_SPEED_PPS = 48; // Smooth reading speed: 48 pixels per second
+
+  const prefersReducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let isReducedMotion = prefersReducedMotionQuery.matches;
 
   function updateSliderCounter() {
     if (!sliderCurrentIndex || !sliderTotalCount) return;
@@ -837,51 +846,70 @@ document.addEventListener("DOMContentLoaded", () => {
     sliderCurrentIndex.textContent = visibleCards.length;
   }
 
-  function updateMarqueeTravel() {
-    if (!slider || !cardContainer) return;
+  function marqueeStep(timestamp) {
+    if (!lastTimestamp) lastTimestamp = timestamp;
+    const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
+    lastTimestamp = timestamp;
 
-    let totalCardsWidth = 0;
-    let visibleCount = 0;
-    allCards.forEach(card => {
-      if (card.style.display !== "none") {
-        totalCardsWidth += (card.offsetWidth || 320) + 20; // 20px gap
-        visibleCount++;
+    if (!isMarqueePaused && !isMarqueeOffscreen && !isReducedMotion && slider && cardContainer) {
+      const activeCards = Array.from(cardContainer.children).filter(c => c.style.display !== "none");
+      const sliderWidth = slider.clientWidth || 1100;
+      let totalWidth = 0;
+      activeCards.forEach(card => {
+        totalWidth += (card.offsetWidth || 320) + 20; // 20px gap
+      });
+
+      if (totalWidth > sliderWidth + 30 && activeCards.length > 1) {
+        marqueeOffset += MARQUEE_SPEED_PPS * dt;
+
+        const firstVisible = activeCards[0];
+        const cardPitch = (firstVisible.offsetWidth || 320) + 20;
+
+        if (marqueeOffset >= cardPitch) {
+          const firstHidden = cardContainer.querySelector('.attack-card-item[style*="display: none"]');
+          if (firstHidden) {
+            cardContainer.insertBefore(firstVisible, firstHidden);
+          } else {
+            cardContainer.appendChild(firstVisible);
+          }
+          marqueeOffset -= cardPitch;
+        }
+
+        cardContainer.style.transform = `translate3d(-${marqueeOffset.toFixed(2)}px, 0, 0)`;
+      } else {
+        cardContainer.style.transform = "translate3d(0, 0, 0)";
       }
-    });
-    if (visibleCount > 0) totalCardsWidth -= 20; // remove trailing gap
-
-    const viewWidth = slider.clientWidth || 1100;
-    const travel = totalCardsWidth - viewWidth;
-
-    if (travel > 15) {
-      // Add a 30px buffer so the last card clears padding before ping-ponging back
-      const travelPx = travel + 30;
-      cardContainer.style.setProperty("--marquee-travel", `-${travelPx}px`);
-      // Consistent reading speed (~70px per second)
-      const durationSec = Math.max(22, Math.round(travelPx / 70));
-      cardContainer.style.setProperty("--marquee-duration", `${durationSec}s`);
-      cardContainer.classList.add("marquee-running");
-    } else {
-      cardContainer.style.setProperty("--marquee-travel", "0px");
-      cardContainer.classList.remove("marquee-running");
     }
+
+    marqueeRafId = requestAnimationFrame(marqueeStep);
   }
 
   function filterCards(category) {
     visibleCards = [];
-    allCards.forEach(card => {
+    const hiddenCards = [];
+
+    originalCardsOrder.forEach(card => {
       const cardCat = card.getAttribute("data-category");
       if (category === "all" || cardCat === category) {
         card.style.display = "flex";
         visibleCards.push(card);
       } else {
         card.style.display = "none";
+        hiddenCards.push(card);
       }
     });
 
-    currentIndex = 0;
+    // Re-populate container with visible cards first, then hidden cards
+    visibleCards.forEach(card => cardContainer.appendChild(card));
+    hiddenCards.forEach(card => cardContainer.appendChild(card));
+
+    marqueeOffset = 0;
+    if (cardContainer) {
+      cardContainer.style.transform = "translate3d(0, 0, 0)";
+    }
+
     updateSliderCounter();
-    updateMarqueeTravel();
+    lastTimestamp = null;
   }
 
   // Filter tab events
@@ -894,7 +922,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Interactive Marquee Pause / Resume Controls
+  // Dedicated Marquee Pause / Resume Control
   const marqueeToggleBtn = document.getElementById("marqueeToggleBtn");
   const marqueeToggleIcon = document.getElementById("marqueeToggleIcon");
   const marqueeToggleText = document.getElementById("marqueeToggleText");
@@ -902,63 +930,80 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (marqueeToggleBtn && cardContainer) {
     marqueeToggleBtn.addEventListener("click", () => {
-      const isPaused = cardContainer.classList.toggle("marquee-paused");
+      isMarqueePaused = !isMarqueePaused;
+      cardContainer.classList.toggle("marquee-paused", isMarqueePaused);
+
       if (marqueeToggleIcon) {
-        marqueeToggleIcon.className = isPaused ? "fas fa-play" : "fas fa-pause";
+        marqueeToggleIcon.className = isMarqueePaused ? "fas fa-play" : "fas fa-pause";
       }
       if (marqueeToggleText) {
-        marqueeToggleText.textContent = isPaused ? "Resume" : "Pause";
+        marqueeToggleText.textContent = isMarqueePaused ? "Resume" : "Pause";
       }
+      marqueeToggleBtn.setAttribute("aria-label", isMarqueePaused ? "Resume continuous marquee animation" : "Pause continuous marquee animation");
+
       if (marqueePatrolBadge) {
-        marqueePatrolBadge.classList.toggle("paused", isPaused);
+        marqueePatrolBadge.classList.toggle("paused", isMarqueePaused);
         const badgeText = marqueePatrolBadge.querySelector(".badge-text");
-        if (badgeText) badgeText.textContent = isPaused ? "Patrol Paused" : "Auto-Patrol Active";
+        if (badgeText) {
+          badgeText.textContent = isMarqueePaused ? "Patrol Paused" : "Auto-Patrol Active";
+        }
+      }
+
+      if (!isMarqueePaused) {
+        lastTimestamp = performance.now();
       }
     });
   }
 
-  // Slider controls (graceful support if triggered)
+  // Slider arrows (smooth step without pausing if invoked)
   if (sliderNextBtn) {
     sliderNextBtn.addEventListener("click", () => {
-      if (cardContainer) cardContainer.classList.add("marquee-paused");
-      if (marqueeToggleText) marqueeToggleText.textContent = "Resume";
-      if (marqueeToggleIcon) marqueeToggleIcon.className = "fas fa-play";
-      if (marqueePatrolBadge) marqueePatrolBadge.classList.add("paused");
+      marqueeOffset += 120;
     });
   }
 
   if (sliderPrevBtn) {
     sliderPrevBtn.addEventListener("click", () => {
-      if (cardContainer) cardContainer.classList.add("marquee-paused");
-      if (marqueeToggleText) marqueeToggleText.textContent = "Resume";
-      if (marqueeToggleIcon) marqueeToggleIcon.className = "fas fa-play";
-      if (marqueePatrolBadge) marqueePatrolBadge.classList.add("paused");
+      marqueeOffset = Math.max(0, marqueeOffset - 120);
     });
   }
 
-  // IntersectionObserver to pause marquee when scrolled away to conserve battery/CPU
-  if ("IntersectionObserver" in window && slider && cardContainer) {
+  // IntersectionObserver to avoid background CPU load when offscreen
+  if ("IntersectionObserver" in window && slider) {
     const marqueeObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
+        isMarqueeOffscreen = !entry.isIntersecting;
         if (entry.isIntersecting) {
-          cardContainer.classList.remove("marquee-offscreen");
-        } else {
-          cardContainer.classList.add("marquee-offscreen");
+          lastTimestamp = performance.now();
         }
       });
     }, { threshold: 0.05 });
     marqueeObserver.observe(slider);
   }
 
-  // Debounced window resize handler for smooth responsive recalculations
-  let marqueeResizeTimer = null;
-  window.addEventListener("resize", () => {
-    clearTimeout(marqueeResizeTimer);
-    marqueeResizeTimer = setTimeout(updateMarqueeTravel, 150);
-  }, { passive: true });
+  // Accessibility: handle reduced motion
+  prefersReducedMotionQuery.addEventListener("change", (e) => {
+    isReducedMotion = e.matches;
+    if (isReducedMotion) {
+      if (cardContainer) cardContainer.style.transform = "none";
+      if (marqueePatrolBadge) {
+        marqueePatrolBadge.classList.add("paused");
+        const badgeText = marqueePatrolBadge.querySelector(".badge-text");
+        if (badgeText) badgeText.textContent = "Motion Reduced";
+      }
+      if (marqueeToggleText) marqueeToggleText.textContent = "Resume";
+      if (marqueeToggleIcon) marqueeToggleIcon.className = "fas fa-play";
+    } else {
+      if (!isMarqueePaused) {
+        lastTimestamp = performance.now();
+      }
+    }
+  });
 
-  // Initial calculation and launch
-  setTimeout(updateMarqueeTravel, 100);
+  // Start continuous marquee RAF loop
+  if (!isReducedMotion) {
+    marqueeRafId = requestAnimationFrame(marqueeStep);
+  }
   updateSliderCounter();
 
   // ============================================================================

@@ -41,3 +41,18 @@ Desktop.ini
 # Temporary Runtime Files
 *.tmp
 *.log
+
+# Environment & Secret Files
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.cert
+*.pfx
+*.crt
+
+# Node Modules & Frontend Build Artifacts
+node_modules/
+.npm/
+.parcel-cache/
