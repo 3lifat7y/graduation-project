@@ -34,8 +34,8 @@ $CandidatePythons = @(
 $PythonExe = $null
 foreach ($cand in $CandidatePythons) {
     if ($cand -and (Test-Path -LiteralPath $cand)) {
-        # Verify pydivert can be imported with this python
-        $testPy = & $cand -c "import pydivert; print('ok')" 2>$null
+        # Verify scapy can be imported with this python
+        $testPy = & $cand -c "import scapy; print('ok')" 2>$null
         if ($testPy -match "ok") {
             $PythonExe = $cand
             break
@@ -138,7 +138,7 @@ except Exception as e:
         if ($pyExit -eq 0 -or (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue)) {
             Write-Host "✅ Service registered successfully via pywin32!" -ForegroundColor Green
             # Update description
-            $descText = "DDoS-Guard kernel packet capture engine running WinDivert in monitor-only mode."
+            $descText = "DDoS-Guard kernel packet capture engine running Scapy + Npcap in monitor-only mode."
             $null = & sc.exe description $ServiceName $descText 2>&1
 
             # Configure SCM Environment block (PYTHONPATH and PYTHONHOME) for LocalSystem host

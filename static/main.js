@@ -45,6 +45,38 @@ document.addEventListener("DOMContentLoaded", () => {
   const diagnosticAlert = document.getElementById("diagnosticAlert");
   const diagnosticMsg = document.getElementById("diagnosticMsg");
 
+  // Real-Time Radar Packet Telemetry Blips
+  const radarPacketBlips = document.getElementById("radarPacketBlips");
+  const scannerConsole = document.getElementById("scannerConsole");
+  let lastCapturedPacketCount = 0;
+
+  function triggerRadarPacketBlip() {
+    if (!radarPacketBlips || document.hidden) return;
+    if (radarPacketBlips.children.length > 5) return;
+    const blip = document.createElement("div");
+    blip.className = "radar-packet-blip";
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 15 + Math.random() * 55;
+    const x = 50 + distance * Math.cos(angle);
+    const y = 50 + distance * Math.sin(angle);
+    blip.style.left = `${x}%`;
+    blip.style.top = `${y}%`;
+    radarPacketBlips.appendChild(blip);
+    setTimeout(() => {
+      if (blip.parentElement) blip.remove();
+    }, 1500);
+  }
+
+  function updateTelemetryCounter(el, newText) {
+    if (!el) return;
+    if (el.textContent !== String(newText)) {
+      el.textContent = newText;
+      el.classList.remove("counter-pop");
+      void el.offsetWidth;
+      el.classList.add("counter-pop");
+    }
+  }
+
   // Adapter & Service Badges
   const adapterChip = document.getElementById("adapterChip");
   const adapterName = document.getElementById("adapterName");
@@ -53,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const adapterIcon = document.getElementById("adapterIcon");
   const headerHealthDot = document.getElementById("headerHealthDot");
   const headerHealthLabel = document.getElementById("headerHealthLabel");
+  let currentNetworkAdapter = null;
 
   // Navigation & UI Elements
   const menuToggle = document.getElementById("menuToggle");
@@ -111,10 +144,10 @@ document.addEventListener("DOMContentLoaded", () => {
       healthClass = "stopped";
       healthText = "Service Inactive";
     } else if (drv.can_capture_live) {
-      labelText = "WinDivert: Ready";
+      labelText = "Npcap: Ready";
       badgeClass = "driver-badge driver-ready";
       healthClass = "running";
-      healthText = "WinDivert Ready";
+      healthText = "Npcap Ready";
     } else {
       labelText = "Service: Not Installed";
       badgeClass = "driver-badge driver-stopped";
@@ -136,6 +169,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (headerHealthDotMobile) {
       headerHealthDotMobile.className = `health-dot ${healthClass}`;
     }
+
+    const topNavHealthDot = document.getElementById("topNavHealthDot");
+    const topNavHealthLabel = document.getElementById("topNavHealthLabel");
+    if (topNavHealthDot) {
+      topNavHealthDot.className = `health-dot ${healthClass}`;
+    }
+    if (topNavHealthLabel) {
+      topNavHealthLabel.textContent = `Engine Core: ${healthText}`;
+    }
   }
 
   async function loadAdapterInfo() {
@@ -146,6 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (data.status === "success" && data.adapter) {
         const ad = data.adapter;
+        currentNetworkAdapter = ad;
         const drv = data.driver_status || {};
         const svc = data.service_state || drv.service_state || {};
 
@@ -231,6 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
           stateBadge.textContent = "Starting...";
         }
         if (radarBox) radarBox.classList.add("active");
+        if (scannerConsole) scannerConsole.classList.add("scanning-active");
         if (resultChipState) resultChipState.textContent = "Starting Engine";
 
         if (checkBtn) {
@@ -257,6 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
           stateBadge.textContent = "Monitoring";
         }
         if (radarBox) radarBox.classList.add("active");
+        if (scannerConsole) scannerConsole.classList.add("scanning-active");
         if (resultChipState) resultChipState.textContent = "Live Telemetry";
 
         if (checkBtn) {
@@ -309,13 +354,25 @@ document.addEventListener("DOMContentLoaded", () => {
           resultIcon.style.color = isAttack ? "var(--status-attack)" : "var(--status-benign)";
         }
 
-        // Render Telemetry Flow Statistics
+        // Render Telemetry Flow Statistics & Trigger Live Packet Blips
         if (telemetryGrid) {
           telemetryGrid.style.display = "grid";
+          const totalPkts = payload.packets_captured !== undefined ? payload.packets_captured : (payload.flow_summary?.packets_captured || 0);
+
+          // Animate packet arrival blip when new packets are genuinely intercepted
+          if (totalPkts > lastCapturedPacketCount) {
+            const diff = totalPkts - lastCapturedPacketCount;
+            lastCapturedPacketCount = totalPkts;
+            const count = Math.min(diff, 4);
+            for (let i = 0; i < count; i++) {
+              setTimeout(triggerRadarPacketBlip, i * 130);
+            }
+          }
+
           if (telemetryPkts) {
-            const totalPkts = payload.packets_captured !== undefined ? payload.packets_captured : (payload.flow_summary?.packets_captured || 0);
             const winPkts = payload.window_packets !== undefined ? payload.window_packets : 0;
-            telemetryPkts.textContent = winPkts > 0 ? `${totalPkts} (${winPkts}/win)` : `${totalPkts}`;
+            const pktsText = winPkts > 0 ? `${totalPkts} (${winPkts}/win)` : `${totalPkts}`;
+            updateTelemetryCounter(telemetryPkts, pktsText);
           }
           if (telemetryDuration) {
             const dur = payload.duration !== undefined ? payload.duration : (((payload.flow_summary?.flow_duration_us || 0) / 1000000));
@@ -323,10 +380,10 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           if (telemetryThroughput) {
             const kbps = payload.throughput_kbps !== undefined ? payload.throughput_kbps : (((payload.flow_summary?.flow_bytes_per_s || 0) / 1024));
-            telemetryThroughput.textContent = `${Number(kbps).toFixed(1)} KB/s`;
+            updateTelemetryCounter(telemetryThroughput, `${Number(kbps).toFixed(1)} KB/s`);
           }
           if (telemetryProtocol) {
-            telemetryProtocol.textContent = payload.protocol || "WinDivert";
+            telemetryProtocol.textContent = payload.protocol || "Npcap";
           }
         }
         if (diagnosticAlert) diagnosticAlert.style.display = "none";
@@ -468,6 +525,9 @@ document.addEventListener("DOMContentLoaded", () => {
           stateBadge.textContent = "Stopped";
         }
         if (radarBox) radarBox.classList.remove("active");
+        if (scannerConsole) scannerConsole.classList.remove("scanning-active");
+        if (radarPacketBlips) radarPacketBlips.innerHTML = "";
+        lastCapturedPacketCount = 0;
         if (resultChipState) resultChipState.textContent = "Monitoring Stopped";
 
         if (checkBtn) {
@@ -533,6 +593,9 @@ document.addEventListener("DOMContentLoaded", () => {
           stateBadge.textContent = "Capture Error";
         }
         if (radarBox) radarBox.classList.remove("active");
+        if (scannerConsole) scannerConsole.classList.remove("scanning-active");
+        if (radarPacketBlips) radarPacketBlips.innerHTML = "";
+        lastCapturedPacketCount = 0;
         if (resultChipState) resultChipState.textContent = "Error";
 
         if (checkBtn) {
@@ -615,7 +678,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (telemetryPkts) telemetryPkts.textContent = "0";
     if (telemetryDuration) telemetryDuration.textContent = "0.0 s";
     if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
-    if (telemetryProtocol) telemetryProtocol.textContent = "WinDivert";
+    if (telemetryProtocol) telemetryProtocol.textContent = "Npcap";
 
     if (diagnosticAlert) diagnosticAlert.style.display = "none";
 
@@ -623,10 +686,16 @@ document.addEventListener("DOMContentLoaded", () => {
     scanStartTime = Date.now();
 
     try {
+      const scanPayload = { continuous: true, min_packets: 3 };
+      if (currentNetworkAdapter) {
+        scanPayload.adapter = currentNetworkAdapter.name;
+        scanPayload.interface_name = currentNetworkAdapter.name;
+        scanPayload.interface_index = currentNetworkAdapter.index;
+      }
       const res = await fetch(`${API_BASE_URL}/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ continuous: true, min_packets: 3 })
+        body: JSON.stringify(scanPayload)
       });
 
       if (!res.ok) {
@@ -757,7 +826,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ============================================================================
-  // 6. Threat Vectors Slider & Category Filtering
+  // 6. Threat Vectors Continuous Horizontal Marquee & Category Filtering
   // ============================================================================
   let visibleCards = [...allCards];
   let currentIndex = 0;
@@ -765,21 +834,37 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateSliderCounter() {
     if (!sliderCurrentIndex || !sliderTotalCount) return;
     sliderTotalCount.textContent = visibleCards.length;
-    sliderCurrentIndex.textContent = visibleCards.length > 0 ? (currentIndex + 1) : 0;
+    sliderCurrentIndex.textContent = visibleCards.length;
   }
 
-  function scrollSliderToIndex(index) {
-    if (!visibleCards.length || !slider) return;
-    currentIndex = Math.max(0, Math.min(index, visibleCards.length - 1));
-    const targetCard = visibleCards[currentIndex];
-    if (targetCard) {
-      targetCard.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-        inline: "center"
-      });
+  function updateMarqueeTravel() {
+    if (!slider || !cardContainer) return;
+
+    let totalCardsWidth = 0;
+    let visibleCount = 0;
+    allCards.forEach(card => {
+      if (card.style.display !== "none") {
+        totalCardsWidth += (card.offsetWidth || 320) + 20; // 20px gap
+        visibleCount++;
+      }
+    });
+    if (visibleCount > 0) totalCardsWidth -= 20; // remove trailing gap
+
+    const viewWidth = slider.clientWidth || 1100;
+    const travel = totalCardsWidth - viewWidth;
+
+    if (travel > 15) {
+      // Add a 30px buffer so the last card clears padding before ping-ponging back
+      const travelPx = travel + 30;
+      cardContainer.style.setProperty("--marquee-travel", `-${travelPx}px`);
+      // Consistent reading speed (~70px per second)
+      const durationSec = Math.max(22, Math.round(travelPx / 70));
+      cardContainer.style.setProperty("--marquee-duration", `${durationSec}s`);
+      cardContainer.classList.add("marquee-running");
+    } else {
+      cardContainer.style.setProperty("--marquee-travel", "0px");
+      cardContainer.classList.remove("marquee-running");
     }
-    updateSliderCounter();
   }
 
   function filterCards(category) {
@@ -796,7 +881,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     currentIndex = 0;
     updateSliderCounter();
-    if (slider) slider.scrollTo({ left: 0, behavior: "smooth" });
+    updateMarqueeTravel();
   }
 
   // Filter tab events
@@ -809,28 +894,82 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Slider controls
+  // Interactive Marquee Pause / Resume Controls
+  const marqueeToggleBtn = document.getElementById("marqueeToggleBtn");
+  const marqueeToggleIcon = document.getElementById("marqueeToggleIcon");
+  const marqueeToggleText = document.getElementById("marqueeToggleText");
+  const marqueePatrolBadge = document.getElementById("marqueePatrolBadge");
+
+  if (marqueeToggleBtn && cardContainer) {
+    marqueeToggleBtn.addEventListener("click", () => {
+      const isPaused = cardContainer.classList.toggle("marquee-paused");
+      if (marqueeToggleIcon) {
+        marqueeToggleIcon.className = isPaused ? "fas fa-play" : "fas fa-pause";
+      }
+      if (marqueeToggleText) {
+        marqueeToggleText.textContent = isPaused ? "Resume" : "Pause";
+      }
+      if (marqueePatrolBadge) {
+        marqueePatrolBadge.classList.toggle("paused", isPaused);
+        const badgeText = marqueePatrolBadge.querySelector(".badge-text");
+        if (badgeText) badgeText.textContent = isPaused ? "Patrol Paused" : "Auto-Patrol Active";
+      }
+    });
+  }
+
+  // Slider controls (graceful support if triggered)
   if (sliderNextBtn) {
     sliderNextBtn.addEventListener("click", () => {
-      scrollSliderToIndex(currentIndex + 1);
+      if (cardContainer) cardContainer.classList.add("marquee-paused");
+      if (marqueeToggleText) marqueeToggleText.textContent = "Resume";
+      if (marqueeToggleIcon) marqueeToggleIcon.className = "fas fa-play";
+      if (marqueePatrolBadge) marqueePatrolBadge.classList.add("paused");
     });
   }
 
   if (sliderPrevBtn) {
     sliderPrevBtn.addEventListener("click", () => {
-      scrollSliderToIndex(currentIndex - 1);
+      if (cardContainer) cardContainer.classList.add("marquee-paused");
+      if (marqueeToggleText) marqueeToggleText.textContent = "Resume";
+      if (marqueeToggleIcon) marqueeToggleIcon.className = "fas fa-play";
+      if (marqueePatrolBadge) marqueePatrolBadge.classList.add("paused");
     });
   }
 
+  // IntersectionObserver to pause marquee when scrolled away to conserve battery/CPU
+  if ("IntersectionObserver" in window && slider && cardContainer) {
+    const marqueeObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          cardContainer.classList.remove("marquee-offscreen");
+        } else {
+          cardContainer.classList.add("marquee-offscreen");
+        }
+      });
+    }, { threshold: 0.05 });
+    marqueeObserver.observe(slider);
+  }
+
+  // Debounced window resize handler for smooth responsive recalculations
+  let marqueeResizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(marqueeResizeTimer);
+    marqueeResizeTimer = setTimeout(updateMarqueeTravel, 150);
+  }, { passive: true });
+
+  // Initial calculation and launch
+  setTimeout(updateMarqueeTravel, 100);
   updateSliderCounter();
 
   // ============================================================================
   // 7. General Navigation, Collapsible Sidebar & Dedicated View Coordinator
   // ============================================================================
   const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+  const navbarSidebarToggleBtn = document.getElementById("navbarSidebarToggleBtn");
   const mobileMenuBtn = document.getElementById("mobileMenuBtn");
   const sidebarBackdrop = document.getElementById("sidebarBackdrop");
   const sidebarNavItems = document.querySelectorAll(".sidebar-nav-item");
+  const topNavLinks = document.querySelectorAll(".top-nav-link");
 
   const dedicatedToolBar = document.getElementById("dedicatedToolBar");
   const dedicatedToolTitle = document.getElementById("dedicatedToolTitle");
@@ -853,7 +992,19 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.classList.add("sidebar-collapsed");
   }
 
-  // Toggle Sidebar on Desktop
+  // Toggle Sidebar Function (Responsive for Desktop Collapse & Mobile Drawer)
+  function handleSidebarToggle() {
+    if (window.innerWidth < 992) {
+      const isOpen = document.body.classList.toggle("mobile-sidebar-open");
+      if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    } else {
+      const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+      localStorage.setItem("nss_sidebar_collapsed", isCollapsed ? "true" : "false");
+      if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+    }
+  }
+
   if (sidebarToggleBtn) {
     sidebarToggleBtn.addEventListener("click", () => {
       const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
@@ -861,7 +1012,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Mobile Drawer Toggle
+  if (navbarSidebarToggleBtn) {
+    navbarSidebarToggleBtn.addEventListener("click", handleSidebarToggle);
+  }
+
+  // Mobile Drawer Toggle (Fallback)
   if (mobileMenuBtn) {
     mobileMenuBtn.addEventListener("click", () => {
       const isOpen = document.body.classList.toggle("mobile-sidebar-open");
@@ -874,6 +1029,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarBackdrop.addEventListener("click", () => {
       document.body.classList.remove("mobile-sidebar-open");
       if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+      if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
     });
   }
 
@@ -887,6 +1043,80 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // Update Active Link in Global Top Navbar
+  function setTopNavActive(navName) {
+    topNavLinks.forEach(link => {
+      if (link.getAttribute("data-top-nav") === navName) {
+        link.classList.add("active");
+      } else {
+        link.classList.remove("active");
+      }
+    });
+  }
+
+  // ============================================================================
+  // Complete Global Dark / Light Theme System
+  // ============================================================================
+  function initTheme() {
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    const themeToggleIcon = document.getElementById("themeToggleIcon");
+    const themeToggleText = document.getElementById("themeToggleText");
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+
+    function applyTheme(theme, animate = false) {
+      if (animate) {
+        document.body.classList.add("theme-transitioning");
+      }
+      document.documentElement.setAttribute("data-theme", theme);
+      const isDark = theme === "dark";
+
+      if (themeToggleIcon) {
+        themeToggleIcon.className = isDark ? "fas fa-sun" : "fas fa-moon";
+      }
+      if (themeToggleText) {
+        themeToggleText.textContent = isDark ? "Light Mode" : "Dark Mode";
+      }
+      if (themeToggleBtn) {
+        const titleStr = isDark ? "Switch to Light Mode" : "Switch to Dark Mode";
+        themeToggleBtn.setAttribute("title", titleStr);
+        themeToggleBtn.setAttribute("aria-label", titleStr);
+      }
+      if (metaTheme) {
+        metaTheme.setAttribute("content", isDark ? "#101411" : "#F7F5EF");
+      }
+
+      if (animate) {
+        window.setTimeout(() => {
+          document.body.classList.remove("theme-transitioning");
+        }, 260);
+      }
+    }
+
+    const savedTheme = localStorage.getItem("nss_theme");
+    const systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initialTheme = savedTheme || (systemDark ? "dark" : "light");
+    applyTheme(initialTheme, false);
+
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme") || "light";
+        const next = current === "dark" ? "light" : "dark";
+        localStorage.setItem("nss_theme", next);
+        applyTheme(next, true);
+      });
+    }
+
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+        if (!localStorage.getItem("nss_theme")) {
+          applyTheme(e.matches ? "dark" : "light", true);
+        }
+      });
+    }
+  }
+
+  initTheme();
 
   // Get Requested View from URL or Hash
   function getQueryView() {
@@ -907,6 +1137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Close mobile drawer on navigation
     document.body.classList.remove("mobile-sidebar-open");
     if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+    if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
 
     if (targetView === "monitoring") {
       document.body.classList.add("dedicated-mode-monitoring");
@@ -925,6 +1156,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (footerEl) footerEl.style.display = "none";
 
       setSidebarActive("monitoring");
+      setTopNavActive("monitoring");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       if (updateHistory) {
@@ -947,6 +1179,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (footerEl) footerEl.style.display = "none";
 
       setSidebarActive("port-scanner");
+      setTopNavActive("port-scanner");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       if (updateHistory) {
@@ -969,12 +1202,38 @@ document.addEventListener("DOMContentLoaded", () => {
       if (footerEl) footerEl.style.display = "block";
 
       setSidebarActive("home");
+      setTopNavActive("home");
 
       if (updateHistory && window.location.search) {
         history.pushState({ view: "landing" }, "", window.location.pathname + (window.location.hash || ""));
       }
     }
   }
+
+  // Intercept Navigation Link Clicks in Global Top Navbar
+  topNavLinks.forEach(link => {
+    link.addEventListener("click", (e) => {
+      const navTarget = link.getAttribute("data-top-nav");
+      if (navTarget === "monitoring") {
+        e.preventDefault();
+        switchView("monitoring");
+      } else if (navTarget === "port-scanner") {
+        e.preventDefault();
+        switchView("port-scanner");
+      } else if (navTarget === "home") {
+        if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner")) {
+          e.preventDefault();
+          switchView("landing");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          document.body.classList.remove("mobile-sidebar-open");
+          if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
+          setSidebarActive("home");
+          setTopNavActive("home");
+        }
+      }
+    });
+  });
 
   // Intercept Navigation Link Clicks
   sidebarNavItems.forEach(item => {
@@ -1269,13 +1528,20 @@ document.addEventListener("DOMContentLoaded", () => {
       // Update UI to scanning state
       isPortScanning = true;
       setBadge("scanning", "Scanning...");
+      isPortScanning = true;
       if (startBtn) {
         startBtn.disabled = true;
         startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Scanning...</span>';
       }
       if (stopBtn) stopBtn.style.display = "inline-flex";
-      if (progressBox) progressBox.style.display = "block";
-      if (progressBar) progressBar.style.width = "0%";
+      if (progressBox) {
+        progressBox.style.display = "block";
+        progressBox.classList.add("ps-scanning");
+      }
+      if (progressBar) {
+        progressBar.style.width = "0%";
+        progressBar.classList.add("scanning");
+      }
       if (progressPct) progressPct.textContent = "0%";
       if (progressStatusText) progressStatusText.textContent = `Connecting to ${target}...`;
 
@@ -1346,9 +1612,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (progressPct) progressPct.textContent = `${pct.toFixed(0)}%`;
         if (progressStatusText && data.message) progressStatusText.textContent = data.message;
 
-        if (kpiHosts) kpiHosts.textContent = data.active_hosts_count || 0;
-        if (kpiScanned) kpiScanned.textContent = data.scanned_ports || 0;
-        if (kpiOpen) kpiOpen.textContent = data.open_ports_count || 0;
+        if (kpiHosts) updateTelemetryCounter(kpiHosts, data.active_hosts_count || 0);
+        if (kpiScanned) updateTelemetryCounter(kpiScanned, data.scanned_ports || 0);
+        if (kpiOpen) updateTelemetryCounter(kpiOpen, data.open_ports_count || 0);
         if (kpiDuration) kpiDuration.textContent = `${(data.duration_s || 0).toFixed(1)}s`;
 
         // Render live interim results if any open ports found
@@ -1391,6 +1657,8 @@ document.addEventListener("DOMContentLoaded", () => {
         startBtn.innerHTML = '<i class="fas fa-play"></i> <span>Start Port Scan</span>';
       }
       if (stopBtn) stopBtn.style.display = "none";
+      if (progressBox) progressBox.classList.remove("ps-scanning");
+      if (progressBar) progressBar.classList.remove("scanning");
     }
 
     function renderResults(hosts) {
@@ -1474,14 +1742,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       let rows = "";
-      ports.forEach(p => {
+      ports.forEach((p, idx) => {
         const stateClass = p.state === "open" ? "state-open" : (p.state === "filtered" ? "state-filtered" : "state-closed");
         const stateIcon = p.state === "open" ? "fa-circle-check" : (p.state === "filtered" ? "fa-circle-exclamation" : "fa-circle-xmark");
         const latencyText = p.latency_ms !== null ? `${p.latency_ms} ms` : "--";
         const bannerHtml = p.banner ? `<code class="ps-banner-code" title="${escapeHtml(p.banner)}">${escapeHtml(p.banner)}</code>` : '<span class="text-muted">--</span>';
 
         rows += `
-          <tr>
+          <tr style="animation-delay: ${Math.min(idx * 28, 400)}ms">
             <td class="ps-port-num">${p.port}</td>
             <td><span class="ps-proto-tag">${p.protocol || "TCP"}</span></td>
             <td>
@@ -1497,21 +1765,23 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       return `
-        <table class="ps-table">
-          <thead>
-            <tr>
-              <th>Port</th>
-              <th>Protocol</th>
-              <th>State</th>
-              <th>Service</th>
-              <th>Banner / Info</th>
-              <th>Latency</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
+        <div class="ps-table-responsive-wrap">
+          <table class="ps-table">
+            <thead>
+              <tr>
+                <th>Port</th>
+                <th>Protocol</th>
+                <th>State</th>
+                <th>Service</th>
+                <th>Banner / Info</th>
+                <th>Latency</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
       `;
     }
 
@@ -1625,6 +1895,194 @@ document.addEventListener("DOMContentLoaded", () => {
       stopScan
     };
   })();
+
+  // ============================================================================
+  // 10. Home Page Cybersecurity Constellation Background & KPI Animation
+  // ============================================================================
+  function initCyberBackgroundCanvas() {
+    const canvas = document.getElementById("cyberNetworkCanvas");
+    if (!canvas) return;
+
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      canvas.style.display = "none";
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let width = 0;
+    let height = 0;
+    let animId = null;
+    let isVisible = true;
+
+    function resize() {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
+      width = rect.width || window.innerWidth;
+      height = rect.height || 600;
+      canvas.width = width * (window.devicePixelRatio || 1);
+      canvas.height = height * (window.devicePixelRatio || 1);
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    }
+    resize();
+    window.addEventListener("resize", resize, { passive: true });
+
+    const nodeCount = Math.max(18, Math.min(38, Math.floor(width / 36)));
+    const nodes = [];
+    for (let i = 0; i < nodeCount; i++) {
+      nodes.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        radius: 1.5 + Math.random() * 1.5,
+        alpha: 0.25 + Math.random() * 0.35
+      });
+    }
+
+    function render() {
+      if (!isVisible) {
+        animId = null;
+        return;
+      }
+      ctx.clearRect(0, 0, width, height);
+
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const nodeRgb = isDark ? "72, 139, 110" : "53, 92, 74";
+
+      // Connecting lines
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i];
+        for (let j = i + 1; j < nodes.length; j++) {
+          const b = nodes[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 115) {
+            const lineAlpha = (1 - dist / 115) * 0.16;
+            ctx.strokeStyle = `rgba(${nodeRgb}, ${lineAlpha})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Nodes
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        n.x += n.vx;
+        n.y += n.vy;
+
+        if (n.x < 0) { n.x = 0; n.vx *= -1; }
+        else if (n.x > width) { n.x = width; n.vx *= -1; }
+        if (n.y < 0) { n.y = 0; n.vy *= -1; }
+        else if (n.y > height) { n.y = height; n.vy *= -1; }
+
+        ctx.fillStyle = `rgba(${nodeRgb}, ${n.alpha})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      animId = requestAnimationFrame(render);
+    }
+
+    const heroSec = canvas.closest(".hero-section");
+    if (heroSec && "IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          isVisible = entry.isIntersecting && !document.hidden;
+          if (isVisible && !animId) {
+            animId = requestAnimationFrame(render);
+          }
+        });
+      }, { threshold: 0.05 });
+      observer.observe(heroSec);
+    } else {
+      animId = requestAnimationFrame(render);
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      isVisible = !document.hidden;
+      if (isVisible && !animId) {
+        animId = requestAnimationFrame(render);
+      }
+    });
+  }
+
+  function initHeroStatsAnimation() {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const statElements = document.querySelectorAll(".hero-stat-card .stat-number");
+    if (!statElements || statElements.length === 0) return;
+
+    let hasAnimated = false;
+    const heroStatsGrid = document.querySelector(".hero-stats-grid");
+    if (!heroStatsGrid) return;
+
+    function animateValue(el, start, end, duration, decimals = 0, prefix = "", suffix = "") {
+      let startTimestamp = null;
+      const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        const ease = 1 - (1 - progress) * (1 - progress);
+        const current = start + (end - start) * ease;
+        el.textContent = `${prefix}${current.toFixed(decimals)}${suffix}`;
+        if (progress < 1) {
+          window.requestAnimationFrame(step);
+        } else {
+          el.textContent = `${prefix}${end.toFixed(decimals)}${suffix}`;
+        }
+      };
+      window.requestAnimationFrame(step);
+    }
+
+    function runStatsAnimation() {
+      if (hasAnimated) return;
+      hasAnimated = true;
+      statElements.forEach(el => {
+        const text = el.textContent.trim();
+        if (text === "15") {
+          animateValue(el, 0, 15, 1000);
+        } else if (text === "77") {
+          animateValue(el, 0, 77, 1200);
+        } else if (text.includes("99.86")) {
+          animateValue(el, 80.0, 99.86, 1400, 2, "", "%");
+        } else if (text.includes("1.0")) {
+          el.style.opacity = "0";
+          setTimeout(() => {
+            el.style.transition = "opacity 0.6s ease";
+            el.style.opacity = "1";
+          }, 300);
+        }
+      });
+    }
+
+    if ("IntersectionObserver" in window) {
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            runStatsAnimation();
+            obs.disconnect();
+          }
+        });
+      }, { threshold: 0.2 });
+      obs.observe(heroStatsGrid);
+    } else {
+      runStatsAnimation();
+    }
+  }
+
+  // Initialize Hero Visual Enhancements
+  initCyberBackgroundCanvas();
+  initHeroStatsAnimation();
 
   // Initialize Port Scanner UI
   PortScannerUI.init();

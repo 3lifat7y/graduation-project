@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Network Security System: Autonomous Real-Time Traffic Inspection, Multi-Class Intrusion Detection, Port Enumeration & Subnet Reconnaissance." />
   <meta name="theme-color" content="#F7F5EF" />
+
+  <!-- Anti-Flash Synchronous Theme Initializer -->
+  <script>
+    (function() {
+      try {
+        var savedTheme = localStorage.getItem('nss_theme');
+        var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var activeTheme = savedTheme ? savedTheme : (systemDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', activeTheme);
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) metaTheme.setAttribute('content', activeTheme === 'dark' ? '#101411' : '#F7F5EF');
+      } catch (e) {}
+    })();
+  </script>
   <title>Network Security System — Autonomous Cyber Threat Defense & Telemetry</title>
 
   <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
@@ -19,20 +33,6 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="app-layout">
-  <!-- Mobile Top Bar (< 992px) -->
-  <header class="mobile-top-bar" id="mobileTopBar">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="appSidebar">
-      <i class="fas fa-bars"></i>
-    </button>
-    <a href="/" class="mobile-brand">
-      <div class="brand-shield"><i class="fas fa-shield-halved"></i></div>
-      <span class="brand-text">Network Security System</span>
-    </a>
-    <div class="system-health-pill compact" id="systemHealthPillMobile" title="Engine Status">
-      <span class="health-dot" id="headerHealthDotMobile"></span>
-    </div>
-  </header>
-
   <!-- Sidebar Backdrop (for Mobile Drawer) -->
   <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
@@ -91,6 +91,33 @@
 
   <!-- Main Content Wrapper -->
   <div class="main-content-wrapper" id="mainContentWrapper">
+    <!-- Global Shared Top Navbar -->
+    <header class="global-top-navbar" id="globalTopNavbar" role="banner">
+      <div class="top-nav-left">
+        <button class="top-nav-sidebar-toggle" id="navbarSidebarToggleBtn" type="button" aria-label="Toggle navigation sidebar" title="Toggle Sidebar">
+          <i class="fas fa-bars"></i>
+        </button>
+        <a href="/" class="top-nav-brand" aria-label="Network Security System Home">
+          <div class="top-nav-shield"><i class="fas fa-shield-halved"></i></div>
+          <span class="top-nav-title">Network Security System</span>
+        </a>
+      </div>
+
+
+
+      <div class="top-nav-right">
+        <div class="top-nav-health-pill" id="topNavHealthPill" title="Windows Sniffer Service Status">
+          <span class="health-dot" id="topNavHealthDot"></span>
+          <span class="health-label" id="topNavHealthLabel">Engine Core: Checking...</span>
+        </div>
+        
+        <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Toggle Dark and Light Mode" title="Toggle Theme">
+          <i class="fas fa-moon" id="themeToggleIcon"></i>
+          <span class="theme-toggle-text" id="themeToggleText">Dark Mode</span>
+        </button>
+      </div>
+    </header>
+
     <!-- Dedicated Tool Breadcrumb Bar (Visible when in dedicated view) -->
     <div class="dedicated-tool-bar" id="dedicatedToolBar" style="display:none;">
       <div class="breadcrumb-trail">
@@ -109,6 +136,37 @@
     <main>
       <!-- Section 1: Hero — Network Security System -->
       <section class="hero-section" id="overview">
+        <!-- Interactive Cybersecurity Constellation Background -->
+        <canvas class="hero-cyber-canvas" id="cyberNetworkCanvas" aria-hidden="true"></canvas>
+
+        <!-- Ambient Floating Cybersecurity Icons (Recognizable, Smooth, Multi-Speed) -->
+        <div class="hero-floating-icons-container" aria-hidden="true">
+          <div class="hero-float-icon icon-shield" style="--delay: 0s; --duration: 5.4s; --float-dist: 18px; top: 12%; left: 5%;">
+            <i class="fas fa-shield-halved"></i>
+          </div>
+          <div class="hero-float-icon icon-lock" style="--delay: -1.8s; --duration: 6.6s; --float-dist: 15px; top: 68%; left: 7%;">
+            <i class="fas fa-lock"></i>
+          </div>
+          <div class="hero-float-icon icon-fingerprint" style="--delay: -3.2s; --duration: 7.2s; --float-dist: 20px; top: 15%; left: 47%;">
+            <i class="fas fa-fingerprint"></i>
+          </div>
+          <div class="hero-float-icon icon-code" style="--delay: -2.4s; --duration: 5.8s; --float-dist: 14px; top: 82%; left: 39%;">
+            <i class="fas fa-code"></i>
+          </div>
+          <div class="hero-float-icon icon-network" style="--delay: -0.9s; --duration: 6.2s; --float-dist: 18px; top: 9%; right: 12%;">
+            <i class="fas fa-network-wired"></i>
+          </div>
+          <div class="hero-float-icon icon-bug" style="--delay: -4.1s; --duration: 7.6s; --float-dist: 16px; top: 48%; right: 3%;">
+            <i class="fas fa-bug"></i>
+          </div>
+          <div class="hero-float-icon icon-check" style="--delay: -1.2s; --duration: 5.2s; --float-dist: 14px; top: 80%; right: 15%;">
+            <i class="fas fa-circle-check"></i>
+          </div>
+          <div class="hero-float-icon icon-key" style="--delay: -3.6s; --duration: 6.4s; --float-dist: 16px; top: 38%; left: 2%;">
+            <i class="fas fa-key"></i>
+          </div>
+        </div>
+
         <div class="hero-container">
           <div class="hero-content">
             <div class="hero-eyebrow">
@@ -174,7 +232,7 @@
                   <div class="node-icon"><i class="fas fa-network-wired"></i></div>
                   <div class="node-meta">
                     <span class="node-title">Kernel Sniffer</span>
-                    <span class="node-desc">WinDivert Flag.SNIFF</span>
+                    <span class="node-desc">Npcap + Scapy (Monitor-Only)</span>
                   </div>
                   <span class="node-badge-ok">ACTIVE</span>
                 </div>
@@ -287,6 +345,7 @@
               <!-- Radar Graphic (Minimalist, Crisp) -->
               <div class="radar-box" id="radarBox" aria-hidden="true">
                 <div class="radar-sweep"></div>
+                <div class="radar-packet-blips" id="radarPacketBlips"></div>
                 <div class="radar-ring ring-1"></div>
                 <div class="radar-ring ring-2"></div>
                 <div class="radar-ring ring-3"></div>
@@ -526,7 +585,10 @@
               <!-- Progress & Telemetry Bar -->
               <div class="ps-progress-box" id="psProgressBox" style="display:none;">
                 <div class="ps-progress-header">
-                  <span class="ps-progress-status" id="psProgressStatusText">Scanning targets...</span>
+                  <div class="ps-progress-status-wrap">
+                    <span class="ps-scan-radar-dot" id="psScanRadarDot" aria-hidden="true"></span>
+                    <span class="ps-progress-status" id="psProgressStatusText">Scanning targets...</span>
+                  </div>
                   <span class="ps-progress-pct" id="psProgressPct">0%</span>
                 </div>
                 <div class="ps-progress-track">
@@ -752,18 +814,35 @@
             </button>
           </div>
 
-          <!-- Slider Navigation Controls -->
+          <!-- Marquee & Threat Catalog Controls -->
           <div class="slider-controls-wrap">
-            <div class="slider-counter">
-              <span id="sliderCurrentIndex">1</span> / <span id="sliderTotalCount">14</span>
+            <div class="marquee-status-group">
+              <span class="marquee-patrol-badge" id="marqueePatrolBadge">
+                <span class="pulse-dot"></span>
+                <span class="badge-text">Auto-Patrol Active</span>
+              </span>
+              <span class="marquee-hover-hint">
+                <i class="fas fa-hand-pointer"></i> Hover card to pause
+              </span>
             </div>
-            <div class="slider-arrows">
-              <button class="nav-btn prev" id="sliderPrevBtn" aria-label="Previous attack card">
-                <i class="fas fa-chevron-left"></i>
+
+            <div class="slider-actions-group">
+              <div class="slider-counter">
+                <span class="counter-label">Catalog:</span>
+                <span class="counter-val"><span id="sliderCurrentIndex">14</span> / <span id="sliderTotalCount">14</span> Vectors</span>
+              </div>
+              <button class="marquee-toggle-btn" id="marqueeToggleBtn" type="button" aria-label="Pause or Resume continuous marquee animation" title="Toggle Auto-Patrol">
+                <i class="fas fa-pause" id="marqueeToggleIcon"></i>
+                <span id="marqueeToggleText">Pause</span>
               </button>
-              <button class="nav-btn next" id="sliderNextBtn" aria-label="Next attack card">
-                <i class="fas fa-chevron-right"></i>
-              </button>
+              <div class="slider-arrows" style="display: none;">
+                <button class="nav-btn prev" id="sliderPrevBtn" aria-label="Previous attack card">
+                  <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="nav-btn next" id="sliderNextBtn" aria-label="Next attack card">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1167,7 +1246,7 @@
             </p>
             <div class="footer-status-indicator">
               <span class="status-live-dot"></span>
-              <span class="status-live-text">Kernel Engine: WinDivert Active</span>
+              <span class="status-live-text">Kernel Engine: Npcap Active</span>
             </div>
           </div>
 

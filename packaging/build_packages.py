@@ -42,26 +42,18 @@ def build_package():
     shutil.copytree(PROJECT_ROOT / "final_output_new_dataset" / "models", DIST_DIR / "final_output_new_dataset" / "models", dirs_exist_ok=True)
     shutil.copytree(PROJECT_ROOT / "final_output_new_dataset" / "configs", DIST_DIR / "final_output_new_dataset" / "configs", dirs_exist_ok=True)
 
-    # 4. Stage WinDivert Driver Binaries
-    print("  • Locating and copying WinDivert 64-bit kernel binaries...")
-    windivert_staged = False
-    possible_paths = [
-        PROJECT_ROOT / ".venv" / "Lib" / "site-packages" / "pydivert" / "windivert_dll",
-        Path(r"C:\Users\alifa\AppData\Local\Python\pythoncore-3.15-64\Lib\site-packages\pydivert\windivert_dll")
+    # 4. Verify Npcap Driver Environment
+    print("  • Verifying Npcap system driver installation...")
+    npcap_paths = [
+        Path(r"C:\Windows\System32\Npcap\wpcap.dll"),
+        Path(r"C:\Windows\System32\wpcap.dll"),
+        Path(r"C:\Program Files\Npcap")
     ]
-    for p in possible_paths:
-        dll = p / "WinDivert64.dll"
-        sys_file = p / "WinDivert64.sys"
-        if dll.exists() and sys_file.exists():
-            target_driver_dir = DIST_DIR / "driver"
-            target_driver_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(dll, target_driver_dir / "WinDivert64.dll")
-            shutil.copy2(sys_file, target_driver_dir / "WinDivert64.sys")
-            print(f"    ✅ Copied WinDivert64.dll & WinDivert64.sys from {p}")
-            windivert_staged = True
-            break
-
-    assert windivert_staged, "Could not locate WinDivert64 binaries for staging"
+    npcap_detected = any(p.exists() for p in npcap_paths)
+    if npcap_detected:
+        print("    ✅ Npcap system driver and wpcap.dll verified.")
+    else:
+        print("    ⚠️ Npcap driver not found in standard system directories. Target machine must have Npcap installed.")
 
     # 5. Stage Python source modules and packages
     print("  • Staging Core Python Modules & Packages...")

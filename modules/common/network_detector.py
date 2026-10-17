@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DDoS-Guard: Network Interface Discovery & WinDivert Driver Health Validator
+DDoS-Guard: Network Interface Discovery & Npcap / Scapy Driver Health Validator
 Automatically detects active network interfaces (Wi-Fi / Ethernet), validates default routing,
-and checks packet capture drivers (WinDivert / pydivert, Raw Sockets) without hardcoded names or IPs.
+and checks packet capture drivers (Npcap, Scapy, Raw Sockets) without hardcoded names or IPs.
 """
 
 import os
@@ -163,15 +163,17 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
 
 def check_capture_drivers(tshark_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Checks if WinDivert (pydivert) or Raw Sockets can capture packets on this machine.
+    Checks if Npcap + Scapy or Raw Sockets can capture packets on this machine.
     Returns status and actionable resolution instructions.
     """
     admin = is_admin_user()
     result = {
+        "npcap_installed": False,
+        "npcap_driver_ready": False,
+        "scapy_available": False,
         "windivert_available": False,
         "windivert_driver_ready": False,
         "is_admin": admin,
-        "npcap_installed": False,
         "raw_socket_available": False,
         "can_capture_live": False,
         "active_engine": "None",
@@ -179,29 +181,62 @@ def check_capture_drivers(tshark_path: Optional[str] = None) -> Dict[str, Any]:
         "remediation_guide": None
     }
 
-    # 1. Test WinDivert (pydivert) capability
-    try:
-        import pydivert
-        result["windivert_available"] = True
-        
-        # Test opening WinDivert if running with Administrator privileges
-        if admin:
-            try:
-                with pydivert.WinDivert("true", flags=pydivert.Flag.SNIFF) as w:
-                    result["windivert_driver_ready"] = True
-                    result["can_capture_live"] = True
-                    result["active_engine"] = "WinDivert"
-            except Exception as e:
-                result["error_reason"] = f"WinDivert initialization warning: {e}"
-        else:
-            result["error_reason"] = "WinDivert kernel driver requires Windows Administrator privileges."
-    except ImportError:
-        result["windivert_available"] = False
-        result["error_reason"] = "pydivert library is not installed."
-    except Exception as e:
-        result["error_reason"] = f"WinDivert inspection error: {e}"
+    # 1. Test Npcap Driver Installation on Windows
+    npcap_paths = [
+        Path(r"C:\Windows\System32\Npcap\wpcap.dll"),
+        Path(r"C:\Windows\System32\wpcap.dll"),
+        Path(r"C:\Program Files\Npcap"),
+        Path(r"C:\Windows\System32\Npcap")
+    ]
+    has_npcap = any(p.exists() for p in npcap_paths)
+    if not has_npcap and os.name == 'nt':
+        try:
+            chk = subprocess.run(
+                ["sc.exe", "query", "npcap"],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            if "RUNNING" in chk.stdout or "STATE" in chk.stdout:
+                has_npcap = True
+        except Exception:
+            pass
 
-    # 2. Test Raw Socket capability (Windows Administrator check)
+    result["npcap_installed"] = has_npcap
+
+    # 2. Test Scapy Library Availability
+    try:
+        import scapy
+        result["scapy_available"] = True
+        result["windivert_available"] = True  # Backward compatibility alias
+    except ImportError:
+        result["scapy_available"] = False
+        result["windivert_available"] = False
+        result["error_reason"] = "scapy library is not installed. Run 'pip install scapy'."
+
+    # 3. Determine if live capture is possible
+    if result["scapy_available"] and result["npcap_installed"]:
+        can_pcap = False
+        try:
+            from scapy.all import conf
+            if conf.use_pcap and getattr(conf, "ifaces", None):
+                can_pcap = True
+        except Exception:
+            pass
+
+        if can_pcap or admin:
+            result["npcap_driver_ready"] = True
+            result["windivert_driver_ready"] = True
+            result["can_capture_live"] = True
+            result["active_engine"] = "Npcap/Scapy"
+        else:
+            result["npcap_driver_ready"] = False
+            result["windivert_driver_ready"] = False
+            result["error_reason"] = "Npcap kernel driver is not accessible or requires Windows Administrator privileges."
+    elif not result["npcap_installed"]:
+        result["error_reason"] = "Npcap driver is not installed on this machine."
+
+    # 4. Test Raw Socket capability (fallback check)
     try:
         active_ip = get_active_routable_ip()
         if active_ip:
@@ -218,17 +253,27 @@ def check_capture_drivers(tshark_path: Optional[str] = None) -> Dict[str, Any]:
     except Exception:
         result["raw_socket_available"] = False
 
-    # 3. Set Remediation Guide if live capture is not available in current session
+    # 5. Set Remediation Guide if live capture is not available in current session
     if not result["can_capture_live"]:
-        if result["windivert_available"] and not result["is_admin"]:
+        if not result["npcap_installed"]:
             result["remediation_guide"] = (
-                "WinDivert is ready on Windows, but requires Administrator privileges. "
+                "Npcap packet capture driver is not installed. "
+                "Please download and install Npcap from https://npcap.com (ensure 'Install Npcap in WinPcap API-compatible Mode' is enabled)."
+            )
+        elif not result["is_admin"]:
+            result["remediation_guide"] = (
+                "Npcap is ready on Windows, but requires Administrator privileges. "
                 "Please launch your command prompt, IDE, or terminal as Administrator."
+            )
+        elif not result["scapy_available"]:
+            result["remediation_guide"] = (
+                "Scapy packet capture engine requires 'scapy' library. "
+                "Ensure 'scapy' is installed with 'pip install scapy' and run as Administrator."
             )
         else:
             result["remediation_guide"] = (
-                "WinDivert packet capture engine requires 'pydivert' and Administrator privileges. "
-                "Ensure 'pydivert' is installed and run terminal as Administrator."
+                "Packet capture engine requires Npcap driver and Administrator privileges. "
+                "Verify Npcap installation and run terminal as Administrator."
             )
 
     return result
@@ -314,9 +359,10 @@ if __name__ == "__main__":
         print(f"   • MAC Address      : {adapter['mac']}")
         print(f"   • Link Speed       : {adapter['link_speed']}")
         print(f"\n🔍 Capture Driver Status:")
-        print(f"   • WinDivert (pydivert) : {'Installed & Available' if driver_info['windivert_available'] else 'NOT Installed'}")
+        print(f"   • Npcap Driver         : {'Installed' if driver_info['npcap_installed'] else 'NOT Installed'}")
+        print(f"   • Scapy Engine         : {'Available' if driver_info['scapy_available'] else 'NOT Installed'}")
         print(f"   • Administrator Rights : {'Yes (Elevated)' if driver_info['is_admin'] else 'No (Standard User)'}")
-        print(f"   • Driver Kernel Ready  : {'Active' if driver_info['windivert_driver_ready'] else 'Awaiting Admin'}")
+        print(f"   • Driver Kernel Ready  : {'Active' if driver_info['npcap_driver_ready'] else 'Awaiting Admin'}")
         print(f"   • Raw Socket           : {'Available' if driver_info['raw_socket_available'] else 'Requires Admin'}")
         print(f"   • Can Sniff Live       : {driver_info['can_capture_live']} (Engine: {driver_info['active_engine']})")
         if not driver_info['can_capture_live']:

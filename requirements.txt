@@ -1,6 +1,6 @@
 flask>=3.0.0
 flask-cors>=5.0.0
-pydivert>=4.0.0
+scapy>=2.5.0
 pywin32>=306
 requests>=2.30.0
 numpy>=2.0.0

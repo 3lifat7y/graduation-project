@@ -75,6 +75,7 @@ class TestScanExecutionFlow(unittest.TestCase):
         }
         with patch("api.get_service_status", return_value=mock_stopped_svc), \
              patch("api.request_service_start", return_value={"status": "started", "message": "Service started."}) as mock_uac, \
+             patch.object(api.ipc_client, "verify_authenticated_health", return_value=(True, "OK")), \
              patch("api.auto_detect_primary_interface", return_value=({"name": "Wi-Fi", "type": "Wi-Fi"}, {"can_capture_live": True})):
             res = self.client.post("/api/scan", json={"duration": 1.0, "min_packets": 1})
             self.assertEqual(res.status_code, 200)
@@ -98,6 +99,7 @@ class TestScanExecutionFlow(unittest.TestCase):
 
         with patch("api.get_service_status", side_effect=fake_get_status), \
              patch("api.request_service_start", return_value={"status": "started", "message": "Service started."}) as mock_start, \
+             patch.object(api.ipc_client, "verify_authenticated_health", return_value=(True, "OK")), \
              patch("api.auto_detect_primary_interface", return_value=({"name": "Ethernet", "type": "Ethernet"}, {"can_capture_live": True})):
             res = self.client.post("/api/scan", json={"duration": 1.0, "min_packets": 2})
             self.assertEqual(res.status_code, 200)
@@ -140,6 +142,7 @@ class TestScanExecutionFlow(unittest.TestCase):
         }
         with patch("api.get_service_status", return_value=mock_running_svc), \
              patch("api.request_service_start") as mock_uac, \
+             patch.object(api.ipc_client, "verify_authenticated_health", return_value=(True, "OK")), \
              patch("api.auto_detect_primary_interface", return_value=({"name": "Wi-Fi", "type": "Wi-Fi"}, {"can_capture_live": True})):
             res = self.client.post("/api/scan", json={"duration": 1.0})
             self.assertEqual(res.status_code, 200)
@@ -151,7 +154,16 @@ class TestScanExecutionFlow(unittest.TestCase):
 
     def test_05_api_request_failure_returns_meaningful_error(self):
         """Scenario 5: API request failure -> meaningful error returned."""
-        with patch("api.auto_detect_primary_interface", side_effect=RuntimeError("No active network adapter found.")):
+        mock_running_svc = {
+            "installed": True,
+            "status": "RUNNING",
+            "running": True,
+            "ipc_online": True,
+            "pid": 9999
+        }
+        with patch("api.get_service_status", return_value=mock_running_svc), \
+             patch.object(api.ipc_client, "verify_authenticated_health", return_value=(True, "OK")), \
+             patch("api.auto_detect_primary_interface", side_effect=RuntimeError("No active network adapter found.")):
             res = self.client.post("/api/scan", json={"duration": 1.0})
             self.assertIn(res.status_code, [200, 500])
             data = res.get_json()

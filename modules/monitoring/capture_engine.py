@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DDoS-Guard: 77-Feature Live Traffic Extraction & WinDivert Flow Sniffer Engine
+DDoS-Guard: 77-Feature Live Traffic Extraction & Npcap / Scapy Flow Sniffer Engine
 Extracts the exact 77 flow features defined in CIC-IDS2017 / final_output_new_dataset,
-with microsecond flow timing using WinDivert (pydivert) and automatic network discovery.
+with microsecond flow timing using Npcap + Scapy sniff() in monitor-only mode and automatic network discovery.
 """
 
 import os
@@ -35,10 +35,14 @@ except ImportError:
         from ..common.network_detector import auto_detect_primary_interface, find_tshark_path, is_admin_user
 
 try:
-    import pydivert
-    HAS_PYDIVERT = True
+    import scapy
+    from scapy.all import sniff, conf, IP, IPv6, TCP, UDP, Raw, AsyncSniffer
+    HAS_SCAPY = True
 except ImportError:
-    HAS_PYDIVERT = False
+    HAS_SCAPY = False
+
+# Backward compatibility alias
+HAS_PYDIVERT = HAS_SCAPY
 
 try:
     import pyshark
@@ -375,6 +379,47 @@ class FlowStatsCollector:
 
         return ordered_dict
 
+    def get_window_snapshot(self, now: Optional[float] = None, min_packets: int = 3) -> Dict[str, Any]:
+        """Provides snapshot capability for FlowStatsCollector if invoked in rolling window context."""
+        cur_t = now or time.time()
+        count = self.packet_count
+        start = self.start_time if self.start_time is not None else cur_t
+        end = self.end_time if self.end_time is not None else cur_t
+        dur = max(0.0, end - start)
+        bytes_sum = sum(self.all_packet_sizes)
+        throughput_bytes_per_s = round(bytes_sum / max(0.5, dur), 2) if dur > 0 else 0.0
+        throughput_kbps = round(throughput_bytes_per_s / 1024.0, 2)
+
+        base_res = {
+            "session_duration": round(dur, 2),
+            "total_packets": count,
+            "total_bytes": bytes_sum,
+            "window_packets": count,
+            "window_bytes": bytes_sum,
+            "throughput_bytes_per_s": throughput_bytes_per_s,
+            "throughput_kbps": throughput_kbps,
+            "protocol": self.protocol_num,
+            "last_packet_time": self.last_packet_time,
+            "window_seconds": dur,
+            "features": None
+        }
+
+        if count == 0:
+            base_res["status"] = "no_traffic"
+            base_res["message"] = "No traffic detected."
+            return base_res
+
+        if count < min_packets:
+            base_res["status"] = "insufficient_traffic"
+            base_res["message"] = f"Network quiet: only {count} packet(s) captured (min required: {min_packets})."
+            return base_res
+
+        features = self.compute_77_features()
+        base_res["status"] = "monitoring"
+        base_res["features"] = features
+        base_res["message"] = f"Active traffic: {count} packets."
+        return base_res
+
 
 def validate_flow_features(features_dict: Any, min_packets: int = 3) -> Tuple[bool, str]:
     """
@@ -432,6 +477,20 @@ class RollingFlowStatsCollector:
             self.total_packets_seen = 0
             self.total_bytes_seen = 0
             self.last_packet_time: Optional[float] = None
+
+    @property
+    def packet_count(self) -> int:
+        return self.total_packets_seen
+
+    @property
+    def all_packet_sizes(self) -> List[int]:
+        with self.lock:
+            return [int(pkt.get("length", 60)) for _, pkt in self.packet_buffer]
+
+    @property
+    def all_packet_times(self) -> List[float]:
+        with self.lock:
+            return [ts for ts, _ in self.packet_buffer]
 
     def add_packet(self, pkt_info: Dict[str, Any]):
         """Processes and appends a single packet dictionary into the rolling window buffer."""
@@ -536,66 +595,256 @@ class RollingFlowStatsCollector:
         return base_res
 
 
-def parse_windivert_packet(packet, target_if_idx: Optional[int] = None) -> Optional[Dict[str, Any]]:
-    """Extracts transport and IP headers from a pydivert Packet object, rejecting loopback/management."""
+def resolve_scapy_interface(interface_name: Optional[str] = None, interface_index: Optional[int] = None) -> Any:
+    """
+    Resolves the target network adapter name or index to a Scapy-compatible interface.
+    Searches Scapy's conf.ifaces by friendly name (e.g. 'Wi-Fi', 'Ethernet'),
+    description, Windows index, or GUID/network_name.
+    Returns the resolved Scapy interface object or its valid network identifier.
+    Returns None if no matching interface exists (NEVER silently substitutes a default interface).
+    """
+    if not HAS_SCAPY:
+        return None
+
     try:
-        # 1. Reject loopback flag from WinDivert kernel driver
+        from scapy.all import conf
+        ifaces = conf.ifaces
+    except Exception:
+        return None
+
+    if not interface_name and interface_index is None:
+        return None
+
+    # 1. Match by Windows Interface Index
+    if interface_index is not None:
+        try:
+            target_idx = int(interface_index)
+            if target_idx > 0:
+                try:
+                    dev = ifaces.dev_from_index(target_idx)
+                    if dev:
+                        return dev
+                except Exception:
+                    pass
+                for if_key, if_obj in ifaces.items():
+                    obj_idx = getattr(if_obj, "index", None)
+                    obj_widx = getattr(if_obj, "win_index", None)
+                    if (obj_idx is not None and int(obj_idx) == target_idx) or \
+                       (obj_widx is not None and int(obj_widx) == target_idx):
+                        return if_obj
+        except (ValueError, TypeError):
+            pass
+
+    # 2. Match by exact Scapy iface name or dev_from_name
+    if interface_name:
+        try:
+            dev = ifaces.dev_from_name(str(interface_name))
+            if dev:
+                return dev
+        except Exception:
+            pass
+
+        norm_name = str(interface_name).strip().lower()
+
+        # Match exact name
+        for if_key, if_obj in ifaces.items():
+            name_str = str(getattr(if_obj, "name", "")).strip().lower()
+            if name_str == norm_name:
+                return if_obj
+
+        # Match exact description
+        for if_key, if_obj in ifaces.items():
+            desc_str = str(getattr(if_obj, "description", "")).strip().lower()
+            if desc_str == norm_name:
+                return if_obj
+
+        # Match description substring
+        for if_key, if_obj in ifaces.items():
+            desc_str = str(getattr(if_obj, "description", "")).strip().lower()
+            if norm_name in desc_str or ("wi-fi" in norm_name and any(k in desc_str for k in ["wireless", "802.11", "wi-fi"])):
+                return if_obj
+
+        # Match GUID or network_name
+        for if_key, if_obj in ifaces.items():
+            net_name = str(getattr(if_obj, "network_name", "")).strip().lower()
+            guid = str(getattr(if_obj, "guid", "")).strip().lower()
+            if norm_name in net_name or (guid and guid in norm_name):
+                return if_obj
+
+    # No match found - Return None. Never silently substitute default interface!
+    return None
+
+
+def parse_scapy_packet(packet: Any, target_if_idx: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """
+    Extracts transport and IP headers from a Scapy packet (or compatible mock),
+    strictly rejecting loopback and internal management traffic (ports 5000, 50505).
+    """
+    try:
+        # 1. Reject loopback flag
         if getattr(packet, 'is_loopback', False):
             return None
 
-        # 2. Extract and check interface index
+        # 2. Extract and check interface index if present
         if_tuple = getattr(packet, 'interface', None)
-        if_idx = if_tuple[0] if if_tuple and len(if_tuple) > 0 else None
-        if target_if_idx is not None and if_idx is not None and if_idx != target_if_idx:
-            return None
+        if if_tuple is not None:
+            if_idx = if_tuple[0] if isinstance(if_tuple, (tuple, list)) and len(if_tuple) > 0 else if_tuple
+            if target_if_idx is not None and if_idx is not None and if_idx != target_if_idx:
+                return None
 
-        ts = float(packet.timestamp.timestamp()) if hasattr(packet.timestamp, 'timestamp') else time.time()
-        length = len(packet.raw) if packet.raw else 60
+        # Timestamp
+        if hasattr(packet, 'time'):
+            try:
+                ts = float(packet.time)
+            except Exception:
+                ts = time.time()
+        elif hasattr(packet, 'timestamp') and hasattr(packet.timestamp, 'timestamp'):
+            ts = float(packet.timestamp.timestamp())
+        else:
+            ts = time.time()
 
-        src_ip = str(packet.src_addr or "0.0.0.0")
-        dst_ip = str(packet.dst_addr or "0.0.0.0")
+        # Wire length
+        if hasattr(packet, '__len__'):
+            try:
+                length = len(packet)
+            except Exception:
+                length = getattr(packet, 'length', 60)
+        elif hasattr(packet, 'raw') and packet.raw:
+            length = len(packet.raw)
+        else:
+            length = int(getattr(packet, 'length', 60))
 
-        # 3. Reject loopback IP addresses
+        # Check IP layer
+        src_ip = "0.0.0.0"
+        dst_ip = "0.0.0.0"
+        proto = 6
+
+        has_scapy_ip = False
+        if HAS_SCAPY:
+            from scapy.all import IP, IPv6
+            if hasattr(packet, 'haslayer') and packet.haslayer(IP):
+                ip_layer = packet[IP]
+                src_ip = str(ip_layer.src or "0.0.0.0")
+                dst_ip = str(ip_layer.dst or "0.0.0.0")
+                proto = int(getattr(ip_layer, 'proto', 6))
+                has_scapy_ip = True
+            elif hasattr(packet, 'haslayer') and packet.haslayer(IPv6):
+                ip6_layer = packet[IPv6]
+                src_ip = str(ip6_layer.src or "::")
+                dst_ip = str(ip6_layer.dst or "::")
+                proto = int(getattr(ip6_layer, 'nh', 6))
+                has_scapy_ip = True
+
+        if not has_scapy_ip:
+            if hasattr(packet, 'src_addr') or hasattr(packet, 'dst_addr'):
+                src_ip = str(getattr(packet, 'src_addr', "0.0.0.0") or "0.0.0.0")
+                dst_ip = str(getattr(packet, 'dst_addr', "0.0.0.0") or "0.0.0.0")
+                if getattr(packet, 'ipv4', None):
+                    proto = int(packet.ipv4.protocol)
+                elif getattr(packet, 'ipv6', None):
+                    proto = int(packet.ipv6.next_hdr)
+                elif isinstance(getattr(packet, 'protocol', None), tuple):
+                    proto = int(packet.protocol[0])
+                elif hasattr(packet, 'protocol'):
+                    proto = int(packet.protocol)
+            elif hasattr(packet, 'ip'):
+                src_ip = str(packet.ip.src)
+                dst_ip = str(packet.ip.dst)
+                proto = int(getattr(packet.ip, 'proto', 6))
+            elif hasattr(packet, 'ipv6'):
+                src_ip = str(packet.ipv6.src)
+                dst_ip = str(packet.ipv6.dst)
+                proto = 6
+            elif not HAS_SCAPY:
+                return None
+
+        # 3. Reject loopback IP addresses (127.0.0.0/8, ::1)
         if src_ip.startswith("127.") or dst_ip.startswith("127.") or src_ip == "::1" or dst_ip == "::1":
             return None
 
-        src_port = int(packet.src_port or 0)
-        dst_port = int(packet.dst_port or 0)
-
-        # 4. Reject local management ports (Flask: 5000, IPC: 50505)
-        if src_port in (5000, 50505) or dst_port in (5000, 50505):
-            return None
-
-        proto = 6
-        if packet.ipv4:
-            proto = int(packet.ipv4.protocol)
-        elif packet.ipv6:
-            proto = int(packet.ipv6.next_hdr)
-        elif isinstance(packet.protocol, tuple):
-            proto = int(packet.protocol[0])
-
+        src_port = 0
+        dst_port = 0
         header_len = 20
         win_size = 0
         payload_len = 0
         flags = {}
 
-        if packet.tcp:
-            proto = 6
-            header_len = int(getattr(packet.tcp, 'header_len', 20))
-            win_size = int(getattr(packet.tcp, 'window', 0))
-            payload_len = int(getattr(packet.tcp, 'payload_len', 0))
-            flags["FIN"] = 1 if getattr(packet.tcp, 'fin', False) else 0
-            flags["SYN"] = 1 if getattr(packet.tcp, 'syn', False) else 0
-            flags["RST"] = 1 if getattr(packet.tcp, 'rst', False) else 0
-            flags["PSH"] = 1 if getattr(packet.tcp, 'psh', False) else 0
-            flags["ACK"] = 1 if getattr(packet.tcp, 'ack', False) else 0
-            flags["URG"] = 1 if getattr(packet.tcp, 'urg', False) else 0
-            flags["CWE"] = 1 if getattr(packet.tcp, 'cwr', False) else 0
-            flags["ECE"] = 1 if getattr(packet.tcp, 'ece', False) else 0
-        elif packet.udp:
-            proto = 17
-            header_len = int(getattr(packet.udp, 'header_len', 8))
-            payload_len = int(getattr(packet.udp, 'payload_len', max(0, length - 28)))
+        is_tcp = False
+        is_udp = False
+
+        if HAS_SCAPY and hasattr(packet, 'haslayer'):
+            from scapy.all import TCP, UDP
+            if packet.haslayer(TCP):
+                is_tcp = True
+                tcp = packet[TCP]
+                src_port = int(getattr(tcp, 'sport', 0))
+                dst_port = int(getattr(tcp, 'dport', 0))
+                d_ofs = getattr(tcp, 'dataofs', None)
+                header_len = int(d_ofs * 4) if d_ofs is not None else 20
+                win_size = int(getattr(tcp, 'window', 0))
+                try:
+                    payload_len = len(bytes(tcp.payload)) if getattr(tcp, 'payload', None) else 0
+                except Exception:
+                    payload_len = 0
+                proto = 6
+
+                try:
+                    f_int = int(tcp.flags)
+                    flags["FIN"] = 1 if (f_int & 0x01) else 0
+                    flags["SYN"] = 1 if (f_int & 0x02) else 0
+                    flags["RST"] = 1 if (f_int & 0x04) else 0
+                    flags["PSH"] = 1 if (f_int & 0x08) else 0
+                    flags["ACK"] = 1 if (f_int & 0x10) else 0
+                    flags["URG"] = 1 if (f_int & 0x20) else 0
+                    flags["ECE"] = 1 if (f_int & 0x40) else 0
+                    flags["CWE"] = 1 if (f_int & 0x80) else 0
+                except Exception:
+                    pass
+
+            elif packet.haslayer(UDP):
+                is_udp = True
+                udp = packet[UDP]
+                src_port = int(getattr(udp, 'sport', 0))
+                dst_port = int(getattr(udp, 'dport', 0))
+                header_len = 8
+                win_size = 0
+                proto = 17
+                try:
+                    payload_len = len(bytes(udp.payload)) if getattr(udp, 'payload', None) else max(0, length - 28)
+                except Exception:
+                    payload_len = max(0, length - 28)
+
+        if not is_tcp and not is_udp:
+            if getattr(packet, 'tcp', None):
+                proto = 6
+                tcp = packet.tcp
+                src_port = int(getattr(tcp, 'sport', getattr(packet, 'src_port', 0)) or 0)
+                dst_port = int(getattr(tcp, 'dport', getattr(packet, 'dst_port', 0)) or 0)
+                header_len = int(getattr(tcp, 'header_len', 20))
+                win_size = int(getattr(tcp, 'window', getattr(tcp, 'window_size', 0)))
+                payload_len = int(getattr(tcp, 'payload_len', 0))
+                flags["FIN"] = 1 if getattr(tcp, 'fin', False) else 0
+                flags["SYN"] = 1 if getattr(tcp, 'syn', False) else 0
+                flags["RST"] = 1 if getattr(tcp, 'rst', False) else 0
+                flags["PSH"] = 1 if getattr(tcp, 'psh', False) else 0
+                flags["ACK"] = 1 if getattr(tcp, 'ack', False) else 0
+                flags["URG"] = 1 if getattr(tcp, 'urg', False) else 0
+                flags["CWE"] = 1 if getattr(tcp, 'cwr', False) else 0
+                flags["ECE"] = 1 if getattr(tcp, 'ece', False) else 0
+            elif getattr(packet, 'udp', None):
+                proto = 17
+                udp = packet.udp
+                src_port = int(getattr(udp, 'sport', getattr(packet, 'src_port', 0)) or 0)
+                dst_port = int(getattr(udp, 'dport', getattr(packet, 'dst_port', 0)) or 0)
+                header_len = int(getattr(udp, 'header_len', 8))
+                payload_len = int(getattr(udp, 'payload_len', max(0, length - 28)))
+            else:
+                src_port = int(getattr(packet, 'src_port', 0) or 0)
+                dst_port = int(getattr(packet, 'dst_port', 0) or 0)
+
+        # 4. Reject local management ports (Flask: 5000, IPC: 50505)
+        if src_port in (5000, 50505) or dst_port in (5000, 50505):
+            return None
 
         return {
             "timestamp": ts,
@@ -609,11 +858,15 @@ def parse_windivert_packet(packet, target_if_idx: Optional[int] = None) -> Optio
             "win_size": win_size,
             "payload_len": payload_len,
             "flags": flags,
-            "interface_index": if_idx,
+            "interface_index": target_if_idx,
             "is_loopback": False
         }
     except Exception:
         return None
+
+
+# Backward compatibility alias
+parse_windivert_packet = parse_scapy_packet
 
 
 def parse_pyshark_packet(packet) -> Optional[Dict[str, Any]]:
@@ -695,7 +948,7 @@ def write_features_atomic(payload: Dict[str, Any], output_path: Path):
         print(f"[Error] Failed to write {output_path}: {e}", file=sys.stderr)
 
 
-def capture_window_windivert(
+def capture_window_scapy(
     interface_name: Optional[str] = None,
     interface_index: Optional[int] = None,
     duration: float = 3.0,
@@ -703,65 +956,87 @@ def capture_window_windivert(
     filter_str: Optional[str] = None
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
-    Captures live packets via WinDivert kernel filter in SNIFF mode for `duration` seconds.
-    Strictly excludes loopback traffic and binds to target interface when index is provided.
+    Captures live packets via Scapy sniff() in monitor-only mode for `duration` seconds.
+    Strictly excludes loopback traffic and management ports (5000, 50505).
     Returns:
         (status_dict, features_dict)
     """
-    if not HAS_PYDIVERT:
+    if not HAS_SCAPY:
         return {
             "status": "error",
             "error_type": "ModuleMissing",
-            "message": "pydivert module is not installed. Install with 'pip install pydivert'."
+            "message": "scapy module is not installed. Install with 'pip install scapy'."
         }, {}
 
-    # Build safe kernel filter that eliminates loopback and restricts to physical traffic
-    if not filter_str or filter_str.strip() == "true":
-        base_exclude = "!loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
-        if interface_index is not None and int(interface_index) > 0:
-            effective_filter = f"ifIdx == {int(interface_index)} && {base_exclude}"
-        else:
-            effective_filter = base_exclude
-    else:
-        effective_filter = filter_str
-
     collector = FlowStatsCollector(target_interface_index=interface_index)
-    start_t = time.time()
+    target_iface = resolve_scapy_interface(interface_name, interface_index)
 
+    if not target_iface:
+        err_msg = (
+            f"Interface resolution failed for adapter='{interface_name}' (index={interface_index}). "
+            f"No matching Scapy/Npcap network adapter found. Capturing aborted to prevent silent default interface substitution."
+        )
+        print(f"[CAPTURE_ERROR] {err_msg}", file=sys.stderr)
+        return {
+            "status": "error",
+            "error_type": "InterfaceNotFound",
+            "message": err_msg,
+            "packets_captured": 0,
+            "duration": 0.0
+        }, {}
+
+    iface_display = getattr(target_iface, "name", str(target_iface))
+    iface_desc = getattr(target_iface, "description", "")
+    print(f"[PHYSICAL_CAPTURE] Selected Scapy interface: {iface_display} ({iface_desc}) | Explicitly binding sniff(iface=...)", flush=True)
+
+    # Standard BPF filter excluding Flask (5000) and IPC (50505) ports
+    bpf_filter = "not (tcp port 5000 or tcp port 50505)"
+    if filter_str and not filter_str.startswith("ifIdx") and "!loopback" not in filter_str:
+        bpf_filter = filter_str
+
+    start_t = time.time()
     try:
-        with pydivert.WinDivert(effective_filter, flags=pydivert.Flag.SNIFF) as w:
-            while True:
-                elapsed = time.time() - start_t
-                if elapsed >= duration:
-                    break
-                time_left = max(0.05, duration - elapsed)
-                try:
-                    packet = w.recv(timeout=min(time_left, 0.4))
-                    if packet:
-                        pkt_dict = parse_windivert_packet(packet, target_if_idx=interface_index)
-                        if pkt_dict:
-                            collector.add_packet(pkt_dict)
-                except TimeoutError:
-                    continue
-                except Exception:
-                    break
+        from scapy.all import sniff
+
+        def on_packet(p):
+            pkt_dict = parse_scapy_packet(p, target_if_idx=interface_index)
+            if pkt_dict:
+                collector.add_packet(pkt_dict)
+
+        sniff_kwargs = {
+            "iface": target_iface,
+            "filter": bpf_filter,
+            "prn": on_packet,
+            "timeout": max(0.1, duration),
+            "store": False
+        }
+        sniff(**sniff_kwargs)
+
     except PermissionError as pe:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[CAPTURE_ERROR] PermissionError: [WinError 5] Access is denied on [{iface_display}]:\n{tb}", file=sys.stderr)
         return {
             "status": "error",
             "error_type": "DriverPermissionError",
             "message": (
-                "WinDivert requires Windows Administrator privileges to open kernel packet filters. "
-                "Please launch your command prompt, IDE, or terminal as Administrator."
+                f"Npcap permission denied (PermissionError) on interface [{iface_display}]: {pe}. "
+                f"Verify Npcap installation and Administrator access."
             ),
+            "traceback": tb,
             "packets_captured": collector.packet_count,
             "duration": round(time.time() - start_t, 2)
         }, {}
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
         err_msg = str(e)
+        print(f"[CAPTURE_ERROR] Scapy capture exception on [{iface_display}]: {err_msg}\n{tb}", file=sys.stderr)
         return {
             "status": "error",
-            "error_type": "WinDivertError",
-            "message": err_msg,
+            "error_type": type(e).__name__,
+            "message": f"Capture error on [{iface_display}]: {err_msg}",
+            "traceback": tb,
             "packets_captured": collector.packet_count,
             "duration": round(time.time() - start_t, 2)
         }, {}
@@ -807,9 +1082,13 @@ def capture_window_windivert(
         "status": "captured",
         "packets_captured": pkt_count,
         "duration": actual_duration,
-        "interface": interface_name or "WinDivert (Physical)",
+        "interface": interface_name or "Npcap (Physical)",
         "last_packet_time": collector.last_packet_time
     }, features
+
+
+# Backward compatibility alias
+capture_window_windivert = capture_window_scapy
 
 
 def capture_window_pyshark(
@@ -867,18 +1146,18 @@ def capture_window_pyshark(
 
 
 def main():
-    p = argparse.ArgumentParser(description="DDoS-Guard: 77-Feature WinDivert Flow Sniffer Engine")
+    p = argparse.ArgumentParser(description="DDoS-Guard: 77-Feature Npcap / Scapy Flow Sniffer Engine")
     p.add_argument("--duration", "-d", type=float, default=3.0, help="Sniff window duration in seconds (Default: 3.0)")
     p.add_argument("--min-packets", "-m", type=int, default=3, help="Minimum packets required for valid flow (Default: 3)")
     p.add_argument("--iface", "-i", type=str, default=None, help="Interface override (e.g. 'Wi-Fi')")
-    p.add_argument("--engine", "-e", type=str, default="windivert", choices=["windivert", "pyshark"], help="Capture engine (Default: windivert)")
+    p.add_argument("--engine", "-e", type=str, default="scapy", choices=["scapy", "windivert", "pyshark"], help="Capture engine (Default: scapy)")
     p.add_argument("--output", "-o", type=str, default="extracted_features.json", help="Path to output JSON")
     args = p.parse_args()
 
     out_path = Path(args.output).resolve()
 
     print("=" * 65)
-    print("   DDoS-Guard: 77-FEATURE WinDivert PACKET SNIFFER & FLOW EXTRACTOR")
+    print("   DDoS-Guard: 77-FEATURE Npcap / Scapy PACKET SNIFFER & FLOW EXTRACTOR")
     print("=" * 65)
 
     try:
@@ -895,15 +1174,15 @@ def main():
     print(f"   Engine Selected         : {args.engine.upper()}")
     print(f"   Observation Window      : {args.duration}s (Threshold: {args.min_packets} packets)")
 
-    if args.engine == "windivert":
-        if not drivers["windivert_available"]:
+    if args.engine in ["scapy", "windivert"]:
+        if not drivers.get("scapy_available", False) and not drivers.get("can_capture_live", False):
             print(f"\n⚠️ Notice: {drivers['remediation_guide']}\n")
             status = {"status": "error", "error_type": "DriverMissing", "message": drivers["remediation_guide"]}
             write_features_atomic(status, out_path)
             sys.exit(1)
 
-        print(f"🚀 Capturing packets via WinDivert kernel filter for {args.duration}s...")
-        status, features = capture_window_windivert(
+        print(f"🚀 Capturing packets via Scapy (Npcap) in monitor-only mode for {args.duration}s...")
+        status, features = capture_window_scapy(
             interface_name=iface_to_use,
             duration=args.duration,
             min_packets=args.min_packets

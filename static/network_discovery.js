@@ -7,6 +7,7 @@
   'use strict';
 
   // State Management
+  // State Management
   const state = {
     networkInfo: null,
     scanStatus: 'idle', // 'idle' | 'scanning' | 'completed' | 'stopped' | 'error'
@@ -17,7 +18,9 @@
     searchQuery: '',
     sortColumn: 'ip',
     sortAsc: true,
-    selectedDevice: null
+    viewMode: localStorage.getItem('nd_view_mode') || 'cards', // 'cards' | 'table'
+    selectedDevice: null,
+    knownIps: new Set()
   };
 
   // DOM Elements
@@ -70,6 +73,13 @@
     countIot: document.getElementById('countIot'),
     ndSearchInput: document.getElementById('ndSearchInput'),
 
+    // View Mode Switcher
+    ndViewCardsBtn: document.getElementById('ndViewCardsBtn'),
+    ndViewTableBtn: document.getElementById('ndViewTableBtn'),
+    ndCardsContainer: document.getElementById('ndCardsContainer'),
+    ndCardsGrid: document.getElementById('ndCardsGrid'),
+    ndTableWrapper: document.getElementById('ndTableWrapper'),
+
     // Table
     ndDeviceTable: document.getElementById('ndDeviceTable'),
     ndTableBody: document.getElementById('ndTableBody'),
@@ -79,6 +89,7 @@
     ndDeviceModalBackdrop: document.getElementById('ndDeviceModalBackdrop'),
     ndDeviceModal: document.getElementById('ndDeviceModal'),
     modalCloseBtn: document.getElementById('modalCloseBtn'),
+    modalFooterCloseBtn: document.getElementById('modalFooterCloseBtn'),
     modalDeviceAvatar: document.getElementById('modalDeviceAvatar'),
     modalDeviceTitle: document.getElementById('modalDeviceTitle'),
     modalDeviceSubtitle: document.getElementById('modalDeviceSubtitle'),
@@ -87,9 +98,17 @@
     modalMac: document.getElementById('modalMac'),
     modalVendor: document.getElementById('modalVendor'),
     modalCategory: document.getElementById('modalCategory'),
+    modalRole: document.getElementById('modalRole'),
+    modalStatusPill: document.getElementById('modalStatusPill'),
+    modalStatusText: document.getElementById('modalStatusText'),
     modalBasis: document.getElementById('modalBasis'),
     modalLastSeen: document.getElementById('modalLastSeen'),
     modalMethods: document.getElementById('modalMethods'),
+    modalPortsPanel: document.getElementById('modalPortsPanel'),
+    modalPortsStatusBadge: document.getElementById('modalPortsStatusBadge'),
+    modalPortsCountText: document.getElementById('modalPortsCountText'),
+    modalPortsHelperText: document.getElementById('modalPortsHelperText'),
+    modalPortsList: document.getElementById('modalPortsList'),
     modalPortScanLink: document.getElementById('modalPortScanLink')
   };
 
@@ -190,6 +209,14 @@
       if (ndHealthDotMobile) {
         ndHealthDotMobile.className = elements.ndHealthDot.className;
       }
+      const topNavHealthDot = document.getElementById('topNavHealthDot');
+      const topNavHealthLabel = document.getElementById('topNavHealthLabel');
+      if (topNavHealthDot) {
+        topNavHealthDot.className = elements.ndHealthDot.className;
+      }
+      if (topNavHealthLabel) {
+        topNavHealthLabel.textContent = elements.ndHealthLabel.textContent;
+      }
     }
 
     if (elements.ndSubnetInput && !elements.ndSubnetInput.value) {
@@ -209,6 +236,7 @@
       return;
     }
 
+    state.knownIps.clear();
     setScanUiState('starting');
 
     try {
@@ -271,13 +299,21 @@
     if (st === 'scanning' || st === 'starting') {
       if (elements.ndStartBtn) elements.ndStartBtn.style.display = 'none';
       if (elements.ndStopBtn) elements.ndStopBtn.style.display = 'inline-flex';
-      if (elements.ndProgressBox) elements.ndProgressBox.style.display = 'block';
+      if (elements.ndProgressBox) {
+        elements.ndProgressBox.style.display = 'block';
+        elements.ndProgressBox.classList.add('scanning');
+      }
+      if (elements.ndProgressBar) elements.ndProgressBar.classList.add('scanning');
     } else {
       if (elements.ndStartBtn) elements.ndStartBtn.style.display = 'inline-flex';
       if (elements.ndStopBtn) elements.ndStopBtn.style.display = 'none';
-      if (st === 'completed' || st === 'stopped') {
-        if (elements.ndProgressBox) elements.ndProgressBox.style.display = 'block';
+      if (elements.ndProgressBox) {
+        elements.ndProgressBox.classList.remove('scanning');
+        if (st === 'completed' || st === 'stopped') {
+          elements.ndProgressBox.style.display = 'block';
+        }
       }
+      if (elements.ndProgressBar) elements.ndProgressBar.classList.remove('scanning');
     }
   }
 
@@ -423,17 +459,164 @@
     return list;
   }
 
-  // 5. Table Rendering
-  function renderDeviceTable() {
-    if (!elements.ndTableBody) return;
+  // Helper: Extract Port Info
+  function getDevicePortsInfo(dev) {
+    let count = null;
+    if (dev.open_ports_count !== undefined && dev.open_ports_count !== null) {
+      count = Number(dev.open_ports_count);
+    } else if (Array.isArray(dev.open_ports)) {
+      count = dev.open_ports.length;
+    }
+    return {
+      count: count,
+      ports: Array.isArray(dev.open_ports) ? dev.open_ports : []
+    };
+  }
 
+  // 5. Inventory Rendering: Cards & Compact Table
+  function renderDeviceInventory() {
     const list = filterAndSortDevices();
+    renderDeviceCards(list);
+    renderCompactTable(list);
+    attachDeviceActionListeners();
+  }
+
+  // Backward compatibility alias for polling loop
+  const renderDeviceTable = renderDeviceInventory;
+
+  // 5a. Responsive Cards Grid (Default View)
+  function renderDeviceCards(list) {
+    if (!elements.ndCardsGrid) return;
+
+    if (list.length === 0) {
+      const isScanActive = state.scanStatus === 'scanning';
+      elements.ndCardsGrid.innerHTML = `
+        <div class="nd-empty-state">
+          <div class="nd-empty-icon"><i class="fas ${isScanActive ? 'fa-spinner fa-spin' : 'fa-satellite-dish'}"></i></div>
+          <h3 class="nd-empty-title">${isScanActive ? 'Probing Subnet...' : 'No Devices Found'}</h3>
+          <p class="nd-empty-desc">${
+            isScanActive
+              ? 'Active ARP and ICMP sweeps are underway. Discovered hosts will appear here dynamically.'
+              : state.devices.length === 0
+              ? "Click 'Start Discovery' above to sweep your local subnet and populate the device asset inventory."
+              : 'No devices matched the selected filter or search criteria.'
+          }</p>
+        </div>
+      `;
+      return;
+    }
+
+    const cardsHtml = list.map((dev, idx) => {
+      const icon = getDeviceIcon(dev.device_type, dev.vendor, dev.is_gateway, dev.is_local_host);
+      const isOnline = dev.status === 'Online';
+      const isNew = state.scanStatus === 'scanning' && !state.knownIps.has(dev.ip);
+      if (isNew) state.knownIps.add(dev.ip);
+      
+      const hostnameDisplay = (!dev.hostname || dev.hostname === 'Unknown')
+        ? `<span class="nd-text-muted">Unknown</span>`
+        : `<span class="nd-card-hostname-text">${escapeHtml(dev.hostname)}</span>`;
+
+      const macDisplay = (!dev.mac || dev.mac === 'Unavailable' || dev.mac === 'Unknown')
+        ? `<span class="nd-text-muted">Not detected</span>`
+        : `<span class="mono">${escapeHtml(dev.mac)}</span>`;
+
+      const vendorClean = (!dev.vendor || dev.vendor === 'Unknown' || dev.vendor === 'Unknown Vendor')
+        ? 'Unknown Vendor'
+        : dev.vendor;
+
+      const categoryClean = dev.device_type || 'Network Device';
+
+      // Role Badge
+      let roleBadge = '';
+      if (dev.is_gateway) {
+        roleBadge = `<span class="nd-badge-role gw" title="Default Subnet Gateway Router"><i class="fas fa-shield-alt"></i> Gateway</span>`;
+      } else if (dev.is_local_host) {
+        roleBadge = `<span class="nd-badge-role self" title="Your Current Local Machine"><i class="fas fa-laptop"></i> Host</span>`;
+      }
+
+      // Open Ports info
+      const portsInfo = getDevicePortsInfo(dev);
+      let portsDisplay = '';
+      if (portsInfo.count !== null) {
+        const hasOpen = portsInfo.count > 0;
+        portsDisplay = `
+          <span class="nd-ports-badge ${hasOpen ? 'has-ports' : 'zero-ports'}">
+            <i class="fas ${hasOpen ? 'fa-door-open' : 'fa-shield'}"></i>
+            ${portsInfo.count} ${portsInfo.count === 1 ? 'Open Port' : 'Open Ports'}
+          </span>
+        `;
+      } else {
+        portsDisplay = `
+          <span class="nd-ports-badge not-scanned" title="Port scan not conducted for this host">
+            <i class="fas fa-minus"></i> Not detected
+          </span>
+        `;
+      }
+
+      return `
+        <div class="nd-device-card ${isNew ? 'new-discovery-glow' : ''}" data-ip="${escapeHtml(dev.ip)}" style="animation-delay: ${Math.min(idx * 35, 500)}ms">
+          <div class="nd-card-header">
+            <div class="nd-card-avatar" title="${escapeHtml(categoryClean)}">
+              <i class="fas ${icon}"></i>
+            </div>
+            <div class="nd-card-title-col">
+              <div class="nd-card-name-row">
+                <h4 class="nd-card-hostname" title="${escapeHtml(dev.hostname || dev.ip)}">${hostnameDisplay}</h4>
+                ${roleBadge}
+              </div>
+              <span class="nd-card-sub" title="${escapeHtml(categoryClean)} • ${escapeHtml(vendorClean)}">
+                ${escapeHtml(categoryClean)} • ${escapeHtml(vendorClean)}
+              </span>
+            </div>
+            <span class="nd-status-pill ${isOnline ? 'online' : 'offline'}">
+              <span class="status-pulse-dot"></span>
+              ${escapeHtml(dev.status || 'Offline')}
+            </span>
+          </div>
+
+          <div class="nd-card-body">
+            <div class="nd-card-prop">
+              <span class="nd-prop-label"><i class="fas fa-location-dot"></i> IP Address</span>
+              <div class="nd-prop-val-wrap">
+                <span class="nd-prop-val mono ${dev.is_gateway ? 'text-gw' : ''}">${escapeHtml(dev.ip)}</span>
+                <button type="button" class="nd-mini-copy-btn" data-copy-text="${escapeHtml(dev.ip)}" title="Copy IP Address">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="nd-card-prop">
+              <span class="nd-prop-label"><i class="fas fa-fingerprint"></i> MAC Address</span>
+              <span class="nd-prop-val mono">${macDisplay}</span>
+            </div>
+
+            <div class="nd-card-prop">
+              <span class="nd-prop-label"><i class="fas fa-shield-halved"></i> Open Ports</span>
+              <span class="nd-prop-val">${portsDisplay}</span>
+            </div>
+          </div>
+
+          <div class="nd-card-footer">
+            <button type="button" class="nd-btn-details nd-view-details-btn" data-ip="${escapeHtml(dev.ip)}" title="View complete hardware profile and scan details">
+              <i class="fas fa-circle-info"></i> View Details
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    elements.ndCardsGrid.innerHTML = cardsHtml;
+  }
+
+  // 5b. Compact Table View (Secondary Option)
+  function renderCompactTable(list) {
+    if (!elements.ndTableBody) return;
 
     if (list.length === 0) {
       const isScanActive = state.scanStatus === 'scanning';
       elements.ndTableBody.innerHTML = `
         <tr class="nd-empty-row">
-          <td colspan="8">
+          <td colspan="6">
             <div class="nd-empty-state">
               <div class="nd-empty-icon"><i class="fas ${isScanActive ? 'fa-spinner fa-spin' : 'fa-satellite-dish'}"></i></div>
               <h3 class="nd-empty-title">${isScanActive ? 'Probing Subnet...' : 'No Devices Found'}</h3>
@@ -442,7 +625,7 @@
                   ? 'Active ARP and ICMP sweeps are underway. Discovered hosts will appear here dynamically.'
                   : state.devices.length === 0
                   ? "Click 'Start Discovery' above to sweep your local subnet and populate the device asset inventory."
-                  : 'No devices matched the selected filter criteria.'
+                  : 'No devices matched the selected filter or search criteria.'
               }</p>
             </div>
           </td>
@@ -451,27 +634,19 @@
       return;
     }
 
-    const rowsHtml = list.map(dev => {
+    const rowsHtml = list.map((dev, idx) => {
       const icon = getDeviceIcon(dev.device_type, dev.vendor, dev.is_gateway, dev.is_local_host);
       const isOnline = dev.status === 'Online';
-      const macDisplay = (!dev.mac || dev.mac === 'Unavailable' || dev.mac === 'Unknown')
-        ? `<span class="nd-text-muted">Unavailable</span>`
-        : `<span class="mono">${escapeHtml(dev.mac)}</span>`;
-
-      const vendorDisplay = (!dev.vendor || dev.vendor === 'Unknown' || dev.vendor === 'Unknown Vendor')
-        ? `<span class="nd-text-muted">Unknown</span>`
-        : `<span>${escapeHtml(dev.vendor)}</span>`;
-
+      
       const hostnameDisplay = (!dev.hostname || dev.hostname === 'Unknown')
         ? `<span class="nd-text-muted">Unknown</span>`
-        : `<span class="nd-hostname-text">${escapeHtml(dev.hostname)}</span>`;
+        : `<span class="nd-hostname-text" title="${escapeHtml(dev.hostname)}">${escapeHtml(dev.hostname)}</span>`;
 
-      // Method Badges
-      const methodsHtml = (dev.methods || ['Probed']).map(m =>
-        `<span class="nd-method-chip" title="Discovered via ${escapeHtml(m)}">${escapeHtml(m)}</span>`
-      ).join('');
+      const macDisplay = (!dev.mac || dev.mac === 'Unavailable' || dev.mac === 'Unknown')
+        ? `<span class="nd-text-muted">Not detected</span>`
+        : `<span class="mono">${escapeHtml(dev.mac)}</span>`;
 
-      // Badges for Gateway or Local Host
+      // Role Badge
       let roleBadge = '';
       if (dev.is_gateway) {
         roleBadge = `<span class="nd-badge-role gw" title="Default Subnet Gateway Router"><i class="fas fa-shield-alt"></i> Gateway</span>`;
@@ -479,17 +654,30 @@
         roleBadge = `<span class="nd-badge-role self" title="Your Current Local Machine"><i class="fas fa-laptop"></i> Host</span>`;
       }
 
-      // Verified vs Inferred badge
-      const isVerified = (dev.device_type_basis || '').includes('Verified');
-      const verifiedTag = isVerified
-        ? `<span class="nd-tag-verified" title="${escapeHtml(dev.device_type_basis)}">Verified</span>`
-        : `<span class="nd-tag-inferred" title="${escapeHtml(dev.device_type_basis)}">Inferred</span>`;
+      // Open Ports
+      const portsInfo = getDevicePortsInfo(dev);
+      let portsDisplay = '';
+      if (portsInfo.count !== null) {
+        const hasOpen = portsInfo.count > 0;
+        portsDisplay = `
+          <span class="nd-ports-badge ${hasOpen ? 'has-ports' : 'zero-ports'}">
+            <i class="fas ${hasOpen ? 'fa-door-open' : 'fa-shield'}"></i>
+            ${portsInfo.count} Open
+          </span>
+        `;
+      } else {
+        portsDisplay = `
+          <span class="nd-ports-badge not-scanned" title="Port scan not conducted for this host">
+            <i class="fas fa-minus"></i> Not detected
+          </span>
+        `;
+      }
 
       return `
-        <tr class="nd-device-row" data-ip="${escapeHtml(dev.ip)}">
+        <tr class="nd-device-row" data-ip="${escapeHtml(dev.ip)}" style="animation-delay: ${Math.min(idx * 28, 450)}ms">
           <td class="col-hostname">
             <div class="nd-device-cell">
-              <div class="nd-avatar-circle" title="${escapeHtml(dev.device_type)}">
+              <div class="nd-avatar-circle" title="${escapeHtml(dev.device_type || 'Device')}">
                 <i class="fas ${icon}"></i>
               </div>
               <div class="nd-name-meta">
@@ -502,25 +690,16 @@
             <span class="mono fw-600 ${dev.is_gateway ? 'text-gw' : ''}">${escapeHtml(dev.ip)}</span>
           </td>
           <td class="col-mac">${macDisplay}</td>
-          <td class="col-vendor">${vendorDisplay}</td>
-          <td class="col-type">
-            <div class="nd-type-wrap">
-              <span>${escapeHtml(dev.device_type)}</span>
-              ${verifiedTag}
-            </div>
-          </td>
           <td class="col-status">
             <span class="nd-status-pill ${isOnline ? 'online' : 'offline'}">
               <span class="status-pulse-dot"></span>
-              ${escapeHtml(dev.status)}
+              ${escapeHtml(dev.status || 'Offline')}
             </span>
           </td>
-          <td class="col-methods">
-            <div class="nd-methods-wrap">${methodsHtml}</div>
-          </td>
+          <td class="col-ports">${portsDisplay}</td>
           <td class="col-actions">
             <button type="button" class="nd-table-btn nd-view-details-btn" data-ip="${escapeHtml(dev.ip)}" title="View complete hardware profile">
-              <i class="fas fa-eye"></i> Details
+              <i class="fas fa-circle-info"></i> Details
             </button>
           </td>
         </tr>
@@ -528,34 +707,61 @@
     }).join('');
 
     elements.ndTableBody.innerHTML = rowsHtml;
+  }
 
-    // Attach row click listeners for drawer modal
-    elements.ndTableBody.querySelectorAll('.nd-device-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        // Prevent opening if clicking a link or button directly
-        if (e.target.closest('button') || e.target.closest('a')) return;
-        const ip = row.getAttribute('data-ip');
-        openDeviceModal(ip);
+  // Attach event listeners for card/table actions
+  function attachDeviceActionListeners() {
+    // Card click (opens modal if not clicking buttons)
+    if (elements.ndCardsGrid) {
+      elements.ndCardsGrid.querySelectorAll('.nd-device-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('button') || e.target.closest('a')) return;
+          const ip = card.getAttribute('data-ip');
+          if (ip) openDeviceModal(ip);
+        });
       });
-    });
+    }
 
-    elements.ndTableBody.querySelectorAll('.nd-view-details-btn').forEach(btn => {
+    // Table row click
+    if (elements.ndTableBody) {
+      elements.ndTableBody.querySelectorAll('.nd-device-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('button') || e.target.closest('a')) return;
+          const ip = row.getAttribute('data-ip');
+          if (ip) openDeviceModal(ip);
+        });
+      });
+    }
+
+    // View Details buttons (on both cards and table)
+    document.querySelectorAll('.nd-view-details-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const ip = btn.getAttribute('data-ip');
-        openDeviceModal(ip);
+        if (ip) openDeviceModal(ip);
+      });
+    });
+
+    // Mini copy buttons on cards
+    document.querySelectorAll('.nd-mini-copy-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = btn.getAttribute('data-copy-text');
+        if (text) copyDirectText(text, btn);
       });
     });
   }
 
-  // 6. Device Details Drawer Modal
+  // 6. Device Details Modal (Structured in 4 Sections)
   function openDeviceModal(ip) {
     const dev = state.devices.find(d => d.ip === ip);
     if (!dev) return;
 
     state.selectedDevice = dev;
     const icon = getDeviceIcon(dev.device_type, dev.vendor, dev.is_gateway, dev.is_local_host);
+    const isOnline = dev.status === 'Online';
 
+    // Header Avatar & Title
     if (elements.modalDeviceAvatar) {
       elements.modalDeviceAvatar.innerHTML = `<i class="fas ${icon}"></i>`;
     }
@@ -565,38 +771,121 @@
     if (elements.modalDeviceSubtitle) {
       let sub = `IPv4: ${dev.ip}`;
       if (dev.is_gateway) sub += ' • Default Subnet Gateway';
-      if (dev.is_local_host) sub += ' • Local Workstation';
+      else if (dev.is_local_host) sub += ' • Local Workstation';
       elements.modalDeviceSubtitle.textContent = sub;
     }
-    if (elements.modalHostname) elements.modalHostname.textContent = dev.hostname || 'Unknown';
-    if (elements.modalIp) elements.modalIp.textContent = dev.ip || 'Unavailable';
-    if (elements.modalMac) elements.modalMac.textContent = dev.mac || 'Unavailable';
-    if (elements.modalVendor) elements.modalVendor.textContent = dev.vendor || 'Unknown Vendor';
-    if (elements.modalCategory) elements.modalCategory.textContent = dev.device_type || 'Unknown Device';
-    if (elements.modalBasis) elements.modalBasis.textContent = dev.device_type_basis || 'Standard heuristic probing';
-    if (elements.modalLastSeen) elements.modalLastSeen.textContent = dev.last_seen || 'Just now';
 
+    // --- Section 1: General Information ---
+    if (elements.modalHostname) {
+      elements.modalHostname.textContent = (dev.hostname && dev.hostname !== 'Unknown') ? dev.hostname : 'Unknown Hostname';
+    }
+    if (elements.modalCategory) {
+      elements.modalCategory.textContent = dev.device_type || 'Unknown Device';
+    }
+    if (elements.modalRole) {
+      elements.modalRole.textContent = dev.is_gateway
+        ? 'Default Subnet Gateway Router'
+        : dev.is_local_host
+        ? 'Local Workstation (This Device)'
+        : 'Network Endpoint Host';
+    }
+    if (elements.modalStatusPill && elements.modalStatusText) {
+      elements.modalStatusPill.className = 'nd-status-pill ' + (isOnline ? 'online' : 'offline');
+      elements.modalStatusText.textContent = dev.status || 'Offline';
+    }
+
+    // --- Section 2: Network Information ---
+    if (elements.modalIp) {
+      elements.modalIp.textContent = dev.ip || 'Unavailable';
+    }
+    if (elements.modalMac) {
+      const macVal = (!dev.mac || dev.mac === 'Unavailable' || dev.mac === 'Unknown') ? 'Not detected' : dev.mac;
+      elements.modalMac.textContent = macVal;
+    }
+    if (elements.modalVendor) {
+      const vendorVal = (!dev.vendor || dev.vendor === 'Unknown' || dev.vendor === 'Unknown Vendor') ? 'Unknown Vendor' : dev.vendor;
+      elements.modalVendor.textContent = vendorVal;
+    }
     if (elements.modalMethods) {
       elements.modalMethods.innerHTML = (dev.methods || ['Probed']).map(m =>
         `<span class="nd-method-chip">${escapeHtml(m)}</span>`
       ).join(' ');
     }
 
+    // --- Section 3: Open Ports ---
+    const portsInfo = getDevicePortsInfo(dev);
+    if (elements.modalPortsCountText && elements.modalPortsStatusBadge) {
+      if (portsInfo.count !== null) {
+        const hasOpen = portsInfo.count > 0;
+        elements.modalPortsStatusBadge.className = 'nd-ports-status-badge ' + (hasOpen ? 'has-ports' : 'zero-ports');
+        elements.modalPortsCountText.textContent = `${portsInfo.count} ${portsInfo.count === 1 ? 'Open Port' : 'Open Ports'} Detected`;
+        
+        if (portsInfo.ports.length > 0 && elements.modalPortsList) {
+          elements.modalPortsList.style.display = 'flex';
+          elements.modalPortsList.innerHTML = portsInfo.ports.map(p => `
+            <span class="nd-port-tag">
+              <span class="port-num">${escapeHtml(p.port || p)}</span>
+              ${p.service ? `<span class="port-srv">${escapeHtml(p.service)}</span>` : ''}
+              ${p.state ? `<span class="port-st ${escapeHtml(p.state)}">${escapeHtml(p.state)}</span>` : ''}
+            </span>
+          `).join('');
+          if (elements.modalPortsHelperText) elements.modalPortsHelperText.textContent = 'Active listening services verified on this host.';
+        } else {
+          if (elements.modalPortsList) elements.modalPortsList.style.display = 'none';
+          if (elements.modalPortsHelperText) {
+            elements.modalPortsHelperText.textContent = hasOpen
+              ? 'Ports recorded by discovery scan.'
+              : 'No open services responded on scanned ports.';
+          }
+        }
+      } else {
+        elements.modalPortsStatusBadge.className = 'nd-ports-status-badge not-scanned';
+        elements.modalPortsCountText.textContent = 'Not scanned / Not detected';
+        if (elements.modalPortsList) elements.modalPortsList.style.display = 'none';
+        if (elements.modalPortsHelperText) {
+          elements.modalPortsHelperText.textContent = 'Run a targeted port scan on this host to enumerate active services.';
+        }
+      }
+    }
+
+    // --- Section 4: Scan Details ---
+    if (elements.modalLastSeen) {
+      elements.modalLastSeen.textContent = dev.last_seen || 'Just now';
+    }
+    if (elements.modalBasis) {
+      elements.modalBasis.textContent = dev.device_type_basis || 'Standard ARP/ICMP probing';
+    }
+
+    // Quick Action: Port Scanner Link
     if (elements.modalPortScanLink) {
-      // Connects to Port Scanner feature on homepage with pre-filled target IP
       elements.modalPortScanLink.href = `/#port-scanner?target=${encodeURIComponent(dev.ip)}`;
     }
 
+    // Open Modal
     if (elements.ndDeviceModalBackdrop) elements.ndDeviceModalBackdrop.classList.add('open');
     if (elements.ndDeviceModal) elements.ndDeviceModal.classList.add('open');
     document.body.style.overflow = 'hidden';
   }
 
   function closeDeviceModal() {
-    if (elements.ndDeviceModalBackdrop) elements.ndDeviceModalBackdrop.classList.remove('open');
     if (elements.ndDeviceModal) elements.ndDeviceModal.classList.remove('open');
-    document.body.style.overflow = '';
-    state.selectedDevice = null;
+    setTimeout(() => {
+      if (elements.ndDeviceModalBackdrop) elements.ndDeviceModalBackdrop.classList.remove('open');
+      document.body.style.overflow = '';
+      state.selectedDevice = null;
+    }, 180);
+  }
+
+  // 7. Clipboard Copy Helpers
+  function copyDirectText(text, btn) {
+    if (!text || text === '--' || text === 'Unavailable' || text === 'Not detected') return;
+    navigator.clipboard.writeText(text).then(() => {
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = `<i class="fas fa-check" style="color:var(--status-benign)"></i>`;
+      setTimeout(() => {
+        btn.innerHTML = origHtml;
+      }, 1500);
+    }).catch(() => {});
   }
 
   // 7. Clipboard Copy Helper
@@ -690,9 +979,38 @@
       });
     });
 
+    // View Mode Switcher
+    function setViewMode(mode) {
+      state.viewMode = mode;
+      localStorage.setItem('nd_view_mode', mode);
+      if (mode === 'table') {
+        if (elements.ndCardsContainer) elements.ndCardsContainer.style.display = 'none';
+        if (elements.ndTableWrapper) elements.ndTableWrapper.style.display = 'block';
+        if (elements.ndViewCardsBtn) elements.ndViewCardsBtn.classList.remove('active');
+        if (elements.ndViewTableBtn) elements.ndViewTableBtn.classList.add('active');
+      } else {
+        if (elements.ndCardsContainer) elements.ndCardsContainer.style.display = 'block';
+        if (elements.ndTableWrapper) elements.ndTableWrapper.style.display = 'none';
+        if (elements.ndViewCardsBtn) elements.ndViewCardsBtn.classList.add('active');
+        if (elements.ndViewTableBtn) elements.ndViewTableBtn.classList.remove('active');
+      }
+    }
+
+    if (elements.ndViewCardsBtn) {
+      elements.ndViewCardsBtn.addEventListener('click', () => setViewMode('cards'));
+    }
+    if (elements.ndViewTableBtn) {
+      elements.ndViewTableBtn.addEventListener('click', () => setViewMode('table'));
+    }
+    // Set initial view state
+    setViewMode(state.viewMode);
+
     // Modal Drawer Close & Backdrop
     if (elements.modalCloseBtn) {
       elements.modalCloseBtn.addEventListener('click', closeDeviceModal);
+    }
+    if (elements.modalFooterCloseBtn) {
+      elements.modalFooterCloseBtn.addEventListener('click', closeDeviceModal);
     }
     if (elements.ndDeviceModalBackdrop) {
       elements.ndDeviceModalBackdrop.addEventListener('click', (e) => {
@@ -719,6 +1037,22 @@
     }
 
     const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+    const navbarSidebarToggleBtn = document.getElementById('navbarSidebarToggleBtn');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+    function handleSidebarToggle() {
+      if (window.innerWidth < 992) {
+        const isOpen = document.body.classList.toggle('mobile-sidebar-open');
+        if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      } else {
+        const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('nss_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+        if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+      }
+    }
+
     if (sidebarToggleBtn) {
       sidebarToggleBtn.addEventListener('click', () => {
         const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
@@ -726,8 +1060,9 @@
       });
     }
 
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    if (navbarSidebarToggleBtn) {
+      navbarSidebarToggleBtn.addEventListener('click', handleSidebarToggle);
+    }
 
     if (mobileMenuBtn) {
       mobileMenuBtn.addEventListener('click', () => {
@@ -740,19 +1075,81 @@
       sidebarBackdrop.addEventListener('click', () => {
         document.body.classList.remove('mobile-sidebar-open');
         if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
+        if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
       });
     }
 
-    document.querySelectorAll('.sidebar-nav-item').forEach(link => {
+    document.querySelectorAll('.sidebar-nav-item, .top-nav-link').forEach(link => {
       link.addEventListener('click', () => {
         document.body.classList.remove('mobile-sidebar-open');
         if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
+        if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
       });
     });
   }
 
-  // 9. Initialize Page
+  // 9. Theme Management (Light / Dark Mode with Persistence)
+  function initTheme() {
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const themeToggleIcon = document.getElementById('themeToggleIcon');
+    const themeToggleText = document.getElementById('themeToggleText');
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+
+    function applyTheme(theme, animate = false) {
+      if (animate) {
+        document.body.classList.add('theme-transitioning');
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+      const isDark = theme === 'dark';
+
+      if (themeToggleIcon) {
+        themeToggleIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+      }
+      if (themeToggleText) {
+        themeToggleText.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+      }
+      if (themeToggleBtn) {
+        const titleStr = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+        themeToggleBtn.setAttribute('title', titleStr);
+        themeToggleBtn.setAttribute('aria-label', titleStr);
+      }
+      if (metaTheme) {
+        metaTheme.setAttribute('content', isDark ? '#101411' : '#F7F5EF');
+      }
+
+      if (animate) {
+        window.setTimeout(() => {
+          document.body.classList.remove('theme-transitioning');
+        }, 260);
+      }
+    }
+
+    const savedTheme = localStorage.getItem('nss_theme');
+    const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (systemDark ? 'dark' : 'light');
+    applyTheme(initialTheme, false);
+
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('nss_theme', next);
+        applyTheme(next, true);
+      });
+    }
+
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        if (!localStorage.getItem('nss_theme')) {
+          applyTheme(e.matches ? 'dark' : 'light', true);
+        }
+      });
+    }
+  }
+
+  // 10. Initialize Page
   document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     initEventListeners();
     loadNetworkInfo();
   });

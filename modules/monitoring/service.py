@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 DDoS-Guard: Windows Service & Secure Local IPC Capture Engine
-Runs in the background (as LocalSystem or elevated service) to open WinDivert
-kernel filters strictly in MONITOR-ONLY mode (pydivert.Flag.SNIFF).
+Runs in the background (as LocalSystem or elevated service) to capture packets
+via Npcap + Scapy strictly in MONITOR-ONLY mode (passive sniff).
 Exposes a secure local IPC interface (127.0.0.1 / Named Pipe) restricted to
 authorized local processes (Flask Backend).
 
 Security Constraints Enforced:
-1. Monitor-Only Mode: pydivert.Flag.SNIFF enforced - no packet modification or dropping.
+1. Monitor-Only Mode: Passive packet capture enforced - no packet modification or dropping.
 2. Least Privilege Control: Accepts only safe telemetry/scan commands (PING, STATUS, START_SCAN, GET_STATUS, STOP_SCAN).
 3. No Remote Control: Binds exclusively to 127.0.0.1 with local token validation.
 4. Standalone & Service Modes: Can run as native Windows Service or CLI worker (--standalone / --debug).
@@ -71,13 +71,13 @@ logger = get_service_logger()
 
 try:
     from modules.monitoring.capture_engine import (
-        FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES,
-        validate_flow_features, RollingFlowStatsCollector
+        FlowStatsCollector, parse_scapy_packet, parse_windivert_packet, OFFICIAL_77_FEATURES,
+        validate_flow_features, RollingFlowStatsCollector, resolve_scapy_interface
     )
 except ImportError:
     from feature_extraction2 import (
-        FlowStatsCollector, parse_windivert_packet, OFFICIAL_77_FEATURES,
-        validate_flow_features, RollingFlowStatsCollector
+        FlowStatsCollector, parse_scapy_packet, parse_windivert_packet, OFFICIAL_77_FEATURES,
+        validate_flow_features, RollingFlowStatsCollector, resolve_scapy_interface
     )
 
 try:
@@ -86,10 +86,14 @@ except ImportError:
     from network_detector import auto_detect_primary_interface, is_admin_user
 
 try:
-    import pydivert
-    HAS_PYDIVERT = True
+    import scapy
+    from scapy.all import sniff, AsyncSniffer
+    HAS_SCAPY = True
 except ImportError:
-    HAS_PYDIVERT = False
+    HAS_SCAPY = False
+
+# Backward compatibility alias
+HAS_PYDIVERT = HAS_SCAPY
 
 try:
     import win32serviceutil
@@ -145,12 +149,13 @@ class CaptureWorker:
             self.active_scan_id = scan_id
             self.is_continuous = continuous
             self.min_packets = min_packets
+            self.total_packets_seen = 0
             self.rolling_collector = RollingFlowStatsCollector(
                 target_interface_index=interface_index,
                 window_seconds=2.0
             )
             self.current_result = {
-                "status": "monitoring" if continuous else "scanning",
+                "status": "scanning",
                 "scan_id": scan_id,
                 "continuous": continuous,
                 "started_at": time.time(),
@@ -162,7 +167,7 @@ class CaptureWorker:
                 "last_packet_time": None,
                 "features": None,
                 "message": (
-                    f"Monitoring live traffic on [{interface_name or 'Network Adapter'}] in real time..."
+                    f"Initializing live traffic monitoring on [{interface_name or 'Network Adapter'}]..."
                     if continuous else
                     f"Capturing traffic on [{interface_name or 'Network Adapter'}] for {duration}s in monitor-only mode..."
                 )
@@ -174,7 +179,7 @@ class CaptureWorker:
             daemon=True
         )
         thread.start()
-        return {"status": "monitoring" if continuous else "scanning", "scan_id": scan_id}
+        return {"status": "scanning", "scan_id": scan_id}
 
     def stop_window(self):
         with self.lock:
@@ -233,96 +238,129 @@ class CaptureWorker:
         collector = FlowStatsCollector(target_interface_index=interface_index)
         start_t = time.time()
 
-        if not HAS_PYDIVERT:
+        if not HAS_SCAPY:
             with self.lock:
                 if self.active_scan_id == scan_id:
                     self.is_capturing = False
                     self.current_result = {
                         "status": "error",
                         "error_type": "ModuleMissing",
-                        "message": "pydivert library not found.",
+                        "message": "scapy library not found.",
                         "scan_id": scan_id
                     }
             return
 
-        # Build safe WinDivert kernel filter strictly excluding loopback and management ports
-        if not filter_str or filter_str.strip() == "true":
-            base_exclude = "!loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
-            if interface_index is not None and int(interface_index) > 0:
-                effective_filter = f"ifIdx == {int(interface_index)} && {base_exclude}"
-            else:
-                effective_filter = base_exclude
-        else:
-            effective_filter = filter_str
+        target_iface = resolve_scapy_interface(interface_name, interface_index)
+        if not target_iface:
+            err_msg = (
+                f"Interface resolution failed for adapter='{interface_name}' (idx={interface_index}). "
+                f"No matching Scapy/Npcap network adapter found. Aborting capture to prevent silent default interface substitution."
+            )
+            logger.error(f"[CAPTURE_ERROR] scan_id={scan_id} | {err_msg}")
+            with self.lock:
+                if self.active_scan_id == scan_id:
+                    self.is_capturing = False
+                    self.current_result = {
+                        "status": "error",
+                        "error_type": "InterfaceNotFound",
+                        "message": err_msg,
+                        "scan_id": scan_id
+                    }
+            return
+
+        iface_display = getattr(target_iface, "name", str(target_iface))
+        iface_desc = getattr(target_iface, "description", "")
+
+        # Standard BPF filter excluding Flask (5000) and IPC (50505) ports
+        bpf_filter = "not (tcp port 5000 or tcp port 50505)"
+        if filter_str and not filter_str.startswith("ifIdx") and "!loopback" not in filter_str:
+            bpf_filter = filter_str
 
         logger.info(
             f"[CAPTURE_START] scan_id={scan_id} | continuous={continuous} | adapter={interface_name} (idx={interface_index}) | "
-            f"duration={duration if not continuous else 'continuous'}s | min_pkts={min_packets} | filter='{effective_filter}'"
+            f"resolved_iface={iface_display} ({iface_desc}) | "
+            f"duration={duration if not continuous else 'continuous'}s | min_pkts={min_packets} | filter='{bpf_filter}'"
         )
 
-        try:
-            # Strictly enforce Flag.SNIFF (monitor-only, non-dropping)
-            with pydivert.WinDivert(effective_filter, flags=pydivert.Flag.SNIFF) as w:
-                while True:
-                    with self.lock:
-                        if self.stop_requested or not self.is_capturing or self.active_scan_id != scan_id:
-                            break
-
-                    if not continuous:
-                        elapsed = time.time() - start_t
-                        if elapsed >= duration:
-                            break
-                        time_left = max(0.05, duration - elapsed)
-                        timeout_val = min(time_left, 0.3)
+        def on_packet(packet):
+            pkt_dict = parse_scapy_packet(packet, target_if_idx=interface_index)
+            if not pkt_dict:
+                return
+            if continuous:
+                self.rolling_collector.add_packet(pkt_dict)
+            else:
+                collector.add_packet(pkt_dict)
+            self.total_packets_seen += 1
+            with self.lock:
+                if self.active_scan_id == scan_id:
+                    if continuous:
+                        self.current_result["packets_captured"] = self.rolling_collector.total_packets_seen
+                        self.current_result["last_packet_time"] = self.rolling_collector.last_packet_time
                     else:
-                        timeout_val = 0.1
+                        self.current_result["packets_captured"] = collector.packet_count
+                        self.current_result["last_packet_time"] = collector.last_packet_time
 
-                    try:
-                        packet = w.recv(timeout=timeout_val)
-                        if packet:
-                            pkt_dict = parse_windivert_packet(packet, target_if_idx=interface_index)
-                            if pkt_dict:
-                                if continuous:
-                                    self.rolling_collector.add_packet(pkt_dict)
-                                else:
-                                    collector.add_packet(pkt_dict)
-                                self.total_packets_seen += 1
-                                with self.lock:
-                                    if self.active_scan_id == scan_id:
-                                        if continuous:
-                                            self.current_result["packets_captured"] = self.rolling_collector.total_packets_seen
-                                            self.current_result["last_packet_time"] = self.rolling_collector.last_packet_time
-                                        else:
-                                            self.current_result["packets_captured"] = collector.packet_count
-                                            self.current_result["last_packet_time"] = collector.last_packet_time
-                    except TimeoutError:
-                        continue
-                    except Exception:
+        sniffer = None
+        try:
+            sniffer_kwargs = {
+                "iface": target_iface,
+                "filter": bpf_filter,
+                "prn": on_packet,
+                "store": False
+            }
+            sniffer = AsyncSniffer(**sniffer_kwargs)
+            sniffer.start()
+
+            while True:
+                with self.lock:
+                    if self.stop_requested or not self.is_capturing or self.active_scan_id != scan_id:
                         break
+
+                if not continuous:
+                    elapsed = time.time() - start_t
+                    if elapsed >= duration:
+                        break
+                    time_left = max(0.05, duration - elapsed)
+                    time.sleep(min(time_left, 0.1))
+                else:
+                    time.sleep(0.1)
+
         except PermissionError as pe:
+            import traceback
+            tb = traceback.format_exc()
             with self.lock:
                 if self.active_scan_id == scan_id:
                     self.is_capturing = False
                     self.current_result = {
                         "status": "error",
                         "error_type": "DriverPermissionError",
-                        "message": f"Kernel driver permission denied: {pe}",
+                        "message": f"Npcap driver permission denied on [{iface_display}]: {pe}",
+                        "traceback": tb,
                         "scan_id": scan_id
                     }
-            logger.error(f"[SCAN_ERROR] scan_id={scan_id} | PermissionError: {pe}")
+            logger.error(f"[SCAN_ERROR] scan_id={scan_id} | PermissionError on [{iface_display}]: {pe}\n{tb}")
             return
         except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
             with self.lock:
                 if self.active_scan_id == scan_id:
                     self.is_capturing = False
                     self.current_result = {
                         "status": "error",
-                        "error_type": "WinDivertError",
-                        "message": str(e),
+                        "error_type": type(e).__name__,
+                        "message": f"Capture error on [{iface_display}]: {e}",
+                        "traceback": tb,
                         "scan_id": scan_id
                     }
-            logger.error(f"[SCAN_ERROR] scan_id={scan_id} | WinDivertError: {e}")
+            logger.error(f"[SCAN_ERROR] scan_id={scan_id} | Exception on [{iface_display}]: {e}\n{tb}")
             return
+        finally:
+            if sniffer:
+                try:
+                    sniffer.stop()
+                except Exception:
+                    pass
 
         actual_duration = round(time.time() - start_t, 2)
 
@@ -566,9 +604,11 @@ class SecureIPCServer:
                 "service": "DDoSGuardSnifferService",
                 "service_version": SERVICE_VERSION,
                 "service_pid": os.getpid(),
-                "capabilities": ["loopback_exclusion", "iface_binding", "dynamic_filter"],
+                "capabilities": ["loopback_exclusion", "iface_binding", "dynamic_filter", "scapy_npcap"],
                 "is_admin": admin,
-                "windivert_available": HAS_PYDIVERT,
+                "scapy_available": HAS_SCAPY,
+                "npcap_available": True,
+                "windivert_available": HAS_SCAPY,
                 "total_packets": self.worker.total_packets_seen
             }
 
@@ -759,8 +799,8 @@ def main():
         print("=" * 65)
         admin = is_admin_user()
         print(f"  • Process Administrator Rights: {'Elevated (Admin)' if admin else 'Standard User'}")
-        print(f"  • WinDivert Engine Status     : {'Installed' if HAS_PYDIVERT else 'Missing'}")
-        print(f"  • Monitor-Only Enforcement    : Active (Flag.SNIFF)")
+        print(f"  • Scapy Engine Status         : {'Installed' if HAS_SCAPY else 'Missing'}")
+        print(f"  • Monitor-Only Enforcement    : Active (Passive Sniff)")
         print(f"  • IPC Local Port              : {args.port}")
 
         worker = CaptureWorker()

@@ -28,6 +28,7 @@ import api
 from api import app, current_scan_session, scan_session_lock, prepare_features, run_scan_worker
 from modules.monitoring.capture_engine import (
     FlowStatsCollector,
+    parse_scapy_packet,
     parse_windivert_packet,
     validate_flow_features,
     OFFICIAL_77_FEATURES
@@ -62,6 +63,16 @@ class TestLiveMonitoringFix(unittest.TestCase):
     def test_01_loopback_and_internal_ports_excluded(self):
         """1. Verify that loopback and local web/IPC traffic (5000, 50505) are rejected."""
         collector = FlowStatsCollector(target_interface_index=14)
+
+        # Scapy packet on loopback (127.0.0.1)
+        from scapy.all import IP, TCP
+        scapy_loopback = IP(src="127.0.0.1", dst="127.0.0.1") / TCP(sport=5000, dport=52345)
+        self.assertIsNone(parse_scapy_packet(scapy_loopback, target_if_idx=14))
+        self.assertIsNone(parse_windivert_packet(scapy_loopback, target_if_idx=14))
+
+        # Scapy packet on IPC port 50505
+        scapy_ipc = IP(src="192.168.1.10", dst="192.168.1.20") / TCP(sport=50505, dport=54321)
+        self.assertIsNone(parse_scapy_packet(scapy_ipc, target_if_idx=14))
 
         # Mock WinDivert packet on loopback
         mock_loopback = MagicMock()

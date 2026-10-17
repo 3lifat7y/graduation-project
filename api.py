@@ -18,19 +18,29 @@ if hasattr(sys.stderr, 'reconfigure'):
 import numpy as np
 import pandas as pd
 import joblib
+import traceback
 
 import datetime
 import secrets
 
-from modules.common.network_detector import auto_detect_primary_interface, check_capture_drivers
-from modules.monitoring.capture_engine import FlowStatsCollector, RollingFlowStatsCollector, capture_window_windivert, OFFICIAL_77_FEATURES, validate_flow_features
+from modules.common.network_detector import (
+    auto_detect_primary_interface, check_capture_drivers,
+    get_windows_network_adapters, get_active_routable_ip
+)
+from modules.monitoring.capture_engine import (
+    FlowStatsCollector, RollingFlowStatsCollector, capture_window_scapy,
+    capture_window_windivert, OFFICIAL_77_FEATURES, validate_flow_features,
+    resolve_scapy_interface, parse_scapy_packet
+)
 from modules.monitoring.ipc_client import DDoSGuardIPCClient
+from modules.monitoring.service import CaptureWorker
 from modules.monitoring.service_helper import get_service_status, request_service_start, request_service_restart, is_service_online, is_authenticated_service_online
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 ipc_client = DDoSGuardIPCClient()
+standalone_worker = CaptureWorker()
 
 
 def log_diag(category: str, message: str, **kwargs):
@@ -123,7 +133,7 @@ current_scan_session = {
 }
 
 # Live packet collector for current session
-live_collector = FlowStatsCollector()
+live_collector = RollingFlowStatsCollector(window_seconds=2.0)
 last_injected_flow = None
 
 
@@ -337,11 +347,7 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
             f"scan_id={scan_id} | adapter={adapter_name} | idx={adapter_index} | "
             f"status={adapter_status} | ip={primary_ip} | connected={is_conn} | duration={duration}s | continuous={continuous}"
         )
-        filter_str = (
-            f"ifIdx == {int(adapter_index)} && !loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
-            if (adapter_index is not None and int(adapter_index) > 0)
-            else "!loopback && (ip || ipv6) && (!tcp || (tcp.SrcPort != 5000 && tcp.DstPort != 5000 && tcp.SrcPort != 50505 && tcp.DstPort != 50505))"
-        )
+        filter_str = "not (tcp port 5000 or tcp port 50505)"
         log_diag("IPC_CMD", f"Sending START_SCAN to Windows Service on [{adapter_name}] (idx={adapter_index}, filter='{filter_str}', duration={duration}s, continuous={continuous}, scan_id={scan_id})")
         svc_start = ipc_client.start_scan(
             duration=duration,
@@ -368,11 +374,6 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
             return
 
         if continuous:
-            with scan_session_lock:
-                if current_scan_session.get("scan_id") == scan_id:
-                    current_scan_session["status"] = "monitoring"
-                    current_scan_session["message"] = f"Monitoring live traffic on [{adapter_name}] in real time..."
-
             last_log_t = 0.0
             while is_monitoring:
                 with scan_session_lock:
@@ -624,19 +625,16 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
             time.sleep(0.1)
 
     elif can_capture_physical:
-        # Local process has Administrator privilege: Run WinDivert directly
+        # Local process: Run Scapy capture directly on resolved physical adapter
         adapter_name = adapter_info.get("name", "Active Adapter")
         adapter_index = adapter_info.get("index")
-        log_diag("PHYSICAL_CAPTURE", f"Running direct WinDivert capture on interface {adapter_name} (idx={adapter_index})", scan_id=scan_id)
-        status, extracted_feats = capture_window_windivert(
-            interface_name=adapter_name,
-            interface_index=adapter_index,
-            duration=duration,
-            min_packets=min_packets
-        )
-        if status.get("status") == "error":
-            err_msg = status.get("message")
-            log_diag("CAPTURE_ERROR", f"Direct capture error: {err_msg}", scan_id=scan_id)
+        target_iface = resolve_scapy_interface(adapter_name, adapter_index)
+        if not target_iface:
+            err_msg = (
+                f"Interface resolution failed for adapter='{adapter_name}' (idx={adapter_index}). "
+                f"No matching Scapy/Npcap network adapter found. Aborting capture to prevent silent default interface substitution."
+            )
+            log_diag("INTERFACE_NOT_FOUND", err_msg, scan_id=scan_id)
             with scan_session_lock:
                 if current_scan_session.get("scan_id") == scan_id:
                     current_scan_session.update({
@@ -644,51 +642,320 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
                         "label": "Capture Error",
                         "confidence": 0.0,
                         "error": err_msg,
-                        "error_type": status.get("error_type"),
-                        "message": f"Packet capture failed: {err_msg}"
+                        "error_type": "InterfaceNotFound",
+                        "message": err_msg
                     })
                     is_monitoring = False
             return
-        elif status.get("status") == "no_traffic":
-            dur = status.get("duration", round(time.time() - start_t, 2))
-            log_diag("NO_TRAFFIC", f"Direct capture quiet: 0 pkts on [{adapter_name}]", scan_id=scan_id)
+
+        iface_display = getattr(target_iface, "name", str(target_iface))
+        iface_desc = getattr(target_iface, "description", "")
+        log_diag("PHYSICAL_CAPTURE", f"Running direct Scapy capture on [{iface_display}] ({iface_desc}, idx={adapter_index})", scan_id=scan_id)
+
+        filter_str = "not (tcp port 5000 or tcp port 50505)"
+        log_diag("STANDALONE_START", f"Starting in-process CaptureWorker on [{iface_display}] (idx={adapter_index}, filter='{filter_str}', duration={duration}s, continuous={continuous}, scan_id={scan_id})")
+        start_res = standalone_worker.start_window(
+            scan_id=scan_id,
+            duration=duration,
+            min_packets=min_packets,
+            filter_str=filter_str,
+            interface_name=adapter_name,
+            interface_index=adapter_index,
+            continuous=continuous
+        )
+        if start_res.get("status") == "error":
+            err_msg = start_res.get("message") or "Failed to start direct capture worker."
+            err_type = start_res.get("error_type", "CaptureError")
+            log_diag("CAPTURE_ERROR", err_msg, scan_id=scan_id)
             with scan_session_lock:
                 if current_scan_session.get("scan_id") == scan_id:
                     current_scan_session.update({
-                        "status": "no_traffic",
-                        "label": "No Traffic Detected",
-                        "is_attack": False,
-                        "prediction": None,
+                        "status": "error",
+                        "label": "Capture Error",
                         "confidence": 0.0,
-                        "packets_captured": 0,
-                        "min_required": min_packets,
-                        "duration": dur,
-                        "last_packet_time": None,
-                        "message": f"No traffic detected on [{adapter_name}]. 0 packets intercepted."
+                        "error": err_msg,
+                        "error_type": err_type,
+                        "message": err_msg
                     })
                     is_monitoring = False
             return
-        elif status.get("status") == "insufficient_traffic":
-            total_seen = status.get("packets_captured", 0)
-            dur = status.get("duration", round(time.time() - start_t, 2))
-            last_pkt_ts = status.get("last_packet_time")
-            log_diag("INSUFFICIENT_TRAFFIC", f"Direct capture quiet: {total_seen} pkts", scan_id=scan_id)
-            with scan_session_lock:
-                if current_scan_session.get("scan_id") == scan_id:
-                    current_scan_session.update({
-                        "status": "insufficient_traffic",
-                        "label": "Insufficient Data",
-                        "is_attack": False,
-                        "prediction": None,
-                        "confidence": 0.0,
-                        "packets_captured": total_seen,
-                        "min_required": min_packets,
-                        "duration": dur,
-                        "last_packet_time": last_pkt_ts,
-                        "message": f"Network was quiet: only {total_seen} packet(s) intercepted in {dur}s (min: {min_packets}). Insufficient data."
-                    })
-                    is_monitoring = False
+
+        if continuous:
+            last_log_t = 0.0
+            while is_monitoring:
+                with scan_session_lock:
+                    if current_scan_session.get("scan_id") != scan_id or current_scan_session.get("status") in ["stopped", "ready"]:
+                        log_diag("MONITORING_STOP", f"Direct monitoring {scan_id} stopped.", scan_id=scan_id)
+                        standalone_worker.stop_window()
+                        return
+
+                worker_status = standalone_worker.get_status(scan_id)
+                if not worker_status or worker_status.get("status") == "error":
+                    err_msg = worker_status.get("message") if worker_status else "Direct capture error."
+                    err_type = worker_status.get("error_type", "DriverPermissionError") if worker_status else "DriverPermissionError"
+                    log_diag("CAPTURE_ERROR", f"Monitoring {scan_id} error: {err_msg}", scan_id=scan_id)
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "error",
+                                "label": "Capture Error",
+                                "confidence": 0.0,
+                                "error": err_msg,
+                                "error_type": err_type,
+                                "message": err_msg
+                            })
+                            is_monitoring = False
+                    return
+
+                curr_st = worker_status.get("status")
+                total_pkts = worker_status.get("packets_captured", 0)
+                win_pkts = worker_status.get("window_packets", 0)
+                throughput = worker_status.get("throughput_kbps", 0.0)
+                proto_num = worker_status.get("protocol", 6)
+                last_pkt = worker_status.get("last_packet_time")
+                elapsed = round(time.time() - start_t, 1)
+
+                proto_map = {6: "TCP (6)", 17: "UDP (17)", 1: "ICMP (1)"}
+                proto_str = proto_map.get(int(proto_num), f"Proto {proto_num}")
+
+                now = time.time()
+                if now - last_log_t >= 1.5:
+                    log_diag("MONITORING_PROGRESS", f"Direct session {scan_id}: {total_pkts} total pkts, {win_pkts} in window ({throughput} KB/s, {elapsed}s)", scan_id=scan_id)
+                    last_log_t = now
+
+                if curr_st == "monitoring" and worker_status.get("features"):
+                    extracted_feats = worker_status.get("features")
+                    try:
+                        X = prepare_features(extracted_feats)
+                        prediction = int(model.predict(X)[0])
+                        label = CLASS_LABELS.get(prediction, "Unknown")
+                        is_attack = bool(prediction != BENIGN_IDX and str(label).lower() not in ["benign", "normal", "safe"])
+                        confidence = 100.0
+                        if hasattr(model, 'predict_proba'):
+                            try:
+                                proba = model.predict_proba(X)[0]
+                                confidence = round(float(proba[prediction]) * 100, 2)
+                            except Exception:
+                                pass
+
+                        flow_summary = {
+                            "packets_captured": total_pkts,
+                            "window_packets": win_pkts,
+                            "flow_duration_us": float(extracted_feats.get("Flow Duration", 0)),
+                            "flow_bytes_per_s": round(float(extracted_feats.get("Flow Bytes/s", 0)), 2),
+                            "flow_packets_per_s": round(float(extracted_feats.get("Flow Packets/s", 0)), 2),
+                            "protocol": int(proto_num),
+                            "avg_packet_size": round(float(extracted_feats.get("Avg Packet Size", 0)), 2)
+                        }
+
+                        with scan_session_lock:
+                            if current_scan_session.get("scan_id") == scan_id:
+                                current_scan_session.update({
+                                    "status": "monitoring",
+                                    "prediction": prediction,
+                                    "label": label,
+                                    "is_attack": is_attack,
+                                    "confidence": confidence,
+                                    "packets_captured": total_pkts,
+                                    "window_packets": win_pkts,
+                                    "throughput_kbps": throughput,
+                                    "protocol": proto_str,
+                                    "flow_summary": flow_summary,
+                                    "duration": elapsed,
+                                    "last_packet_time": last_pkt,
+                                    "message": "⚠️ Security Alert: Malicious DDoS Traffic Signature Detected!" if is_attack else "✅ Security Status: Normal / Benign Traffic Flow Verified",
+                                    "timestamp": time.strftime("%H:%M:%S")
+                                })
+                    except Exception as inf_err:
+                        log_diag("INFERENCE_ERROR", f"Model inference exception: {inf_err}", scan_id=scan_id)
+
+                elif curr_st == "no_traffic":
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "no_traffic",
+                                "label": "No Traffic Detected",
+                                "is_attack": False,
+                                "prediction": None,
+                                "confidence": 0.0,
+                                "packets_captured": total_pkts,
+                                "window_packets": 0,
+                                "throughput_kbps": 0.0,
+                                "protocol": "--",
+                                "duration": elapsed,
+                                "message": f"No traffic detected on [{adapter_name}]. 0 packets intercepted in active window."
+                            })
+
+                elif curr_st == "insufficient_traffic":
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "insufficient_traffic",
+                                "label": "Insufficient Data",
+                                "is_attack": False,
+                                "prediction": None,
+                                "confidence": 0.0,
+                                "packets_captured": total_pkts,
+                                "window_packets": win_pkts,
+                                "throughput_kbps": throughput,
+                                "protocol": proto_str,
+                                "duration": elapsed,
+                                "message": f"Network quiet: only {win_pkts} packet(s) in active window (min required: {min_packets})."
+                            })
+
+                time.sleep(0.25)
+            standalone_worker.stop_window()
             return
+        else:
+            poll_timeout = duration + 3.5
+            poll_start = time.time()
+            last_log_t = 0.0
+
+            while time.time() - poll_start < poll_timeout:
+                with scan_session_lock:
+                    if current_scan_session.get("scan_id") != scan_id or current_scan_session.get("status") != "scanning":
+                        log_diag("SCAN_CANCEL", f"Direct scan {scan_id} was cancelled by user.", scan_id=scan_id)
+                        standalone_worker.stop_window()
+                        return
+
+                worker_status = standalone_worker.get_status(scan_id)
+                curr_st = worker_status.get("status")
+
+                with scan_session_lock:
+                    if current_scan_session.get("scan_id") == scan_id:
+                        pkts = worker_status.get("packets_captured")
+                        if pkts is not None:
+                            current_scan_session["packets_captured"] = pkts
+                        if worker_status.get("last_packet_time"):
+                            current_scan_session["last_packet_time"] = worker_status["last_packet_time"]
+
+                now = time.time()
+                if now - last_log_t >= 0.8:
+                    log_diag("CAPTURE_PROGRESS", f"Direct scan {scan_id}: {worker_status.get('packets_captured', 0)} pkts ({now - start_t:.1f}s)", scan_id=scan_id)
+                    last_log_t = now
+
+                if curr_st == "captured":
+                    extracted_feats = worker_status.get("features", {})
+                    last_pkt_ts = worker_status.get("last_packet_time")
+                    total_seen = worker_status.get("packets_captured", 0)
+                    dur = worker_status.get("duration", round(time.time() - start_t, 2))
+                    log_diag("CAPTURE_COMPLETE", f"Direct scan {scan_id} successfully captured {total_seen} packets on [{adapter_name}] (last_pkt_time: {last_pkt_ts}).", scan_id=scan_id)
+
+                    try:
+                        inf_start = time.time()
+                        X = prepare_features(extracted_feats)
+                        prediction = int(model.predict(X)[0])
+                        label = CLASS_LABELS.get(prediction, "Unknown")
+                        is_attack = bool(prediction != BENIGN_IDX and str(label).lower() not in ["benign", "normal", "safe"])
+                        confidence = 100.0
+                        if hasattr(model, 'predict_proba'):
+                            try:
+                                proba = model.predict_proba(X)[0]
+                                confidence = round(float(proba[prediction]) * 100, 2)
+                            except Exception:
+                                pass
+                        inf_dur = round((time.time() - inf_start) * 1000, 1)
+                        log_diag("INFERENCE_COMPLETE", f"Direct scan {scan_id} prediction -> Label: '{label}' (is_attack={is_attack}), Confidence: {confidence}%, Packets: {total_seen}, Inference Latency: {inf_dur}ms", scan_id=scan_id)
+
+                        flow_summary = {
+                            "packets_captured": total_seen,
+                            "flow_duration_us": float(extracted_feats.get("Flow Duration", 0)),
+                            "flow_bytes_per_s": round(float(extracted_feats.get("Flow Bytes/s", 0)), 2),
+                            "flow_packets_per_s": round(float(extracted_feats.get("Flow Packets/s", 0)), 2),
+                            "protocol": int(extracted_feats.get("Protocol", 6)),
+                            "avg_packet_size": round(float(extracted_feats.get("Avg Packet Size", 0)), 2)
+                        }
+
+                        with scan_session_lock:
+                            if current_scan_session.get("scan_id") == scan_id:
+                                current_scan_session.update({
+                                    "status": "prediction_available",
+                                    "prediction": prediction,
+                                    "label": label,
+                                    "is_attack": is_attack,
+                                    "confidence": confidence,
+                                    "packets_captured": total_seen,
+                                    "duration": dur,
+                                    "last_packet_time": last_pkt_ts,
+                                    "flow_summary": flow_summary,
+                                    "message": f"Analysis complete: {label} ({confidence}%) over {total_seen} packets."
+                                })
+                                is_monitoring = False
+                        return
+                    except Exception as e:
+                        err_msg = str(e)
+                        log_diag("INFERENCE_ERROR", f"Model inference exception on direct scan {scan_id}: {err_msg}", scan_id=scan_id)
+                        with scan_session_lock:
+                            if current_scan_session.get("scan_id") == scan_id:
+                                current_scan_session.update({
+                                    "status": "error",
+                                    "label": "Model Inference Error",
+                                    "confidence": 0.0,
+                                    "error": err_msg,
+                                    "message": f"Inference error: {err_msg}"
+                                })
+                                is_monitoring = False
+                        return
+
+                elif curr_st == "no_traffic":
+                    dur = worker_status.get("duration", round(time.time() - start_t, 2))
+                    log_diag("NO_TRAFFIC", f"Direct capture quiet: 0 pkts on [{adapter_name}]", scan_id=scan_id)
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "no_traffic",
+                                "label": "No Traffic Detected",
+                                "is_attack": False,
+                                "prediction": None,
+                                "confidence": 0.0,
+                                "packets_captured": 0,
+                                "min_required": min_packets,
+                                "duration": dur,
+                                "last_packet_time": None,
+                                "message": f"No traffic detected on [{adapter_name}]. 0 packets intercepted."
+                            })
+                            is_monitoring = False
+                    return
+
+                elif curr_st == "insufficient_traffic":
+                    total_seen = worker_status.get("packets_captured", 0)
+                    dur = worker_status.get("duration", round(time.time() - start_t, 2))
+                    last_pkt_ts = worker_status.get("last_packet_time")
+                    log_diag("INSUFFICIENT_TRAFFIC", f"Direct capture quiet: {total_seen} pkts", scan_id=scan_id)
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "insufficient_traffic",
+                                "label": "Insufficient Data",
+                                "is_attack": False,
+                                "prediction": None,
+                                "confidence": 0.0,
+                                "packets_captured": total_seen,
+                                "min_required": min_packets,
+                                "duration": dur,
+                                "last_packet_time": last_pkt_ts,
+                                "message": f"Network was quiet: only {total_seen} packet(s) intercepted in {dur}s (min: {min_packets}). Insufficient data."
+                            })
+                            is_monitoring = False
+                    return
+
+                elif curr_st in ["error", "service_unavailable", "timeout"]:
+                    err_msg = worker_status.get("message") or "Direct capture error."
+                    log_diag("CAPTURE_ERROR", f"Scan {scan_id} failed: {err_msg}", scan_id=scan_id)
+                    with scan_session_lock:
+                        if current_scan_session.get("scan_id") == scan_id:
+                            current_scan_session.update({
+                                "status": "error",
+                                "label": "Capture Error",
+                                "confidence": 0.0,
+                                "error": err_msg,
+                                "error_type": worker_status.get("error_type", "CaptureError"),
+                                "message": f"Direct capture error: {err_msg}"
+                            })
+                            is_monitoring = False
+                    return
+
+                time.sleep(0.1)
     else:
         # Service offline & Local process non-elevated: Fail clearly with ZERO fake or synthetic fallbacks
         err_msg = (
@@ -848,7 +1115,7 @@ def get_adapter_info():
 
         if service_online:
             driver_status["can_capture_live"] = True
-            driver_status["active_engine"] = "WinDivert (Windows Service)"
+            driver_status["active_engine"] = "Npcap + Scapy (Windows Service)"
             driver_status["remediation_guide"] = "DDoS-Guard Windows Service is active and ready."
         elif svc_state.get("installed") and svc_state.get("status") == "STOPPED":
             driver_status["can_capture_live"] = False
@@ -908,12 +1175,17 @@ def start_scan():
         duration = 3.0
         min_packets = 3
         continuous = True
+        req_adapter_name = None
+        req_adapter_idx = None
+
         if request.is_json and request.get_json():
             req_data = request.get_json(silent=True) or {}
             duration = float(req_data.get("duration", 3.0))
             min_packets = int(req_data.get("min_packets", 3))
             if "continuous" in req_data:
                 continuous = bool(req_data["continuous"])
+            req_adapter_name = req_data.get("interface_name") or req_data.get("adapter") or req_data.get("interface")
+            req_adapter_idx = req_data.get("interface_index")
         elif request.args:
             if "continuous" in request.args:
                 continuous = request.args.get("continuous", "true").lower() in ("true", "1")
@@ -921,8 +1193,10 @@ def start_scan():
                 duration = float(request.args.get("duration", 3.0))
             if "min_packets" in request.args:
                 min_packets = int(request.args.get("min_packets", 3))
+            req_adapter_name = request.args.get("interface_name") or request.args.get("adapter") or request.args.get("interface")
+            req_adapter_idx = request.args.get("interface_index")
 
-        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: continuous={continuous}, duration={duration}s, min_packets={min_packets}")
+        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: adapter={req_adapter_name} (idx={req_adapter_idx}), continuous={continuous}, duration={duration}s, min_packets={min_packets}")
 
         # Wipe previous scan predictions, packet counts, and errors immediately
         current_scan_session.update({
@@ -937,141 +1211,68 @@ def start_scan():
             "error": None
         })
 
-        # 1. Query actual Windows SCM state before starting
-        svc_state = get_service_status(include_ipc=True)
-        log_diag("SCM_STATE", f"Status: {svc_state.get('status')} | Installed: {svc_state.get('installed')} | PID: {svc_state.get('pid')} | IPC: {svc_state.get('ipc_online')}")
-
-        if not svc_state.get("installed"):
-            not_inst_msg = (
-                "DDoS-Guard Windows Sniffer Service is not installed. "
-                "Run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Install' as Administrator."
-            )
-            log_diag("SERVICE_NOT_INSTALLED", not_inst_msg)
-            current_scan_session.update({
-                "status": "error",
-                "error_type": "SERVICE_NOT_INSTALLED",
-                "error": not_inst_msg,
-                "message": not_inst_msg,
-                "service_state": svc_state
-            })
-            return jsonify(current_scan_session), 200
-
-        # Check if service is currently in START_PENDING (wait briefly for transition)
-        if svc_state.get("status") == "START_PENDING":
-            log_diag("SCM_STATE", "Service is currently START_PENDING. Waiting up to 4s for startup to complete...")
-            pending_wait_start = time.time()
-            while time.time() - pending_wait_start < 4.0:
-                time.sleep(0.4)
-                svc_state = get_service_status(include_ipc=True)
-                if svc_state.get("running") and svc_state.get("ipc_online"):
-                    break
-
-        # If service is stopped, request scoped administrator elevation through standard Windows UAC prompt
-        if not svc_state.get("ipc_online") and (svc_state.get("status") in ["STOPPED", "STOP_PENDING"] or not svc_state.get("running")):
-            log_diag("UAC_ELEVATION", "Service is STOPPED. Requesting scoped Administrator elevation via Windows UAC dialog...")
-            uac_res = request_service_start(timeout=10.0)
-            status_code = uac_res.get("status")
-
-            if status_code == "uac_cancelled":
-                cancel_msg = uac_res.get("message", "Administrator approval was cancelled by the user.")
-                log_diag("UAC_CANCELLED", f"User declined UAC prompt (Win32 Error 1223): {cancel_msg}")
-                current_scan_session.update({
-                    "status": "uac_cancelled",
-                    "error_type": "UAC_CANCELLED",
-                    "error": cancel_msg,
-                    "message": cancel_msg,
-                    "prediction": None,
-                    "label": None,
-                    "service_state": get_service_status(include_ipc=True)
-                })
-                return jsonify(current_scan_session), 200
-
-            elif status_code == "start_failed":
-                fail_msg = uac_res.get("message", "Elevated service startup failed.")
-                log_diag("UAC_FAILED", f"Service start failure: {fail_msg}")
-                current_scan_session.update({
-                    "status": "error",
-                    "error_type": "SERVICE_START_FAILED",
-                    "error": fail_msg,
-                    "message": fail_msg,
-                    "prediction": None,
-                    "label": None,
-                    "log_tail": uac_res.get("log_tail", []),
-                    "service_state": get_service_status(include_ipc=True)
-                })
-                return jsonify(current_scan_session), 200
-
-            log_diag("UAC_APPROVED", "User approved UAC prompt; Windows Service confirmed RUNNING and authenticated IPC online.")
-            svc_state = get_service_status(include_ipc=True)
-        else:
-            log_diag("SCM_STATE", f"Service is already RUNNING (PID: {svc_state.get('pid')}, IPC: {svc_state.get('ipc_online')}). Bypassing UAC elevation prompt.")
-
-        # Check if the running service is outdated (e.g. started before isolation patches)
-        v_info = ipc_client.get_service_version_info()
-        if v_info.get("online") and not v_info.get("is_updated"):
-            log_diag(
-                "SERVICE_OUTDATED",
-                f"Sniffer service (PID: {v_info.get('pid')}) is running outdated build '{v_info.get('version')}'. "
-                f"Requesting elevated service restart to load network isolation..."
-            )
-            restart_res = request_service_restart(timeout=10.0)
-            if restart_res.get("status") == "started":
-                log_diag("SERVICE_RESTARTED", "Windows Service successfully restarted and updated build verified.")
-                svc_state = get_service_status(include_ipc=True)
-            elif restart_res.get("status") == "uac_cancelled":
-                cancel_msg = "Administrator approval was cancelled. An elevated restart of the Windows Service is required to load network isolation fixes."
-                log_diag("UAC_CANCELLED", cancel_msg)
-                current_scan_session.update({
-                    "status": "uac_cancelled",
-                    "label": "Capture Error",
-                    "confidence": 0.0,
-                    "error_type": "UAC_CANCELLED",
-                    "error": cancel_msg,
-                    "message": cancel_msg,
-                    "prediction": None,
-                    "label": None,
-                    "service_state": get_service_status(include_ipc=True)
-                })
-                return jsonify(current_scan_session), 200
-            else:
-                outdated_msg = (
-                    f"DDoS-Guard Windows Service is running an outdated in-memory build (PID: {v_info.get('pid')}, version: {v_info.get('version')}). "
-                    f"An elevated service restart is required to load loopback and network isolation fixes. "
-                    f"Please run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Restart' as Administrator."
-                )
-                log_diag("SERVICE_OUTDATED_ERROR", outdated_msg)
-                current_scan_session.update({
-                    "status": "error",
-                    "label": "Capture Error",
-                    "confidence": 0.0,
-                    "error_type": "OUTDATED_SERVICE",
-                    "error": outdated_msg,
-                    "message": outdated_msg,
-                    "prediction": None,
-                    "label": None,
-                    "service_state": svc_state
-                })
-                return jsonify(current_scan_session), 200
-
-        # 2. Strict Authenticated IPC Health Verification before dispatching scan
-        auth_ok, auth_detail = ipc_client.verify_authenticated_health(require_updated_version=True)
-        if not auth_ok:
-            log_diag("IPC_AUTH_ERROR", f"Authenticated IPC health check failed: {auth_detail}")
-            current_scan_session.update({
-                "status": "error",
-                "label": "Capture Error",
-                "confidence": 0.0,
-                "error_type": "IPC_AUTH_FAILED",
-                "error": auth_detail,
-                "message": f"Service is running but authenticated IPC health check failed: {auth_detail}",
-                "prediction": None,
-                "label": None,
-                "service_state": svc_state
-            })
-            return jsonify(current_scan_session), 200
-
+        # Resolve requested network adapter or auto-detect primary
         try:
-            adapter_info, driver_info = auto_detect_primary_interface()
+            if req_adapter_name or req_adapter_idx is not None:
+                adapters = get_windows_network_adapters()
+                matched_ad = None
+                for ad in adapters:
+                    if req_adapter_idx is not None and int(ad.get("index", -1)) == int(req_adapter_idx):
+                        matched_ad = dict(ad)
+                        break
+                    if req_adapter_name and str(ad.get("name", "")).strip().lower() == str(req_adapter_name).strip().lower():
+                        matched_ad = dict(ad)
+                        break
+                    if req_adapter_name and str(req_adapter_name).strip().lower() in str(ad.get("description", "")).strip().lower():
+                        matched_ad = dict(ad)
+                        break
+
+                if matched_ad:
+                    adapter_info = matched_ad
+                    active_ip = get_active_routable_ip()
+                    adapter_info["primary_ip"] = active_ip or (adapter_info["ips"][0] if adapter_info.get("ips") else None)
+                    adapter_info["is_connected"] = bool(adapter_info.get("primary_ip"))
+                    driver_info = check_capture_drivers()
+                    adapter_info["driver_status"] = driver_info
+                else:
+                    scapy_dev = resolve_scapy_interface(req_adapter_name, req_adapter_idx)
+                    if scapy_dev:
+                        scapy_name = getattr(scapy_dev, "name", req_adapter_name)
+                        scapy_desc = getattr(scapy_dev, "description", "")
+                        scapy_idx = getattr(scapy_dev, "index", req_adapter_idx)
+                        scapy_ip = getattr(scapy_dev, "ip", None)
+                        is_wifi = any(k in str(scapy_name).lower() or k in str(scapy_desc).lower() for k in ["wi-fi", "wireless", "802.11"])
+                        adapter_info = {
+                            "name": scapy_name,
+                            "description": scapy_desc,
+                            "index": scapy_idx,
+                            "status": "Up",
+                            "type": "Wi-Fi" if is_wifi else "Ethernet",
+                            "ips": [scapy_ip] if scapy_ip else [],
+                            "primary_ip": scapy_ip,
+                            "is_connected": bool(scapy_ip),
+                            "is_virtual": False
+                        }
+                        driver_info = check_capture_drivers()
+                        adapter_info["driver_status"] = driver_info
+                    else:
+                        err_msg = (
+                            f"Requested network adapter '{req_adapter_name}' (idx={req_adapter_idx}) "
+                            f"could not be resolved. Aborting capture to prevent silent default interface substitution."
+                        )
+                        log_diag("ADAPTER_NOT_FOUND", err_msg)
+                        current_scan_session.update({
+                            "status": "error",
+                            "label": "Capture Error",
+                            "confidence": 0.0,
+                            "error_type": "InterfaceNotFound",
+                            "error": err_msg,
+                            "message": err_msg
+                        })
+                        return jsonify(current_scan_session), 200
+            else:
+                adapter_info, driver_info = auto_detect_primary_interface()
+
             adapter_name = adapter_info.get("name", "Unknown")
             adapter_idx = adapter_info.get("index")
             adapter_status = adapter_info.get("status", "Unknown")
@@ -1092,10 +1293,145 @@ def start_scan():
                 "confidence": 0.0,
                 "error_type": "ADAPTER_OFFLINE",
                 "error": err_msg,
-                "message": f"Network adapter error: {err_msg}",
-                "service_state": svc_state
+                "message": f"Network adapter error: {err_msg}"
             })
             return jsonify(current_scan_session), 200
+
+        # 1. Query actual Windows SCM state before starting
+        svc_state = get_service_status(include_ipc=True)
+        log_diag("SCM_STATE", f"Status: {svc_state.get('status')} | Installed: {svc_state.get('installed')} | PID: {svc_state.get('pid')} | IPC: {svc_state.get('ipc_online')}")
+
+        if not svc_state.get("installed"):
+            if not driver_info.get("can_capture_live"):
+                not_inst_msg = (
+                    "DDoS-Guard Windows Sniffer Service is not installed. "
+                    "Run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Install' as Administrator."
+                )
+                log_diag("SERVICE_NOT_INSTALLED", not_inst_msg)
+                current_scan_session.update({
+                    "status": "error",
+                    "error_type": "SERVICE_NOT_INSTALLED",
+                    "error": not_inst_msg,
+                    "message": not_inst_msg,
+                    "service_state": svc_state
+                })
+                return jsonify(current_scan_session), 200
+            else:
+                log_diag("STANDALONE_CAPTURE", f"Windows Service not installed. Running direct Scapy capture on [{adapter_name}] (idx={adapter_idx}).")
+        else:
+            # Check if service is currently in START_PENDING (wait briefly for transition)
+            if svc_state.get("status") == "START_PENDING":
+                log_diag("SCM_STATE", "Service is currently START_PENDING. Waiting up to 4s for startup to complete...")
+                pending_wait_start = time.time()
+                while time.time() - pending_wait_start < 4.0:
+                    time.sleep(0.4)
+                    svc_state = get_service_status(include_ipc=True)
+                    if svc_state.get("running") and svc_state.get("ipc_online"):
+                        break
+
+            # If service is stopped, request scoped administrator elevation through standard Windows UAC prompt
+            if not svc_state.get("ipc_online") and (svc_state.get("status") in ["STOPPED", "STOP_PENDING"] or not svc_state.get("running")):
+                log_diag("UAC_ELEVATION", "Service is STOPPED. Requesting scoped Administrator elevation via Windows UAC dialog...")
+                uac_res = request_service_start(timeout=10.0)
+                status_code = uac_res.get("status")
+
+                if status_code == "uac_cancelled":
+                    cancel_msg = uac_res.get("message", "Administrator approval was cancelled by the user.")
+                    log_diag("UAC_CANCELLED", f"User declined UAC prompt (Win32 Error 1223): {cancel_msg}")
+                    current_scan_session.update({
+                        "status": "uac_cancelled",
+                        "error_type": "UAC_CANCELLED",
+                        "error": cancel_msg,
+                        "message": cancel_msg,
+                        "prediction": None,
+                        "label": None,
+                        "service_state": get_service_status(include_ipc=True)
+                    })
+                    return jsonify(current_scan_session), 200
+
+                elif status_code == "start_failed":
+                    fail_msg = uac_res.get("message", "Elevated service startup failed.")
+                    log_diag("UAC_FAILED", f"Service start failure: {fail_msg}")
+                    current_scan_session.update({
+                        "status": "error",
+                        "error_type": "SERVICE_START_FAILED",
+                        "error": fail_msg,
+                        "message": fail_msg,
+                        "prediction": None,
+                        "label": None,
+                        "log_tail": uac_res.get("log_tail", []),
+                        "service_state": get_service_status(include_ipc=True)
+                    })
+                    return jsonify(current_scan_session), 200
+
+                log_diag("UAC_APPROVED", "User approved UAC prompt; Windows Service confirmed RUNNING and authenticated IPC online.")
+                svc_state = get_service_status(include_ipc=True)
+            else:
+                log_diag("SCM_STATE", f"Service is already RUNNING (PID: {svc_state.get('pid')}, IPC: {svc_state.get('ipc_online')}). Bypassing UAC elevation prompt.")
+
+            # Check if the running service is outdated (e.g. started before isolation patches)
+            v_info = ipc_client.get_service_version_info()
+            if v_info.get("online") and not v_info.get("is_updated"):
+                log_diag(
+                    "SERVICE_OUTDATED",
+                    f"Sniffer service (PID: {v_info.get('pid')}) is running outdated build '{v_info.get('version')}'. "
+                    f"Requesting elevated service restart to load network isolation..."
+                )
+                restart_res = request_service_restart(timeout=10.0)
+                if restart_res.get("status") == "started":
+                    log_diag("SERVICE_RESTARTED", "Windows Service successfully restarted and updated build verified.")
+                    svc_state = get_service_status(include_ipc=True)
+                elif restart_res.get("status") == "uac_cancelled":
+                    cancel_msg = "Administrator approval was cancelled. An elevated restart of the Windows Service is required to load network isolation fixes."
+                    log_diag("UAC_CANCELLED", cancel_msg)
+                    current_scan_session.update({
+                        "status": "uac_cancelled",
+                        "label": "Capture Error",
+                        "confidence": 0.0,
+                        "error_type": "UAC_CANCELLED",
+                        "error": cancel_msg,
+                        "message": cancel_msg,
+                        "prediction": None,
+                        "label": None,
+                        "service_state": get_service_status(include_ipc=True)
+                    })
+                    return jsonify(current_scan_session), 200
+                else:
+                    outdated_msg = (
+                        f"DDoS-Guard Windows Service is running an outdated in-memory build (PID: {v_info.get('pid')}, version: {v_info.get('version')}). "
+                        f"An elevated service restart is required to load loopback and network isolation fixes. "
+                        f"Please run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Restart' as Administrator."
+                    )
+                    log_diag("SERVICE_OUTDATED_ERROR", outdated_msg)
+                    current_scan_session.update({
+                        "status": "error",
+                        "label": "Capture Error",
+                        "confidence": 0.0,
+                        "error_type": "OUTDATED_SERVICE",
+                        "error": outdated_msg,
+                        "message": outdated_msg,
+                        "prediction": None,
+                        "label": None,
+                        "service_state": svc_state
+                    })
+                    return jsonify(current_scan_session), 200
+
+            # 2. Strict Authenticated IPC Health Verification before dispatching scan
+            auth_ok, auth_detail = ipc_client.verify_authenticated_health(require_updated_version=True)
+            if not auth_ok:
+                log_diag("IPC_AUTH_ERROR", f"Authenticated IPC health check failed: {auth_detail}")
+                current_scan_session.update({
+                    "status": "error",
+                    "label": "Capture Error",
+                    "confidence": 0.0,
+                    "error_type": "IPC_AUTH_FAILED",
+                    "error": auth_detail,
+                    "message": f"Service is running but authenticated IPC health check failed: {auth_detail}",
+                    "prediction": None,
+                    "label": None,
+                    "service_state": svc_state
+                })
+                return jsonify(current_scan_session), 200
 
         # Generate unique scan ID with random entropy to prevent any collision or stale state
         scan_id = f"scan_{int(time.time() * 1000)}_{secrets.token_hex(3)}"
@@ -1116,7 +1452,7 @@ def start_scan():
             "interface": adapter_info,
             "driver_status": driver_info,
             "service_state": svc_state,
-            "is_live_capture": bool(svc_state.get("running") and svc_state.get("ipc_online")),
+            "is_live_capture": bool(svc_state.get("running") and svc_state.get("ipc_online")) or bool(driver_info.get("can_capture_live")),
             "prediction": None,
             "label": None,
             "is_attack": False,
@@ -1154,6 +1490,10 @@ def stop_scan():
     try:
         if ipc_client.is_service_running():
             ipc_client.stop_scan()
+    except Exception:
+        pass
+    try:
+        standalone_worker.stop_window()
     except Exception:
         pass
     with scan_session_lock:

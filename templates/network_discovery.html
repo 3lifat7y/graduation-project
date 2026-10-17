@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Network Security System: Autonomous Local Network Discovery & Hardware Device Asset Inventory with ARP, ICMP, and OUI Manufacturer Detection." />
   <meta name="theme-color" content="#F7F5EF" />
+
+  <!-- Anti-Flash Synchronous Theme Initializer -->
+  <script>
+    (function() {
+      try {
+        var savedTheme = localStorage.getItem('nss_theme');
+        var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var activeTheme = savedTheme ? savedTheme : (systemDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', activeTheme);
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) metaTheme.setAttribute('content', activeTheme === 'dark' ? '#101411' : '#F7F5EF');
+      } catch (e) {}
+    })();
+  </script>
   <title>Network Security System — Local Network Discovery & Asset Inventory</title>
 
   <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
@@ -19,20 +33,6 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="app-layout network-discovery-page">
-  <!-- Mobile Top Bar (< 992px) -->
-  <header class="mobile-top-bar" id="mobileTopBar">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="appSidebar">
-      <i class="fas fa-bars"></i>
-    </button>
-    <a href="/" class="mobile-brand">
-      <div class="brand-shield"><i class="fas fa-shield-halved"></i></div>
-      <span class="brand-text">Network Security System</span>
-    </a>
-    <div class="system-health-pill compact" id="systemHealthPillMobile" title="Adapter Status">
-      <span class="health-dot running" id="ndHealthDotMobile"></span>
-    </div>
-  </header>
-
   <!-- Sidebar Backdrop (for Mobile Drawer) -->
   <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
@@ -91,6 +91,33 @@
 
   <!-- Main Content Wrapper -->
   <div class="main-content-wrapper" id="mainContentWrapper">
+    <!-- Global Shared Top Navbar -->
+    <header class="global-top-navbar" id="globalTopNavbar" role="banner">
+      <div class="top-nav-left">
+        <button class="top-nav-sidebar-toggle" id="navbarSidebarToggleBtn" type="button" aria-label="Toggle navigation sidebar" title="Toggle Sidebar">
+          <i class="fas fa-bars"></i>
+        </button>
+        <a href="/" class="top-nav-brand" aria-label="Network Security System Home">
+          <div class="top-nav-shield"><i class="fas fa-shield-halved"></i></div>
+          <span class="top-nav-title">Network Security System</span>
+        </a>
+      </div>
+
+
+
+      <div class="top-nav-right">
+        <div class="top-nav-health-pill" id="topNavHealthPill" title="Local Network Adapter Status">
+          <span class="health-dot running" id="topNavHealthDot"></span>
+          <span class="health-label" id="topNavHealthLabel">Adapter: Detecting...</span>
+        </div>
+        
+        <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Toggle Dark and Light Mode" title="Toggle Theme">
+          <i class="fas fa-moon" id="themeToggleIcon"></i>
+          <span class="theme-toggle-text" id="themeToggleText">Dark Mode</span>
+        </button>
+      </div>
+    </header>
+
     <!-- Dedicated Tool Breadcrumb Bar -->
     <div class="dedicated-tool-bar">
       <div class="breadcrumb-trail">
@@ -246,7 +273,10 @@
             <div class="nd-progress-fill" id="ndProgressBar" style="width: 0%;"></div>
           </div>
           <div class="nd-progress-labels">
-            <span class="nd-progress-status" id="ndProgressStatus">Probing local subnet addresses...</span>
+            <div class="nd-progress-status-wrap">
+              <span class="nd-scan-radar-dot" id="ndScanRadarDot" aria-hidden="true"></span>
+              <span class="nd-progress-status" id="ndProgressStatus">Probing local subnet addresses...</span>
+            </div>
             <span class="nd-progress-pct" id="ndProgressPct">0%</span>
           </div>
         </div>
@@ -270,31 +300,55 @@
             <button type="button" class="nd-filter-tab" data-filter="iot">IoT / Printers (<span id="countIot">0</span>)</button>
           </div>
 
-          <div class="nd-search-wrap">
-            <i class="fas fa-search nd-search-icon"></i>
-            <input type="text" id="ndSearchInput" class="nd-search-input" placeholder="Search IP, Hostname, MAC, Vendor, or Category..." />
+          <div class="nd-toolbar-right">
+            <div class="nd-search-wrap">
+              <i class="fas fa-search nd-search-icon"></i>
+              <input type="text" id="ndSearchInput" class="nd-search-input" placeholder="Search IP, Hostname, MAC, Vendor, or Category..." />
+            </div>
+
+            <!-- Responsive View Switcher: Cards (Default) vs Compact Table -->
+            <div class="nd-view-switcher" role="group" aria-label="Device layout mode">
+              <button type="button" class="nd-view-btn active" id="ndViewCardsBtn" data-view="cards" title="Clean & Responsive Cards View">
+                <i class="fas fa-grip"></i>
+                <span class="view-btn-text">Cards</span>
+              </button>
+              <button type="button" class="nd-view-btn" id="ndViewTableBtn" data-view="table" title="Compact Table View">
+                <i class="fas fa-table-list"></i>
+                <span class="view-btn-text">Table</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Responsive Table Container -->
-        <div class="nd-table-wrapper">
+        <!-- 1. Responsive Device Cards Grid (Default View) -->
+        <div class="nd-cards-container" id="ndCardsContainer">
+          <div class="nd-device-cards-grid" id="ndCardsGrid">
+            <!-- Standby Empty State by Default -->
+            <div class="nd-empty-state">
+              <div class="nd-empty-icon"><i class="fas fa-satellite-dish"></i></div>
+              <h3 class="nd-empty-title">Ready for Network Reconnaissance</h3>
+              <p class="nd-empty-desc">Click 'Start Discovery' above to sweep your local subnet and populate the device asset inventory.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Compact Table Container (Secondary View) -->
+        <div class="nd-table-wrapper" id="ndTableWrapper" style="display: none;">
           <table class="nd-device-table" id="ndDeviceTable">
             <thead>
               <tr>
-                <th data-sort="hostname">Device Name / Hostname <i class="fas fa-sort"></i></th>
-                <th data-sort="ip">IPv4 Address <i class="fas fa-sort"></i></th>
-                <th data-sort="mac">MAC Address <i class="fas fa-sort"></i></th>
-                <th data-sort="vendor">Manufacturer (OUI) <i class="fas fa-sort"></i></th>
-                <th data-sort="type">Device Category <i class="fas fa-sort"></i></th>
-                <th data-sort="status">Status <i class="fas fa-sort"></i></th>
-                <th>Discovery Method</th>
-                <th>Action</th>
+                <th data-sort="hostname" class="th-hostname">Device / Hostname <i class="fas fa-sort"></i></th>
+                <th data-sort="ip" class="th-ip">IPv4 Address <i class="fas fa-sort"></i></th>
+                <th data-sort="mac" class="th-mac">MAC Address <i class="fas fa-sort"></i></th>
+                <th data-sort="status" class="th-status">Status <i class="fas fa-sort"></i></th>
+                <th class="th-ports">Open Ports</th>
+                <th class="th-actions">Action</th>
               </tr>
             </thead>
             <tbody id="ndTableBody">
               <!-- Standby Empty State by Default -->
               <tr class="nd-empty-row">
-                <td colspan="8">
+                <td colspan="6">
                   <div class="nd-empty-state">
                     <div class="nd-empty-icon"><i class="fas fa-satellite-dish"></i></div>
                     <h3 class="nd-empty-title">Ready for Network Reconnaissance</h3>
@@ -367,66 +421,124 @@
       </div>
 
       <div class="nd-modal-body">
-        <div class="nd-modal-meta-grid">
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-desktop"></i> Hostname</span>
-            <div class="field-val-wrap">
-              <span class="field-val" id="modalHostname">Unknown</span>
-              <button type="button" class="nd-copy-btn" data-copy="modalHostname" title="Copy Hostname"><i class="fas fa-copy"></i></button>
+        <!-- 1. General Information Section -->
+        <div class="nd-modal-section">
+          <h4 class="nd-section-heading">
+            <i class="fas fa-circle-info"></i> General Information
+          </h4>
+          <div class="nd-modal-meta-grid">
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-desktop"></i> Hostname</span>
+              <div class="field-val-wrap">
+                <span class="field-val" id="modalHostname">Unknown</span>
+                <button type="button" class="nd-copy-btn" data-copy="modalHostname" title="Copy Hostname"><i class="fas fa-copy"></i></button>
+              </div>
             </div>
-          </div>
 
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-network-wired"></i> IPv4 Address</span>
-            <div class="field-val-wrap">
-              <span class="field-val highlight" id="modalIp">192.168.1.1</span>
-              <button type="button" class="nd-copy-btn" data-copy="modalIp" title="Copy IP"><i class="fas fa-copy"></i></button>
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-tags"></i> Inferred Category</span>
+              <div class="field-val" id="modalCategory">Unknown Device</div>
             </div>
-          </div>
 
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-fingerprint"></i> Hardware MAC Address</span>
-            <div class="field-val-wrap">
-              <span class="field-val mono" id="modalMac">00:00:00:00:00:00</span>
-              <button type="button" class="nd-copy-btn" data-copy="modalMac" title="Copy MAC"><i class="fas fa-copy"></i></button>
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-network-wired"></i> Device Role</span>
+              <div class="field-val" id="modalRole">Network Endpoint</div>
             </div>
-          </div>
 
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-industry"></i> Hardware Manufacturer (OUI)</span>
-            <div class="field-val" id="modalVendor">Unknown Vendor</div>
-          </div>
-
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-tags"></i> Inferred Category</span>
-            <div class="field-val" id="modalCategory">Unknown Device</div>
-          </div>
-
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-circle-info"></i> Inference Basis</span>
-            <div class="field-val text-muted" id="modalBasis">N/A</div>
-          </div>
-
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-clock"></i> Last Discovered</span>
-            <div class="field-val" id="modalLastSeen">Just now</div>
-          </div>
-
-          <div class="nd-modal-field">
-            <span class="field-label"><i class="fas fa-satellite-dish"></i> Discovery Techniques</span>
-            <div class="field-badges" id="modalMethods">
-              <span class="nd-method-chip">ARP</span>
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-signal"></i> Device Status</span>
+              <div class="field-val" id="modalStatusWrap">
+                <span class="nd-status-pill online" id="modalStatusPill">
+                  <span class="status-pulse-dot"></span>
+                  <span id="modalStatusText">Online</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Quick Actions Row -->
-        <div class="nd-modal-actions">
-          <a href="#" id="modalPortScanLink" class="btn-primary" target="_blank">
-            <i class="fas fa-bullseye"></i>
-            <span>Inspect Ports on this Host</span>
-          </a>
+        <!-- 2. Network Information Section -->
+        <div class="nd-modal-section">
+          <h4 class="nd-section-heading">
+            <i class="fas fa-network-wired"></i> Network Information
+          </h4>
+          <div class="nd-modal-meta-grid">
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-location-dot"></i> IPv4 Address</span>
+              <div class="field-val-wrap">
+                <span class="field-val highlight" id="modalIp">192.168.1.1</span>
+                <button type="button" class="nd-copy-btn" data-copy="modalIp" title="Copy IP"><i class="fas fa-copy"></i></button>
+              </div>
+            </div>
+
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-fingerprint"></i> Hardware MAC Address</span>
+              <div class="field-val-wrap">
+                <span class="field-val mono" id="modalMac">00:00:00:00:00:00</span>
+                <button type="button" class="nd-copy-btn" data-copy="modalMac" title="Copy MAC"><i class="fas fa-copy"></i></button>
+              </div>
+            </div>
+
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-industry"></i> Hardware Manufacturer (OUI)</span>
+              <div class="field-val" id="modalVendor">Unknown Vendor</div>
+            </div>
+
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-satellite-dish"></i> Discovery Methods</span>
+              <div class="field-badges" id="modalMethods">
+                <span class="nd-method-chip">ARP</span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- 3. Open Ports Section -->
+        <div class="nd-modal-section">
+          <h4 class="nd-section-heading">
+            <i class="fas fa-shield-halved"></i> Open Ports
+          </h4>
+          <div class="nd-ports-panel" id="modalPortsPanel">
+            <div class="nd-ports-summary-row">
+              <span class="nd-ports-status-badge" id="modalPortsStatusBadge">
+                <i class="fas fa-door-open"></i> <span id="modalPortsCountText">Not scanned</span>
+              </span>
+              <span class="nd-ports-helper-text" id="modalPortsHelperText">Run a targeted port scan on this host to enumerate active services.</span>
+            </div>
+            <div class="nd-ports-list" id="modalPortsList" style="display: none;">
+              <!-- Dynamically populated if open_ports array is present -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Scan Details Section -->
+        <div class="nd-modal-section">
+          <h4 class="nd-section-heading">
+            <i class="fas fa-stopwatch"></i> Scan Details
+          </h4>
+          <div class="nd-modal-meta-grid">
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-clock"></i> Last Discovered</span>
+              <div class="field-val" id="modalLastSeen">Just now</div>
+            </div>
+
+            <div class="nd-modal-field">
+              <span class="field-label"><i class="fas fa-circle-question"></i> Inference Basis</span>
+              <div class="field-val text-muted" id="modalBasis">N/A</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Actions Footer -->
+      <div class="nd-modal-footer">
+        <button type="button" class="nd-btn nd-btn-secondary" id="modalFooterCloseBtn">
+          <i class="fas fa-xmark"></i> Close
+        </button>
+        <a href="#" id="modalPortScanLink" class="nd-btn nd-btn-primary" target="_blank">
+          <i class="fas fa-bullseye"></i>
+          <span>Inspect Ports in Port Scanner</span>
+        </a>
       </div>
     </div>
   </div>

@@ -248,6 +248,91 @@ class TestNetworkDiscoveryApi(unittest.TestCase):
         data = json.loads(resp.get_data(as_text=True))
         self.assertEqual(data["status"], "not_found")
 
+    def test_network_discovery_ui_cards_and_modal_structure(self):
+        """Verify HTML template contains cards grid, view switcher, and 4 modal sections."""
+        resp = self.app.get('/network-discovery')
+        self.assertEqual(resp.status_code, 200)
+        html = resp.get_data(as_text=True)
+
+        # 1. View Switcher & Responsive Cards
+        self.assertIn('id="ndViewCardsBtn"', html)
+        self.assertIn('id="ndViewTableBtn"', html)
+        self.assertIn('id="ndCardsContainer"', html)
+        self.assertIn('id="ndCardsGrid"', html)
+        self.assertIn('id="ndTableWrapper"', html)
+        self.assertIn('id="ndDeviceTable"', html)
+
+        # 2. Four Structured Modal Sections
+        self.assertIn("General Information", html)
+        self.assertIn("Network Information", html)
+        self.assertIn("Open Ports", html)
+        self.assertIn("Scan Details", html)
+
+        # 3. Modal Controls & Fields
+        self.assertIn('id="modalCloseBtn"', html)
+        self.assertIn('id="modalFooterCloseBtn"', html)
+        self.assertIn('id="modalPortScanLink"', html)
+        self.assertIn('id="modalHostname"', html)
+        self.assertIn('id="modalIp"', html)
+        self.assertIn('id="modalMac"', html)
+        self.assertIn('id="modalVendor"', html)
+        self.assertIn('id="modalCategory"', html)
+        self.assertIn('id="modalRole"', html)
+        self.assertIn('id="modalStatusPill"', html)
+        self.assertIn('id="modalPortsCountText"', html)
+        self.assertIn('id="modalLastSeen"', html)
+        self.assertIn('id="modalBasis"', html)
+
+    def test_device_data_contract_and_edge_cases(self):
+        """Verify device schema support for complete, partial, and edge-case device payloads."""
+        # 1. Device with incomplete telemetry
+        incomplete_dev = {
+            "ip": "192.168.1.155",
+            "hostname": "Unknown",
+            "mac": "Unavailable",
+            "vendor": "Unknown Vendor",
+            "device_type": "Unknown Device",
+            "device_type_basis": "Insufficient data for inference",
+            "status": "Online",
+            "methods": ["ICMP"],
+            "last_seen": "12:00:00",
+            "is_gateway": False,
+            "is_local_host": False,
+        }
+        # Validate that essential properties exist
+        self.assertIn("ip", incomplete_dev)
+        self.assertIn("hostname", incomplete_dev)
+        self.assertIn("mac", incomplete_dev)
+        self.assertIn("status", incomplete_dev)
+        self.assertNotIn("open_ports", incomplete_dev)
+
+        # 2. Device with long hostname and open ports
+        complete_dev = {
+            "ip": "192.168.1.25",
+            "hostname": "corp-deep-learning-compute-cluster-node-01.internal.subdomain.lan",
+            "mac": "00:11:22:33:44:55",
+            "vendor": "Intel",
+            "device_type": "Computer / Workstation",
+            "device_type_basis": "Verified by hostname and MAC OUI",
+            "status": "Online",
+            "methods": ["ARP", "ICMP"],
+            "last_seen": "12:00:01",
+            "is_gateway": False,
+            "is_local_host": False,
+            "open_ports_count": 5,
+            "open_ports": [
+                {"port": 22, "service": "SSH", "state": "open"},
+                {"port": 80, "service": "HTTP", "state": "open"},
+                {"port": 443, "service": "HTTPS", "state": "open"},
+                {"port": 8080, "service": "HTTP-Proxy", "state": "open"},
+                {"port": 9000, "service": "SonarQube", "state": "open"}
+            ]
+        }
+        self.assertTrue(len(complete_dev["hostname"]) > 50)
+        self.assertEqual(complete_dev["open_ports_count"], 5)
+        self.assertEqual(len(complete_dev["open_ports"]), 5)
+
 
 if __name__ == '__main__':
     unittest.main()
+
