@@ -39,11 +39,13 @@
   <!-- Collapsible Sidebar Navigation -->
   <aside class="app-sidebar" id="appSidebar" aria-label="Main Navigation">
     <div class="sidebar-header">
-      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="SocNet - Network Security System Home">
-        <img src="/static/images/socnet_logo.jpg" alt="SocNet Logo" class="brand-logo-img" />
+      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="Network Security System Home">
+        <div class="brand-shield" aria-hidden="true">
+          <i class="fas fa-shield-halved"></i>
+        </div>
         <div class="brand-text-wrap">
-          <span class="brand-title">SocNet</span>
-          <span class="brand-subtitle">Network Security System</span>
+          <span class="brand-title">Network Security</span>
+          <span class="brand-subtitle">System Console</span>
         </div>
       </a>
     </div>
@@ -93,7 +95,6 @@
           <i class="fas fa-bars"></i>
         </button>
         <a href="/" class="top-nav-brand" aria-label="Network Security System Home">
-          <img src="/static/images/socnet_logo.jpg" alt="SocNet Logo" class="top-nav-logo-img" />
           <span class="top-nav-title">Network Security System</span>
         </a>
       </div>
@@ -167,7 +168,7 @@
             <div class="hero-eyebrow">
               <span class="eyebrow-pill"><i class="fas fa-shield-halved"></i> Enterprise Security Platform</span>
               <span class="eyebrow-divider">•</span>
-              <span class="eyebrow-text">CIC-IDS2017 Benchmark Verified</span>
+              <span class="eyebrow-text">Unified Threat Defense & Telemetry</span>
             </div>
 
             <h1 class="hero-title">
@@ -175,25 +176,25 @@
             </h1>
 
             <p class="hero-description">
-              Unified cybersecurity defense platform combining real-time bidirectional flow telemetry, sub-second machine learning intrusion detection across 15 traffic categories, autonomous local subnet reconnaissance, and active service port enumeration.
+              Unified cybersecurity operations platform delivering real-time network traffic monitoring, automated threat detection, autonomous local subnet device discovery, and active port security scanning.
             </p>
 
             <div class="hero-stats-grid">
               <div class="hero-stat-card">
-                <span class="stat-number">15</span>
-                <span class="stat-label">Verified Classes</span>
+                <span class="stat-number">Live</span>
+                <span class="stat-label">Traffic Telemetry</span>
               </div>
               <div class="hero-stat-card">
-                <span class="stat-number">77</span>
-                <span class="stat-label">Flow Features</span>
+                <span class="stat-number">14+</span>
+                <span class="stat-label">Threat Signatures</span>
               </div>
               <div class="hero-stat-card">
-                <span class="stat-number">99.86%</span>
-                <span class="stat-label">Detection Recall</span>
+                <span class="stat-number">Subnet</span>
+                <span class="stat-label">Device Discovery</span>
               </div>
               <div class="hero-stat-card">
-                <span class="stat-number">&lt; 1.0s</span>
-                <span class="stat-label">Inference Time</span>
+                <span class="stat-number">Port</span>
+                <span class="stat-label">Security Auditing</span>
               </div>
             </div>
 
@@ -218,49 +219,49 @@
                   <span class="dot dot-amber"></span>
                   <span class="dot dot-green"></span>
                 </div>
-                <span class="console-card-title">security_core.engine</span>
+                <span class="console-card-title">security_monitor.status</span>
                 <span class="console-badge-active">ACTIVE DEFENSE</span>
               </div>
 
               <div class="console-pipeline">
                 <div class="pipeline-node">
-                  <div class="node-icon"><i class="fas fa-network-wired"></i></div>
+                  <div class="node-icon"><i class="fas fa-satellite-dish"></i></div>
                   <div class="node-meta">
-                    <span class="node-title">Kernel Sniffer</span>
-                    <span class="node-desc">Npcap + Scapy (Monitor-Only)</span>
+                    <span class="node-title">Live Traffic Monitoring</span>
+                    <span class="node-desc">Continuous packet inspection across interfaces</span>
                   </div>
                   <span class="node-badge-ok">ACTIVE</span>
                 </div>
                 <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
 
-                <div class="pipeline-node">
-                  <div class="node-icon"><i class="fas fa-layer-group"></i></div>
+                <div class="pipeline-node highlight">
+                  <div class="node-icon"><i class="fas fa-shield-virus"></i></div>
                   <div class="node-meta">
-                    <span class="node-title">Telemetry Engine</span>
-                    <span class="node-desc">77 Bidirectional Flow Metrics</span>
+                    <span class="node-title">Threat & Anomaly Detection</span>
+                    <span class="node-desc">Automated detection of hostile traffic vectors</span>
                   </div>
-                  <span class="node-badge-ok">STREAMING</span>
+                  <span class="node-badge-ok">GUARDING</span>
                 </div>
                 <div class="pipeline-arrow"><i class="fas fa-arrow-down"></i></div>
 
-                <div class="pipeline-node highlight">
-                  <div class="node-icon"><i class="fas fa-microchip"></i></div>
+                <div class="pipeline-node">
+                  <div class="node-icon"><i class="fas fa-sitemap"></i></div>
                   <div class="node-meta">
-                    <span class="node-title">XGBoost Classifier</span>
-                    <span class="node-desc">Champion Multi-Class Model</span>
+                    <span class="node-title">Subnet & Port Discovery</span>
+                    <span class="node-desc">Connected host mapping & service enumeration</span>
                   </div>
-                  <span class="node-badge-ai">INFERENCE</span>
+                  <span class="node-badge-ok">READY</span>
                 </div>
               </div>
 
               <div class="console-footer-telemetry">
                 <div class="telemetry-pill">
-                  <span class="lbl">IPC Port:</span>
-                  <span class="val">127.0.0.1:50505</span>
+                  <span class="lbl">Protection:</span>
+                  <span class="val">Live Monitoring</span>
                 </div>
                 <div class="telemetry-pill">
-                  <span class="lbl">Auth:</span>
-                  <span class="val">HMAC-SHA256</span>
+                  <span class="lbl">Visibility:</span>
+                  <span class="val">Zero Latency Alerts</span>
                 </div>
               </div>
             </div>
