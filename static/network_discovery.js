@@ -1040,6 +1040,13 @@
     const navbarSidebarToggleBtn = document.getElementById('navbarSidebarToggleBtn');
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    const sidebarMobileCloseBtn = document.getElementById('sidebarMobileCloseBtn');
+
+    function closeMobileSidebar() {
+      document.body.classList.remove('mobile-sidebar-open');
+      if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
+      if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
+    }
 
     function handleSidebarToggle() {
       if (window.innerWidth < 992) {
@@ -1072,19 +1079,29 @@
     }
 
     if (sidebarBackdrop) {
-      sidebarBackdrop.addEventListener('click', () => {
-        document.body.classList.remove('mobile-sidebar-open');
-        if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
-        if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
-      });
+      sidebarBackdrop.addEventListener('click', closeMobileSidebar);
     }
 
-    document.querySelectorAll('.sidebar-nav-item, .top-nav-link').forEach(link => {
-      link.addEventListener('click', () => {
-        document.body.classList.remove('mobile-sidebar-open');
-        if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
-        if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
-      });
+    if (sidebarMobileCloseBtn) {
+      sidebarMobileCloseBtn.addEventListener('click', closeMobileSidebar);
+    }
+
+    // Dismiss on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('mobile-sidebar-open')) {
+        closeMobileSidebar();
+      }
+    });
+
+    // Dismiss on resize
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 992 && document.body.classList.contains('mobile-sidebar-open')) {
+        closeMobileSidebar();
+      }
+    });
+
+    document.querySelectorAll('.sidebar-nav-item, .top-nav-link, .sidebar-brand').forEach(link => {
+      link.addEventListener('click', closeMobileSidebar);
     });
   }
 

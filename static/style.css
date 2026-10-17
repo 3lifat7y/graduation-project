@@ -609,6 +609,10 @@ body.sidebar-collapsed .app-sidebar {
   transition: justify-content var(--transition-fast);
 }
 
+.sidebar-mobile-close-btn {
+  display: none !important;
+}
+
 .brand-shield {
   width: 38px;
   height: 38px;
@@ -2357,7 +2361,7 @@ body.dedicated-mode-port-scanner .site-footer {
   height: 42px;
   min-height: 42px;
   box-sizing: border-box;
-  padding: 0 14px 0 38px;
+  padding: 0 96px 0 38px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-base);
@@ -4070,7 +4074,7 @@ body.dedicated-mode-port-scanner .site-footer {
   height: 42px;
   min-height: 42px;
   box-sizing: border-box;
-  padding: 0 14px 0 38px;
+  padding: 0 126px 0 38px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-base);
@@ -5107,20 +5111,115 @@ body.dedicated-mode-port-scanner .site-footer {
 
 /* ==============================================================================
    Responsive Breakpoints & Mobile Optimization
+   Complete multi-screen fluid layout supporting 320px, 360px, 375px, 390px, 414px, 768px, 1024px & Desktop
 ============================================================================== */
 
+/* --- Breakpoint 1: Large Laptops & Medium Desktops (max-width: 1200px) --- */
+@media (max-width: 1200px) {
+  .section-container {
+    padding: 56px 28px;
+  }
+
+  .hero-container {
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 36px;
+  }
+
+  .hero-title {
+    font-size: 2.7rem;
+  }
+
+  .connection-wrapper {
+    gap: 24px;
+  }
+
+  .footer-main-row,
+  .footer-top-row {
+    grid-template-columns: 1.3fr 1fr 1fr;
+    gap: 28px;
+  }
+}
+
+/* --- Breakpoint 2: Tablet Landscape (max-width: 1024px) --- */
+@media (max-width: 1024px) {
+  .section-container {
+    padding: 48px 24px;
+  }
+
+  .hero-container {
+    gap: 28px;
+  }
+
+  .hero-title {
+    font-size: 2.45rem;
+  }
+
+  .hero-description {
+    font-size: 1.05rem;
+  }
+
+  .hero-stats-grid {
+    gap: 10px;
+  }
+
+  .stat-number {
+    font-size: 1.45rem;
+  }
+
+  .tips-container,
+  .team-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+
+  .connection-wrapper {
+    gap: 20px;
+  }
+
+  .ps-config-grid {
+    gap: 18px;
+  }
+
+  .nd-kpi-grid,
+  .ps-kpi-grid {
+    gap: 12px;
+  }
+
+  .nd-kpi-value,
+  .ps-kpi-val {
+    font-size: 1.45rem;
+  }
+
+  .footer-main-row,
+  .footer-top-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+
+  .footer-brand,
+  .footer-brand-col {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- Breakpoint 3: Tablet Portrait & Mobile Off-Canvas Drawer (max-width: 991px) --- */
 @media (max-width: 991px) {
+  /* Body lock when mobile drawer is open */
+  body.mobile-sidebar-open {
+    overflow: hidden !important;
+  }
+
   /* Global Top Navbar on mobile / tablet */
   .global-top-navbar {
-    padding: 0 14px;
+    padding: 0 16px;
   }
 
   .top-nav-center {
-    display: none;
+    display: none !important;
   }
 
   .theme-toggle-text {
-    display: none;
+    display: none !important;
   }
 
   .theme-toggle-btn {
@@ -5137,33 +5236,83 @@ body.dedicated-mode-port-scanner .site-footer {
     padding: 6px 10px;
   }
 
-  /* Main content takes full width, no extra padding needed since navbar is sticky inside wrapper */
+  /* Main content takes full width, no margin for collapsed sidebar */
   .main-content-wrapper {
     margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
     padding-top: 0 !important;
   }
 
   /* Sidebar transforms into off-canvas drawer */
   .app-sidebar {
     width: 280px !important;
+    max-width: 84vw !important;
     transform: translateX(-100%);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+    box-shadow: 6px 0 32px rgba(0, 0, 0, 0.25);
+    z-index: 1000;
   }
 
   body.mobile-sidebar-open .app-sidebar {
     transform: translateX(0);
   }
 
+  /* Mobile Backdrop */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 20, 17, 0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 950;
+    opacity: 0;
+    transition: opacity var(--transition-smooth);
+  }
+
   body.mobile-sidebar-open .sidebar-backdrop {
-    display: block;
-    opacity: 1;
+    display: block !important;
+    opacity: 1 !important;
+  }
+
+  /* Mobile Drawer Close Button */
+  .sidebar-mobile-close-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-left: auto;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .sidebar-mobile-close-btn:hover {
+    background: var(--bg-secondary-hover);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+
+  .sidebar-mobile-close-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .sidebar-header {
+    justify-content: space-between;
   }
 
   .sidebar-toggle-btn {
-    display: none;
+    display: none !important;
   }
 
-  /* Hero grid stacks */
+  /* Hero grid stacks cleanly */
   .hero-container {
     grid-template-columns: 1fr;
     gap: 36px;
@@ -5175,68 +5324,147 @@ body.dedicated-mode-port-scanner .site-footer {
 
   .hero-visual {
     max-width: 100%;
+    width: 100%;
+  }
+
+  .cyber-console-card {
+    max-width: 520px;
+    margin: 0 auto;
   }
 
   .hero-float-icon.icon-key,
   .hero-float-icon.icon-bug {
     display: none;
   }
+
   .hero-float-icon {
     opacity: 0.12;
   }
+
   [data-theme="dark"] .hero-float-icon {
     opacity: 0.16;
   }
 
-  /* Scanner & Port Scanner stack */
+  /* Operational Workstations stack into single column */
   .connection-wrapper {
     grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .connection-box,
+  .connection-result {
+    min-height: auto;
   }
 
   .ps-config-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .nd-landing-grid {
     grid-template-columns: 1fr;
+    gap: 28px;
   }
 
-  .tips-container, .team-container {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .footer-main-row, .footer-top-row {
+  .footer-main-row,
+  .footer-top-row {
     grid-template-columns: 1fr;
+    gap: 24px;
   }
 }
 
+/* --- Breakpoint 4: Tablets & Large Mobile Devices (max-width: 768px) --- */
 @media (max-width: 768px) {
+  /* Prevent iOS Safari auto-zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
   .section-container {
-    padding: 40px 20px;
+    padding: 40px 18px;
   }
 
   .section-title {
-    font-size: 1.8rem;
+    font-size: 1.85rem;
+  }
+
+  .section-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .dedicated-tool-bar {
+    padding: 10px 18px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .breadcrumb-trail {
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.82rem;
+  }
+
+  /* Hero Section */
+  .hero-section {
+    padding: 40px 18px 36px;
+  }
+
+  .hero-title {
+    font-size: 1.95rem;
+    line-height: 1.2;
+  }
+
+  .hero-description {
+    font-size: 0.98rem;
+    margin-bottom: 24px;
   }
 
   .hero-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+
+  .hero-stat-card {
+    padding: 12px 14px;
+    min-height: 76px;
+  }
+
+  .stat-number {
+    font-size: 1.45rem;
   }
 
   .hero-cta-group {
     flex-direction: column;
     align-items: stretch;
     width: 100%;
+    gap: 10px;
   }
 
   .hero-cta-group .btn-primary,
   .hero-cta-group .btn-secondary {
     width: 100%;
+    min-height: 44px;
     justify-content: center;
+    font-size: 0.92rem;
+  }
+
+  .cyber-console-card {
+    max-width: 100%;
+  }
+
+  /* Port Scanner */
+  .ps-card-body {
+    padding: 20px 16px;
   }
 
   .ps-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .ps-results-wrapper {
+    padding: 20px 16px;
   }
 
   .ps-results-toolbar {
@@ -5260,12 +5488,104 @@ body.dedicated-mode-port-scanner .site-footer {
     width: 100%;
   }
 
+  /* Live Network Monitoring */
+  .connection-box,
+  .connection-result {
+    padding: 20px 16px;
+  }
+
+  .radar-box {
+    width: 150px;
+    height: 150px;
+  }
+
+  .telemetry-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* Threat Intelligence & Marquee */
+  .benign-baseline-card {
+    padding: 20px 18px;
+  }
+
+  .benign-card-inner {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .benign-icon-col {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .benign-metrics-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .category-filter-bar {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+  }
+
+  .filter-tab {
+    flex-shrink: 0;
+  }
+
+  .slider-controls-wrap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .marquee-status-group,
+  .slider-actions-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Network Discovery Page */
+  .nd-main-container {
+    padding: 28px 18px 48px;
+  }
+
+  .nd-hero-title {
+    font-size: 1.95rem;
+  }
+
+  .nd-hero-subtitle {
+    font-size: 0.95rem;
+  }
+
   .nd-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
 
   .nd-network-ribbon {
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .nd-landing-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .nd-preview-console {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nd-mock-row {
+    min-width: 460px;
   }
 
   .nd-device-cards-grid {
@@ -5275,6 +5595,7 @@ body.dedicated-mode-port-scanner .site-footer {
   .nd-toolbar-right {
     width: 100%;
     justify-content: space-between;
+    gap: 10px;
   }
 
   .nd-search-wrap {
@@ -5301,30 +5622,525 @@ body.dedicated-mode-port-scanner .site-footer {
     padding: 12px;
   }
 
-  .tips-container, .team-container {
+  .nd-modal-meta-grid {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* Prevention & Team */
+  .tips-container,
+  .team-container {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .site-footer {
+    padding: 36px 18px 24px;
+  }
+}
+
+/* --- Breakpoint 5: Standard Mobile Phones (max-width: 480px) --- */
+@media (max-width: 480px) {
+  .section-container {
+    padding: 32px 14px;
+  }
+
+  .section-title {
+    font-size: 1.6rem;
+    margin-bottom: 8px;
+  }
+
+  .section-subtitle {
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  /* Global Top Navbar on Small Screens */
+  .global-top-navbar {
+    padding: 0 12px;
+  }
+
+  .top-nav-brand .top-nav-title {
+    font-size: 0.88rem;
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .top-nav-health-pill {
+    display: none !important;
+  }
+
+  .theme-toggle-btn {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Hero Section */
+  .hero-section {
+    padding: 28px 14px 32px;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.74rem;
+    padding: 4px 12px;
+    margin-bottom: 14px;
+    gap: 6px;
+  }
+
+  .hero-title {
+    font-size: 1.65rem;
+    margin-bottom: 14px;
+    letter-spacing: -0.02em;
+  }
+
+  .hero-description {
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    line-height: 1.55;
+  }
+
+  .hero-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .hero-stat-card {
+    padding: 10px 12px;
+    min-height: 72px;
+  }
+
+  .stat-number {
+    font-size: 1.35rem;
+  }
+
+  .stat-label {
+    font-size: 0.68rem;
+  }
+
+  .hero-float-icon {
+    transform: scale(0.7);
+    opacity: 0.09;
+  }
+
+  [data-theme="dark"] .hero-float-icon {
+    opacity: 0.12;
+  }
+
+  /* Hero Console Pipeline Card */
+  .cyber-console-card {
+    margin-top: 8px;
+  }
+
+  .console-card-header {
+    padding: 10px 14px;
+  }
+
+  .console-card-title {
+    font-size: 0.72rem;
+  }
+
+  .console-pipeline {
+    padding: 14px 12px;
+    gap: 8px;
+  }
+
+  .pipeline-node {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .node-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.85rem;
+  }
+
+  .node-title {
+    font-size: 0.82rem;
+  }
+
+  .node-desc {
+    font-size: 0.7rem;
+  }
+
+  .console-footer-telemetry {
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  /* Port Scanner Workstation */
+  .ps-card-header {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .ps-header-left,
+  .ps-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .ps-card-body {
+    padding: 16px 12px;
+  }
+
+  .ps-mode-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+
+  .ps-mode-tab {
+    width: 100%;
+    justify-content: space-between;
+    padding: 0 14px;
+    height: 42px;
+    min-height: 42px;
+  }
+
+  .ps-input-wrap .ps-input {
+    padding-right: 88px;
+    font-size: 0.84rem;
+  }
+
+  .ps-inline-btn {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 0.72rem;
+  }
+
+  .ps-port-presets {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    gap: 6px;
+  }
+
+  .ps-preset-btn {
+    flex-shrink: 0;
+    height: 34px;
+    min-height: 34px;
+  }
+
+  .ps-advanced-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .ps-adv-item {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .ps-select {
+    flex: 1;
+    max-width: 170px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .ps-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .ps-btn-group,
+  .ps-export-group {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ps-btn-group button,
+  .ps-export-group button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .ps-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .ps-kpi-card {
+    padding: 10px 12px;
+    min-height: 72px;
+  }
+
+  .ps-kpi-val {
+    font-size: 1.25rem;
+  }
+
+  .ps-results-wrapper {
+    padding: 16px 12px;
+  }
+
+  .ps-search-box input {
+    height: 40px;
+    min-height: 40px;
+  }
+
+  /* Live Network Monitoring */
+  .adapter-chip {
+    flex-direction: column;
+    border-radius: var(--radius-md);
+    gap: 6px;
+    padding: 12px 14px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  .chip-divider {
+    display: none;
+  }
+
+  .chip-segment {
+    justify-content: center;
+    width: 100%;
+    font-size: 0.8rem;
+  }
+
+  .connection-box,
+  .connection-result {
+    padding: 16px 12px;
+    min-height: auto;
+  }
+
+  .radar-box {
+    width: 135px;
+    height: 135px;
+    margin: 6px auto 14px;
+  }
+
+  .btn-group-scan {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .check-btn,
+  .stop-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .telemetry-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .telemetry-item {
+    padding: 8px 10px;
+    min-height: 54px;
+    gap: 8px;
+  }
+
+  .t-icon {
+    font-size: 1rem;
+    width: 20px;
+    min-width: 20px;
+  }
+
+  .t-value {
+    font-size: 0.82rem;
+  }
+
+  .result-hero-row {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .result-icon-wrap {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    font-size: 1.3rem;
+  }
+
+  .result-label {
+    font-size: 1.15rem;
+  }
+
+  /* Threat Intelligence & Marquee */
+  .benign-baseline-card {
+    padding: 16px 12px;
+    margin-bottom: 24px;
+  }
+
+  .benign-title-row h3 {
+    font-size: 1.05rem;
   }
 
   .benign-metrics-row {
     grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
   }
 
-  .benign-card-inner {
-    grid-template-columns: 1fr;
+  .benign-metric {
+    padding: 6px 10px;
   }
 
-  .nd-modal-meta-grid {
-    grid-template-columns: 1fr;
+  .bm-label {
+    font-size: 0.68rem;
   }
-}
 
-@media (max-width: 480px) {
+  .bm-val {
+    font-size: 0.88rem;
+  }
+
+  .card {
+    width: 290px;
+    min-width: 290px;
+    padding: 16px;
+    min-height: 380px;
+  }
+
+  .card .img-wrap {
+    height: 130px;
+  }
+
+  .card h3 {
+    font-size: 1.05rem;
+  }
+
+  .card p {
+    font-size: 0.8rem;
+  }
+
+  /* Network Discovery Section & Page */
   .nd-main-container {
-    padding: 20px 12px 48px;
+    padding: 20px 12px 40px;
+  }
+
+  .nd-hero-badge {
+    font-size: 0.72rem;
+    padding: 4px 10px;
+  }
+
+  .nd-hero-title {
+    font-size: 1.6rem;
+  }
+
+  .nd-hero-subtitle {
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .nd-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .nd-kpi-card {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .nd-kpi-icon {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    font-size: 1rem;
+  }
+
+  .nd-kpi-value {
+    font-size: 1.35rem;
+  }
+
+  .nd-control-card {
+    padding: 16px 12px;
+  }
+
+  .nd-panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .nd-network-ribbon {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .nd-ribbon-item {
+    padding: 10px 12px;
+  }
+
+  .nd-ribbon-val {
+    font-size: 0.82rem;
+    word-break: break-all;
+  }
+
+  .nd-form-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .nd-input-group {
+    width: 100%;
+  }
+
+  .nd-input-wrap .nd-text-input {
+    padding-right: 110px;
+    font-size: 0.84rem;
+  }
+
+  .nd-quick-fill-btn {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 0.72rem;
+  }
+
+  .nd-select-input {
+    width: 100%;
+    height: 42px;
+    min-height: 42px;
+  }
+
+  .nd-btn-group {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .nd-btn-group .nd-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
   }
 
   .nd-table-section {
     padding: 16px 10px;
+  }
+
+  .nd-table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
 
   .nd-filter-tabs {
@@ -5338,136 +6154,419 @@ body.dedicated-mode-port-scanner .site-footer {
     flex-shrink: 0;
   }
 
-  .nd-form-row {
+  .nd-toolbar-right {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .nd-search-wrap {
+    width: 100%;
+  }
+
+  .nd-search-input {
+    width: 100%;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .nd-view-switcher {
+    width: 100%;
+    display: flex;
+  }
+
+  .nd-view-btn {
+    flex: 1;
+    justify-content: center;
+    height: 36px;
+    min-height: 36px;
+  }
+
+  .nd-device-cards-grid {
+    grid-template-columns: 1fr;
     gap: 12px;
   }
 
-  .nd-input-group {
+  .nd-device-card {
     width: 100%;
+    min-width: 0;
+    padding: 14px 12px;
   }
 
-  .nd-select-input {
-    width: 100%;
+  .nd-card-prop {
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
-  .nd-btn-group {
-    width: 100%;
-    flex-direction: column;
+  .nd-prop-val-wrap {
+    max-width: 100%;
   }
 
-  .nd-btn-group .nd-btn {
-    width: 100%;
-    justify-content: center;
+  .nd-prop-val.mono {
+    word-break: break-all;
+  }
+
+  /* Device Details Modal */
+  .nd-device-modal {
+    width: calc(100% - 16px);
+    margin: 8px;
+    max-height: 90vh;
+  }
+
+  .nd-modal-header {
+    padding: 12px 14px;
+  }
+
+  .nd-modal-body {
+    padding: 12px 10px;
+    max-height: calc(90vh - 120px);
+  }
+
+  .nd-modal-section {
+    padding: 10px;
+    margin-bottom: 12px;
   }
 
   .nd-modal-footer {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
+    padding: 12px;
   }
 
   .nd-modal-footer .nd-btn {
     width: 100%;
+    min-height: 42px;
     justify-content: center;
   }
 
-  .nd-btn-details {
-    width: 100%;
-    justify-content: center;
+  .field-val {
+    word-break: break-all;
   }
 
-  .ps-mode-bar {
+  /* Home Page Discovery Preview */
+  .nd-landing-feature-title {
+    font-size: 1.35rem;
+  }
+
+  .nd-landing-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .nd-landing-stat {
+    padding: 8px 10px;
+  }
+
+  .stat-num {
+    font-size: 1.15rem;
+  }
+
+  .stat-lbl {
+    font-size: 0.68rem;
+  }
+
+  .nd-preview-console {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nd-mock-row {
+    min-width: 440px;
+    padding: 8px 10px;
+    font-size: 0.74rem;
+  }
+
+  /* Site Footer */
+  .site-footer {
+    padding: 28px 14px 20px;
+  }
+
+  .footer-main-row,
+  .footer-top-row {
+    gap: 20px;
+  }
+
+  .footer-logo {
+    font-size: 1.1rem;
+  }
+
+  .footer-bottom-row {
     flex-direction: column;
-    align-items: stretch;
-  }
-
-  .ps-mode-tab {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .ps-actions-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  .ps-btn-group {
-    width: 100%;
-    flex-direction: column;
-  }
-
-  .ps-btn-group button {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .ps-export-group {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .ps-export-group button {
-    flex: 1;
-    justify-content: center;
-  }
-
-  .btn-group-scan {
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-  }
-
-  .check-btn, .stop-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .hero-stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-float-icon {
-    transform: scale(0.75);
-    opacity: 0.10;
-  }
-  [data-theme="dark"] .hero-float-icon {
-    opacity: 0.13;
-  }
-
-  .ps-kpi-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .nd-kpi-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .nd-network-ribbon {
-    grid-template-columns: 1fr;
-  }
-
-  .telemetry-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .adapter-chip {
-    flex-direction: column;
-    border-radius: var(--radius-lg);
+    align-items: flex-start;
     gap: 8px;
   }
+}
 
-  .chip-divider {
-    display: none;
+/* --- Breakpoint 6: Ultra-Compact Mobile Screens (max-width: 360px: iPhone SE, Galaxy A) --- */
+@media (max-width: 360px) {
+  .section-container {
+    padding: 24px 10px;
+  }
+
+  /* Navbar */
+  .global-top-navbar {
+    padding: 0 8px;
   }
 
   .top-nav-brand .top-nav-title {
-    font-size: 0.88rem;
+    font-size: 0.78rem;
+    max-width: 130px;
   }
 
-  .top-nav-health-pill {
-    display: none;
+  .top-nav-sidebar-toggle {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+  }
+
+  .theme-toggle-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+  }
+
+  /* Hero Section */
+  .hero-section {
+    padding: 24px 10px 28px;
+  }
+
+  .hero-title {
+    font-size: 1.45rem;
+  }
+
+  .hero-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .hero-stat-card {
+    padding: 8px 8px;
+    min-height: 64px;
+  }
+
+  .stat-number {
+    font-size: 1.15rem;
+  }
+
+  .stat-label {
+    font-size: 0.64rem;
+  }
+
+  .pipeline-node {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .node-title {
+    font-size: 0.76rem;
+  }
+
+  .node-desc {
+    font-size: 0.66rem;
+  }
+
+  /* Marquee Attack Cards */
+  .card {
+    width: 268px;
+    min-width: 268px;
+    padding: 12px;
+    min-height: 360px;
+  }
+
+  .card .img-wrap {
+    height: 115px;
+  }
+
+  .card h3 {
+    font-size: 0.98rem;
+  }
+
+  .card p {
+    font-size: 0.76rem;
+  }
+
+  .card-footer-meta {
+    font-size: 0.7rem;
+  }
+
+  /* Port Scanner */
+  .ps-card-body {
+    padding: 12px 8px;
+  }
+
+  .ps-input-wrap .ps-input {
+    padding-right: 76px;
+    font-size: 0.78rem;
+  }
+
+  .ps-inline-btn {
+    font-size: 0.68rem;
+    padding: 0 6px;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .ps-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .ps-kpi-card {
+    padding: 8px;
+    min-height: 64px;
+  }
+
+  .ps-kpi-val {
+    font-size: 1.15rem;
+  }
+
+  .ps-kpi-lbl {
+    font-size: 0.68rem;
+  }
+
+  .ps-results-wrapper {
+    padding: 12px 8px;
+  }
+
+  /* Live Network Monitoring */
+  .connection-box,
+  .connection-result {
+    padding: 14px 8px;
+  }
+
+  .radar-box {
+    width: 120px;
+    height: 120px;
+    margin: 4px auto 10px;
+  }
+
+  .telemetry-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .telemetry-item {
+    padding: 6px 8px;
+    min-height: 48px;
+    gap: 6px;
+  }
+
+  .t-label {
+    font-size: 0.62rem;
+  }
+
+  .t-value {
+    font-size: 0.74rem;
+  }
+
+  .result-icon-wrap {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    font-size: 1.15rem;
+  }
+
+  .result-label {
+    font-size: 1.05rem;
+  }
+
+  /* Network Discovery */
+  .nd-main-container {
+    padding: 16px 8px 36px;
+  }
+
+  .nd-hero-title {
+    font-size: 1.4rem;
+  }
+
+  .nd-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .nd-kpi-card {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .nd-kpi-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.9rem;
+  }
+
+  .nd-kpi-value {
+    font-size: 1.15rem;
+  }
+
+  .nd-kpi-label {
+    font-size: 0.66rem;
+  }
+
+  .nd-control-card {
+    padding: 12px 8px;
+  }
+
+  .nd-landing-stats {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .nd-quick-fill-btn {
+    font-size: 0.68rem;
+    padding: 0 6px;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .nd-input-wrap .nd-text-input {
+    padding-right: 96px;
+    font-size: 0.78rem;
+  }
+
+  .nd-table-section {
+    padding: 12px 6px;
+  }
+
+  .nd-device-card {
+    padding: 10px 8px;
+  }
+
+  /* Modal on 320px */
+  .nd-device-modal {
+    width: calc(100% - 10px);
+    margin: 5px;
+    max-height: 92vh;
+  }
+
+  .nd-modal-header {
+    padding: 10px 12px;
+  }
+
+  .nd-modal-body {
+    padding: 10px 8px;
+  }
+
+  .nd-modal-section {
+    padding: 8px;
+  }
+
+  .field-val {
+    font-size: 0.75rem;
+  }
+
+  .field-label {
+    font-size: 0.64rem;
+  }
+
+  /* Benign Baseline */
+  .benign-metrics-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 }
 
