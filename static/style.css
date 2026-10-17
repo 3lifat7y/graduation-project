@@ -3660,11 +3660,12 @@ body.dedicated-mode-port-scanner .site-footer {
 
 .team-container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 20px;
 }
 
 .team-card {
+  grid-column: span 2;
   background: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -3678,6 +3679,14 @@ body.dedicated-mode-port-scanner .site-footer {
   min-width: 0;
   box-sizing: border-box;
   transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.team-card:nth-child(4) {
+  grid-column: 2 / span 2;
+}
+
+.team-card:nth-child(5) {
+  grid-column: 4 / span 2;
 }
 
 .team-card:hover {
@@ -3732,13 +3741,16 @@ body.dedicated-mode-port-scanner .site-footer {
 .team-role-pill {
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 2px 10px;
+  padding: 3px 12px;
   border-radius: var(--radius-full);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--accent);
   margin-bottom: 8px;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
+  max-width: 100%;
 }
 
 .team-role-desc {
@@ -5250,10 +5262,26 @@ body.dedicated-mode-port-scanner .site-footer {
     font-size: 1.45rem;
   }
 
-  .tips-container,
+  .tips-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+
   .team-container {
     grid-template-columns: repeat(2, 1fr);
     gap: 18px;
+  }
+
+  .team-card,
+  .team-card:nth-child(4) {
+    grid-column: auto;
+  }
+
+  .team-card:nth-child(5) {
+    grid-column: 1 / span 2;
+    max-width: 420px;
+    justify-self: center;
+    width: 100%;
   }
 
   .connection-wrapper {
@@ -5790,10 +5818,22 @@ body.dedicated-mode-port-scanner .site-footer {
   }
 
   /* Prevention & Team */
-  .tips-container,
+  .tips-container {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
   .team-container {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  .team-card,
+  .team-card:nth-child(4),
+  .team-card:nth-child(5) {
+    grid-column: auto;
+    max-width: 100%;
+    width: 100%;
   }
 
   .site-footer {
