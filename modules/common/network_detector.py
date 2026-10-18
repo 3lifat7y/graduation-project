@@ -67,82 +67,196 @@ def get_active_routable_ip() -> Optional[str]:
     return None
 
 
-def get_windows_network_adapters() -> List[Dict[str, Any]]:
-    """Queries all network adapters and IPv4 addresses via Windows PowerShell with fallback."""
-    adapters = []
-    if os.name != 'nt':
-        return adapters
-
+def get_scapy_interfaces_info() -> Tuple[Dict[int, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """Retrieves Scapy/Npcap interface identifiers keyed by interface index and identifier/name."""
+    info_by_idx: Dict[int, Dict[str, Any]] = {}
+    info_by_name: Dict[str, Dict[str, Any]] = {}
     try:
-        # Combined query to reduce PowerShell startup overhead and halve execution time
-        ps_cmd = (
-            "$a = Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, InterfaceIndex, MacAddress, LinkSpeed; "
-            "$b = Get-NetIPAddress -AddressFamily IPv4 | Select-Object InterfaceAlias, IPAddress, InterfaceIndex, PrefixLength; "
-            "@{adapters=$a; ips=$b} | ConvertTo-Json -Compress -Depth 3"
-        )
-        res = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            payload = json.loads(res.stdout.strip())
-            raw_adapters = payload.get("adapters", [])
-            if isinstance(raw_adapters, dict):
-                raw_adapters = [raw_adapters]
-            raw_ips = payload.get("ips", [])
-            if isinstance(raw_ips, dict):
-                raw_ips = [raw_ips]
-
-            ips_by_idx = {}
-            for entry in raw_ips:
-                idx = entry.get("InterfaceIndex")
-                ip = entry.get("IPAddress")
-                if idx and ip:
-                    ips_by_idx.setdefault(idx, []).append(ip)
-
-            for ad in raw_adapters:
-                name = str(ad.get("Name", "")).strip()
-                desc = str(ad.get("InterfaceDescription", "")).strip()
-                status = str(ad.get("Status", "Unknown")).strip()
-                idx = ad.get("InterfaceIndex", 0)
-                mac = str(ad.get("MacAddress", "")).strip()
-                speed = str(ad.get("LinkSpeed", "0 bps")).strip()
-                ips = ips_by_idx.get(idx, [])
-
-                # Categorize interface type
-                lower_name = name.lower()
-                lower_desc = desc.lower()
-
-                if any(k in lower_name or k in lower_desc for k in ["wi-fi", "wireless", "802.11", "wlan"]):
-                    adapter_type = "Wi-Fi"
-                elif any(k in lower_name or k in lower_desc for k in ["ethernet", "lan", "gigabit", "fast ethernet", "i219", "realtek"]):
-                    adapter_type = "Ethernet"
-                elif "loopback" in lower_name or "loopback" in lower_desc:
-                    adapter_type = "Loopback"
-                elif any(k in lower_name or k in lower_desc for k in ["vmware", "virtualbox", "vethernet", "hyper-v"]):
-                    adapter_type = "Virtual"
-                else:
-                    adapter_type = "Other"
-
-                is_virtual = (adapter_type in ["Virtual", "Loopback"]) or any(k in lower_desc for k in ["vmware", "virtualbox", "hyper-v", "bluetooth"])
-
-                adapters.append({
-                    "name": name,
-                    "description": desc,
-                    "status": status,
-                    "index": idx,
+        from scapy.all import conf
+        if getattr(conf, "ifaces", None):
+            for if_key, if_obj in conf.ifaces.items():
+                idx = getattr(if_obj, "index", None)
+                widx = getattr(if_obj, "win_index", None)
+                guid = getattr(if_obj, "guid", None)
+                net_name = getattr(if_obj, "network_name", None) or str(if_key)
+                name = getattr(if_obj, "name", None)
+                ip = getattr(if_obj, "ip", None)
+                mac = getattr(if_obj, "mac", None)
+                desc = getattr(if_obj, "description", None)
+                entry = {
+                    "scapy_name": name,
+                    "scapy_desc": desc,
+                    "guid": guid,
+                    "network_name": net_name,
+                    "index": idx if idx is not None else widx,
+                    "ip": ip,
                     "mac": mac,
-                    "link_speed": speed,
-                    "type": adapter_type,
-                    "ips": ips,
-                    "is_virtual": is_virtual
-                })
-    except Exception as e:
-        print(f"[Warning] Failed to query Windows adapters via PowerShell: {e}", file=sys.stderr)
+                }
+                if idx is not None:
+                    try:
+                        info_by_idx[int(idx)] = entry
+                    except (ValueError, TypeError):
+                        pass
+                if widx is not None:
+                    try:
+                        info_by_idx[int(widx)] = entry
+                    except (ValueError, TypeError):
+                        pass
+                if guid:
+                    info_by_name[str(guid).strip().lower()] = entry
+                if name:
+                    info_by_name[str(name).strip().lower()] = entry
+    except Exception:
+        pass
+    return info_by_idx, info_by_name
 
-    # Robust Fallback: If PowerShell timed out or returned no adapters, use direct socket gateway IP
+
+def get_windows_network_adapters() -> List[Dict[str, Any]]:
+    """
+    Queries all network adapters and IPv4 addresses via Windows PowerShell
+    and enriches each adapter with Scapy/Npcap device identifiers without hardcoded names or IPs.
+    """
+    adapters = []
+    scapy_by_idx, scapy_by_name = get_scapy_interfaces_info()
+
+    if os.name == 'nt':
+        try:
+            # Query PowerShell for adapters and IP assignments
+            ps_cmd = (
+                "$a = Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, InterfaceIndex, MacAddress, LinkSpeed, PhysicalMediaType, MediaType; "
+                "$b = Get-NetIPAddress -AddressFamily IPv4 | Select-Object InterfaceAlias, IPAddress, InterfaceIndex, PrefixLength; "
+                "@{adapters=$a; ips=$b} | ConvertTo-Json -Compress -Depth 3"
+            )
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                payload = json.loads(res.stdout.strip())
+                raw_adapters = payload.get("adapters", [])
+                if isinstance(raw_adapters, dict):
+                    raw_adapters = [raw_adapters]
+                raw_ips = payload.get("ips", [])
+                if isinstance(raw_ips, dict):
+                    raw_ips = [raw_ips]
+
+                ips_by_idx = {}
+                for entry in raw_ips:
+                    idx = entry.get("InterfaceIndex")
+                    ip = entry.get("IPAddress")
+                    if idx and ip:
+                        ips_by_idx.setdefault(idx, []).append(ip)
+
+                for ad in raw_adapters:
+                    name = str(ad.get("Name", "")).strip()
+                    desc = str(ad.get("InterfaceDescription", "")).strip()
+                    status = str(ad.get("Status", "Unknown")).strip()
+                    idx = ad.get("InterfaceIndex", 0)
+                    mac = str(ad.get("MacAddress", "")).strip()
+                    speed = str(ad.get("LinkSpeed", "0 bps")).strip()
+                    p_media = str(ad.get("PhysicalMediaType", "")).strip().lower()
+                    media = str(ad.get("MediaType", "")).strip().lower()
+                    ips = ips_by_idx.get(idx, [])
+
+                    # Categorize interface type with robust hardware and NDIS media checks
+                    lower_name = name.lower()
+                    lower_desc = desc.lower()
+
+                    is_virtual = (
+                        any(k in lower_desc for k in ["vmware", "virtualbox", "hyper-v", "bluetooth", "wan miniport", "teredo", "isatap", "npcap loopback"]) or
+                        any(k in lower_name for k in ["vmware", "virtualbox", "vethernet", "hyper-v", "bluetooth", "loopback"])
+                    )
+
+                    if "loopback" in lower_name or "loopback" in lower_desc:
+                        adapter_type = "Loopback"
+                    elif is_virtual:
+                        adapter_type = "Virtual"
+                    elif (
+                        "802.11" in p_media or "native802_11" in p_media or
+                        any(k in lower_name or k in lower_desc for k in ["wi-fi", "wireless", "802.11", "wlan", "wifi"])
+                    ):
+                        adapter_type = "Wi-Fi"
+                    elif (
+                        "802.3" in p_media or "802.3" in media or
+                        any(k in lower_name or k in lower_desc for k in [
+                            "ethernet", "lan", "gigabit", "fast ethernet", "i219", "realtek",
+                            "intel(r) ethernet", "broadcom", "marvell", "qualcomm", "killer",
+                            "pcie gbe", "pci-e", "gbe family", "usb ethernet", "rj45", "local area connection"
+                        ])
+                    ):
+                        adapter_type = "Ethernet"
+                    else:
+                        adapter_type = "Other"
+
+                    # Cross-reference Scapy Npcap device info
+                    scapy_info = scapy_by_idx.get(idx) or scapy_by_name.get(lower_name) or {}
+                    network_name = scapy_info.get("network_name")
+                    guid = scapy_info.get("guid")
+                    scapy_ip = scapy_info.get("ip")
+                    if scapy_ip and scapy_ip not in ips and not scapy_ip.startswith("169.254."):
+                        ips.append(scapy_ip)
+
+                    adapters.append({
+                        "name": name,
+                        "description": desc,
+                        "status": status,
+                        "index": idx,
+                        "mac": mac or scapy_info.get("mac", "N/A"),
+                        "link_speed": speed,
+                        "type": adapter_type,
+                        "ips": ips,
+                        "is_virtual": is_virtual,
+                        "network_name": network_name,
+                        "guid": guid,
+                        "scapy_name": scapy_info.get("scapy_name", name)
+                    })
+        except Exception as e:
+            print(f"[Warning] Failed to query Windows adapters via PowerShell: {e}", file=sys.stderr)
+
+    # Scapy-Based Secondary Discovery: If PowerShell returned no adapters, query Scapy's conf.ifaces directly
+    if not adapters and scapy_by_name:
+        for if_name_key, s_entry in scapy_by_name.items():
+            s_name = s_entry.get("scapy_name") or if_name_key
+            s_desc = s_entry.get("scapy_desc") or ""
+            s_ip = s_entry.get("ip")
+            s_idx = s_entry.get("index") or 0
+            lower_name = s_name.lower()
+            lower_desc = s_desc.lower()
+
+            is_virtual = (
+                any(k in lower_desc for k in ["vmware", "virtualbox", "hyper-v", "bluetooth", "wan miniport"]) or
+                any(k in lower_name for k in ["vmware", "virtualbox", "vethernet", "hyper-v", "bluetooth", "loopback"])
+            )
+            if "loopback" in lower_name or "loopback" in lower_desc:
+                adapter_type = "Loopback"
+            elif is_virtual:
+                adapter_type = "Virtual"
+            elif any(k in lower_name or k in lower_desc for k in ["wi-fi", "wireless", "802.11", "wlan", "wifi"]):
+                adapter_type = "Wi-Fi"
+            elif any(k in lower_name or k in lower_desc for k in ["ethernet", "lan", "gigabit", "i219", "realtek", "fast ethernet"]):
+                adapter_type = "Ethernet"
+            else:
+                adapter_type = "Other"
+
+            ips = [s_ip] if s_ip and not s_ip.startswith("169.254.") else []
+            adapters.append({
+                "name": s_name,
+                "description": s_desc,
+                "status": "Up" if ips else "Unknown",
+                "index": s_idx,
+                "mac": s_entry.get("mac") or "N/A",
+                "link_speed": "N/A",
+                "type": adapter_type,
+                "ips": ips,
+                "is_virtual": is_virtual,
+                "network_name": s_entry.get("network_name"),
+                "guid": s_entry.get("guid"),
+                "scapy_name": s_name
+            })
+
+    # Robust Fallback: If no adapters discovered yet, use active routable IP without hardcoding Wi-Fi
     if not adapters:
         active_ip = get_active_routable_ip()
         if active_ip:
@@ -153,9 +267,12 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                 "index": 1,
                 "mac": "N/A",
                 "link_speed": "N/A",
-                "type": "Wi-Fi",
+                "type": "Ethernet",  # Conservative neutral physical default, never assume Wi-Fi
                 "ips": [active_ip],
-                "is_virtual": False
+                "is_virtual": False,
+                "network_name": None,
+                "guid": None,
+                "scapy_name": "Primary Active Adapter"
             })
 
     return adapters
@@ -282,6 +399,8 @@ def check_capture_drivers(tshark_path: Optional[str] = None) -> Dict[str, Any]:
 def auto_detect_primary_interface() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Selects the primary active network adapter using routing and interface health.
+    Prioritizes connected physical Ethernet adapters over Wi-Fi, rejects disconnected/disabled
+    adapters, and retrieves current IPv4, interface index, and Scapy/Npcap identifiers.
     Returns:
         (adapter_dict, driver_health_dict)
     """
@@ -291,41 +410,66 @@ def auto_detect_primary_interface() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     selected = None
 
-    # Priority 1: Match adapter possessing the active routable IP
-    if active_ip:
-        for ad in adapters:
-            if active_ip in ad["ips"]:
+    # Filter physical, non-virtual adapters
+    physical_adapters = [ad for ad in adapters if not ad.get("is_virtual", False)]
+
+    def _has_valid_ip(ad_dict: Dict[str, Any]) -> bool:
+        return any(
+            ip and not ip.startswith("169.254.") and not ip.startswith("127.")
+            for ip in ad_dict.get("ips", [])
+        )
+
+    # Priority 1: Connected physical Ethernet adapter with status 'Up' and valid non-APIPA IPv4
+    for ad in physical_adapters:
+        if ad.get("status") == "Up" and ad.get("type") == "Ethernet" and _has_valid_ip(ad):
+            selected = ad
+            break
+
+    # Priority 2: If active routable IP matches an Up physical Ethernet adapter
+    if not selected and active_ip:
+        for ad in physical_adapters:
+            if ad.get("status") == "Up" and ad.get("type") == "Ethernet" and active_ip in ad.get("ips", []):
                 selected = ad
                 break
 
-    # Priority 2: Active physical adapter (Wi-Fi or Ethernet) with status 'Up' and non-APIPA IP
+    # Priority 3: Connected physical Wi-Fi adapter with status 'Up' and valid non-APIPA IPv4
     if not selected:
-        for ad in adapters:
-            if ad["status"] == "Up" and not ad["is_virtual"] and ad["type"] in ["Wi-Fi", "Ethernet"]:
-                valid_ips = [ip for ip in ad["ips"] if not ip.startswith("169.254.") and not ip.startswith("127.")]
-                if valid_ips:
+        for ad in physical_adapters:
+            if ad.get("status") == "Up" and ad.get("type") == "Wi-Fi" and _has_valid_ip(ad):
+                selected = ad
+                break
+
+    # Priority 4: Match active routable IP on any physical adapter that is 'Up'
+    if not selected and active_ip:
+        for ad in physical_adapters:
+            if ad.get("status") == "Up" and active_ip in ad.get("ips", []):
+                selected = ad
+                break
+
+    # Priority 5: Any physical adapter (Ethernet first, then Wi-Fi) with status 'Up'
+    if not selected:
+        for ad in physical_adapters:
+            if ad.get("status") == "Up" and ad.get("type") == "Ethernet":
+                selected = ad
+                break
+        if not selected:
+            for ad in physical_adapters:
+                if ad.get("status") == "Up" and ad.get("type") == "Wi-Fi":
                     selected = ad
                     break
 
-    # Priority 3: Any physical adapter that is 'Up' (even without configured IP yet)
+    # Priority 6: Fallback to any non-virtual adapter that is 'Up'
     if not selected:
-        for ad in adapters:
-            if ad["status"] == "Up" and not ad["is_virtual"] and ad["type"] in ["Wi-Fi", "Ethernet"]:
-                selected = ad
-                break
-
-    # Priority 4: Fallback to any non-virtual adapter that is 'Up'
-    if not selected:
-        for ad in adapters:
-            if ad["status"] == "Up" and not ad["is_virtual"]:
+        for ad in physical_adapters:
+            if ad.get("status") == "Up":
                 selected = ad
                 break
 
     if not selected:
-        # Check if physical adapters exist but are down / disabled (e.g. Wi-Fi turned off)
-        down_physical = [ad for ad in adapters if ad["type"] in ["Wi-Fi", "Ethernet"]]
+        # Check if physical adapters exist but are down / disabled (e.g. Wi-Fi turned off or cable unplugged)
+        down_physical = [ad for ad in adapters if ad.get("type") in ["Wi-Fi", "Ethernet"] and not ad.get("is_virtual", False)]
         if down_physical:
-            names = ", ".join(f"{a['name']} ({a['status']})" for a in down_physical)
+            names = ", ".join(f"{a['name']} ({a.get('status', 'Offline')})" for a in down_physical)
             raise RuntimeError(
                 f"Network adapter is offline or disconnected: {names}. "
                 f"Please enable Wi-Fi or connect an Ethernet cable."
@@ -336,9 +480,22 @@ def auto_detect_primary_interface() -> Tuple[Dict[str, Any], Dict[str, Any]]:
                 "Please connect your device to Wi-Fi or plug in an Ethernet cable."
             )
 
-    # Enrich selected adapter
-    selected["primary_ip"] = active_ip or (selected["ips"][0] if selected["ips"] else None)
-    selected["is_connected"] = bool(active_ip or [ip for ip in selected["ips"] if not ip.startswith("169.254.") and not ip.startswith("127.")])
+    # Determine primary IP strictly from the SELECTED adapter's own IP list
+    valid_selected_ips = [
+        ip for ip in selected.get("ips", [])
+        if ip and not ip.startswith("169.254.") and not ip.startswith("127.")
+    ]
+    if active_ip and active_ip in selected.get("ips", []):
+        selected_ip = active_ip
+    elif valid_selected_ips:
+        selected_ip = valid_selected_ips[0]
+    elif selected.get("ips"):
+        selected_ip = selected["ips"][0]
+    else:
+        selected_ip = None
+
+    selected["primary_ip"] = selected_ip
+    selected["is_connected"] = bool(selected_ip and selected.get("status") == "Up")
     selected["driver_status"] = drivers
 
     return selected, drivers

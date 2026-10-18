@@ -13,7 +13,7 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("Install", "Start", "Stop", "Restart", "Status", "Uninstall", "TestIPC")]
+    [ValidateSet("Install", "Start", "Stop", "Restart", "Status", "Uninstall", "TestIPC", "ConfigureFirewall", "Firewall")]
     [string]$Action
 )
 
@@ -322,4 +322,31 @@ except Exception as e:
         }
         Write-Host "✅ Service $ServiceName has been uninstalled." -ForegroundColor Green
     }
+
+    { $_ -in @("ConfigureFirewall", "Firewall") } {
+        if (-not (Check-Administrator)) {
+            Show-UACWarning
+            exit 1
+        }
+        Write-Host "=== Configuring Windows Firewall for SocNet / DDoS-Guard ===" -ForegroundColor Cyan
+        $RuleName = "SocNet DDoS-Guard Monitoring Service"
+
+        # Remove previous rule if present
+        Remove-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
+
+        # Create inbound rule strictly for TCP ports 5000 and 8080 on Private and Domain profiles
+        New-NetFirewallRule -DisplayName $RuleName `
+            -Description "Permits incoming authorized network traffic for SocNet Web UI (5000) and Benign Test Service (8080) on local Ethernet networks." `
+            -Direction Inbound `
+            -Protocol TCP `
+            -LocalPort 5000, 8080 `
+            -Action Allow `
+            -Profile Private, Domain `
+            -Enabled True | Out-Null
+
+        Write-Host "✅ Inbound Windows Firewall rule '$RuleName' created successfully." -ForegroundColor Green
+        Write-Host "   • Allowed TCP Ports : 5000 (API / Web UI), 8080 (Benign Test Service)" -ForegroundColor Gray
+        Write-Host "   • Network Profiles  : Private, Domain (Public WAN blocked)" -ForegroundColor Gray
+    }
 }
+

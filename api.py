@@ -50,10 +50,28 @@ def log_diag(category: str, message: str, **kwargs):
     print(f"[{ts}] [{category.upper()}] {message}{extra}", flush=True)
 
 
+def is_authorized_client(client_ip: Optional[str]) -> bool:
+    """Restricts API access to loopback and authorized private test subnets (RFC 1918)."""
+    if not client_ip:
+        return True
+    try:
+        import ipaddress
+        ip = ipaddress.ip_address(client_ip)
+        return ip.is_loopback or ip.is_private
+    except Exception:
+        return True  # Fallback to allow if format unrecognized in unit test mocks
+
+
 @app.before_request
 def log_request_start():
     request._start_time = time.time()
     if request.path.startswith("/api"):
+        if not is_authorized_client(request.remote_addr):
+            log_diag("AUTH_REJECT", f"Blocked unauthorized API access attempt from public IP {request.remote_addr}")
+            return jsonify({
+                "status": "error",
+                "message": "Access restricted: Development API is restricted to authorized local and private test networks."
+            }), 403
         log_diag("HTTP_REQ", f"--> {request.method} {request.path} from {request.remote_addr}")
 
 
@@ -1102,7 +1120,7 @@ def home():
 
 @app.route('/api/adapter-info', methods=['GET'])
 def get_adapter_info():
-    """Returns the auto-detected primary network adapter, capture driver, and Windows Service readiness."""
+    """Returns the auto-detected primary network adapter, capture driver, Windows Service readiness, and available adapters."""
     try:
         adapter, driver_status = auto_detect_primary_interface()
         svc_probe = ipc_client.ping()
@@ -1129,13 +1147,46 @@ def get_adapter_info():
             "status": "success",
             "adapter": adapter,
             "driver_status": driver_status,
-            "service_state": svc_state
+            "service_state": svc_state,
+            "available_adapters": get_windows_network_adapters()
         }), 200
     except Exception as e:
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
+
+
+@app.route('/api/health', methods=['GET'])
+def get_health_status():
+    """Lightweight connectivity health check endpoint for remote test clients and local monitoring."""
+    try:
+        adapter, driver_status = auto_detect_primary_interface()
+        return jsonify({
+            "status": "ok",
+            "service": "SocNet DDoS-Guard",
+            "monitoring": is_monitoring,
+            "primary_adapter": {
+                "name": adapter.get("name"),
+                "type": adapter.get("type"),
+                "ip": adapter.get("primary_ip"),
+                "status": adapter.get("status"),
+                "index": adapter.get("index"),
+                "network_name": adapter.get("network_name")
+            },
+            "can_capture_live": driver_status.get("can_capture_live", False),
+            "traffic_test_port": getattr(app, "traffic_test_port", 8080),
+            "timestamp": time.time()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "degraded",
+            "service": "SocNet DDoS-Guard",
+            "error": str(e),
+            "monitoring": is_monitoring,
+            "traffic_test_port": getattr(app, "traffic_test_port", 8080),
+            "timestamp": time.time()
+        }), 200
 
 
 @app.route('/api/service-status', methods=['GET'])
@@ -1228,10 +1279,27 @@ def start_scan():
                         break
 
                 if matched_ad:
+                    if matched_ad.get("status") in ["Disconnected", "Disabled"]:
+                        err_msg = (
+                            f"Requested network adapter '{matched_ad.get('name')}' is {matched_ad.get('status')}. "
+                            f"Monitoring cannot start on a disconnected or disabled interface. Please connect the cable or enable the adapter."
+                        )
+                        log_diag("ADAPTER_OFFLINE", err_msg)
+                        current_scan_session.update({
+                            "status": "error",
+                            "label": "Capture Error",
+                            "confidence": 0.0,
+                            "error_type": "ADAPTER_OFFLINE",
+                            "error": err_msg,
+                            "message": err_msg
+                        })
+                        return jsonify(current_scan_session), 200
+
                     adapter_info = matched_ad
                     active_ip = get_active_routable_ip()
-                    adapter_info["primary_ip"] = active_ip or (adapter_info["ips"][0] if adapter_info.get("ips") else None)
-                    adapter_info["is_connected"] = bool(adapter_info.get("primary_ip"))
+                    valid_ips = [ip for ip in adapter_info.get("ips", []) if ip and not ip.startswith("169.254.") and not ip.startswith("127.")]
+                    adapter_info["primary_ip"] = (active_ip if active_ip in adapter_info.get("ips", []) else (valid_ips[0] if valid_ips else None))
+                    adapter_info["is_connected"] = bool(adapter_info.get("primary_ip") and adapter_info.get("status") == "Up")
                     driver_info = check_capture_drivers()
                     adapter_info["driver_status"] = driver_info
                 else:
@@ -1241,6 +1309,7 @@ def start_scan():
                         scapy_desc = getattr(scapy_dev, "description", "")
                         scapy_idx = getattr(scapy_dev, "index", req_adapter_idx)
                         scapy_ip = getattr(scapy_dev, "ip", None)
+                        scapy_netname = getattr(scapy_dev, "network_name", None)
                         is_wifi = any(k in str(scapy_name).lower() or k in str(scapy_desc).lower() for k in ["wi-fi", "wireless", "802.11"])
                         adapter_info = {
                             "name": scapy_name,
@@ -1251,7 +1320,8 @@ def start_scan():
                             "ips": [scapy_ip] if scapy_ip else [],
                             "primary_ip": scapy_ip,
                             "is_connected": bool(scapy_ip),
-                            "is_virtual": False
+                            "is_virtual": False,
+                            "network_name": scapy_netname
                         }
                         driver_info = check_capture_drivers()
                         adapter_info["driver_status"] = driver_info
@@ -1272,6 +1342,13 @@ def start_scan():
                         return jsonify(current_scan_session), 200
             else:
                 adapter_info, driver_info = auto_detect_primary_interface()
+
+            # Ensure Scapy Npcap device identifier is linked
+            if not adapter_info.get("network_name"):
+                scapy_dev = resolve_scapy_interface(adapter_info.get("name"), adapter_info.get("index"))
+                if scapy_dev:
+                    adapter_info["network_name"] = getattr(scapy_dev, "network_name", None)
+                    adapter_info["scapy_guid"] = getattr(scapy_dev, "guid", None)
 
             adapter_name = adapter_info.get("name", "Unknown")
             adapter_idx = adapter_info.get("index")
@@ -1812,6 +1889,78 @@ def get_network_discovery_device(ip: str):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
+
+
+class BenignTrafficHandler(BaseHTTPRequestHandler):
+    """
+    Handles benign HTTP test traffic from the Sender Computer.
+    Acknowledges requests with standard HTTP 200 OK responses to ensure full
+    TCP three-way handshake, payload transfer, and clean teardown over Ethernet.
+    """
+    def log_message(self, format, *args):
+        # Quiet standard HTTP server stderr logging
+        pass
+
+    def do_GET(self):
+        body = json.dumps({
+            "status": "success",
+            "service": "SocNet Benign Traffic Sink",
+            "message": "Benign network probe received and acknowledged.",
+            "path": self.path,
+            "timestamp": time.time()
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        content_len = int(self.headers.get("Content-Length", 0))
+        _ = self.rfile.read(content_len) if content_len > 0 else b""
+        body = json.dumps({
+            "status": "success",
+            "service": "SocNet Benign Traffic Sink",
+            "message": "Benign POST probe received and acknowledged.",
+            "bytes_received": content_len,
+            "timestamp": time.time()
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+
+def start_benign_traffic_service(host: str = "0.0.0.0", port: int = 8080):
+    """Starts the in-process Benign Traffic Test Service in a background thread."""
+    try:
+        from http.server import HTTPServer
+        from socketserver import ThreadingMixIn
+        class ThreadedTrafficServer(ThreadingMixIn, HTTPServer):
+            daemon_threads = True
+            allow_reuse_address = True
+
+        server = ThreadedTrafficServer((host, port), BenignTrafficHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        log_diag("TRAFFIC_SERVICE", f"Benign Traffic Test Server active on http://{host}:{port}")
+        return server
+    except Exception as ex:
+        log_diag("TRAFFIC_SERVICE_ERROR", f"Could not bind Benign Traffic Server to port {port}: {ex}")
+        return None
+
+
 def check_port_availability(port: int = 5000):
     """Detects and alerts if port is already bound."""
     import socket
@@ -1823,19 +1972,47 @@ def check_port_availability(port: int = 5000):
 
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description="SocNet / DDoS-Guard Monitoring Server")
+    parser.add_argument("--host", default=os.environ.get("SOCNET_HOST", "0.0.0.0"), help="Host IP to bind (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("SOCNET_PORT", 5000)), help="Port to bind Flask API (default: 5000)")
+    parser.add_argument("--traffic-port", type=int, default=int(os.environ.get("SOCNET_TRAFFIC_PORT", 8080)), help="Port for benign test traffic service (default: 8080)")
+    parser.add_argument("--no-traffic-service", action="store_true", help="Disable the in-process benign traffic test service")
+    args = parser.parse_args()
+
     print("=" * 90)
     print("           AI-POWERED REAL-TIME DDoS DETECTION SYSTEM")
     print("                    ULTIMATE FINAL VERSION - 2025")
     print("=" * 90)
     load_model_and_scaler()
-    check_port_availability(5000)
+    check_port_availability(args.port)
+
+    # Detect active primary adapter to display genuine IP to user
+    primary_ad_info = {}
+    try:
+        primary_ad_info, _ = auto_detect_primary_interface()
+    except Exception:
+        pass
+
+    ad_ip = primary_ad_info.get("primary_ip") or "127.0.0.1"
+    ad_name = primary_ad_info.get("name") or "Primary Interface"
+    ad_type = primary_ad_info.get("type") or "Network"
+
+    if not args.no_traffic_service:
+        app.traffic_test_port = args.traffic_port
+        start_benign_traffic_service(host=args.host, port=args.traffic_port)
+
     print("Server is running on:")
-    print("   → http://127.0.0.1:5000")
+    print(f"   → Dashboard / API : http://127.0.0.1:{args.port} (Localhost)")
+    if ad_ip and ad_ip != "127.0.0.1":
+        print(f"   → Remote Test API : http://{ad_ip}:{args.port} [{ad_type}: {ad_name}]")
+    if not args.no_traffic_service:
+        print(f"   → Benign Traffic  : http://{ad_ip}:{args.traffic_port} (Port for send_traffic.py)")
     print("\nFeatures:")
     print("   • Automatic Network Adapter Auto-Discovery (Wi-Fi & Ethernet)")
     print("   • Live flow capture & 77-feature extraction engine")
     print("   • Multi-Class Intrusion Detection (15 categories)")
-    print("   • Simulated attack streaming with send_traffic.py")
+    print("   • Real benign network traffic testing with send_traffic.py")
     print("   • 6-State Reactive Lifecycle")
     print("=" * 90)
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)

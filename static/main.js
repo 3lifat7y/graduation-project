@@ -210,6 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function syncServiceStatus() {
     if (isScanning) return;
     try {
+      await loadAdapterInfo();
       const res = await fetch(`${API_BASE_URL}/service-status`);
       if (!res.ok) return;
       const data = await res.json();
@@ -231,6 +232,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function setUIState(state, payload = {}) {
     if (payload && (payload.service_state || payload.driver_status)) {
       updateServiceBadge(payload.service_state, payload.driver_status);
+    }
+    if (payload && payload.interface) {
+      const iface = payload.interface;
+      if (adapterName) adapterName.textContent = `${iface.name} (${iface.type})`;
+      if (adapterIp && iface.primary_ip) adapterIp.textContent = `IPv4: ${iface.primary_ip}`;
+      if (adapterIcon) {
+        adapterIcon.className = (iface.type === "Ethernet") ? "fas fa-ethernet" : "fas fa-wifi";
+      }
     }
 
     if (stateBadge) {
@@ -686,8 +695,17 @@ document.addEventListener("DOMContentLoaded", () => {
     scanStartTime = Date.now();
 
     try {
+      // Refresh adapter information immediately before dispatching start request
+      await loadAdapterInfo();
+
       const scanPayload = { continuous: true, min_packets: 3 };
       if (currentNetworkAdapter) {
+        if (currentNetworkAdapter.status === "Disconnected" || currentNetworkAdapter.status === "Disabled") {
+          setUIState("error", {
+            message: `Selected adapter '${currentNetworkAdapter.name}' is ${currentNetworkAdapter.status}. Please connect an Ethernet cable or enable your network interface.`
+          });
+          return;
+        }
         scanPayload.adapter = currentNetworkAdapter.name;
         scanPayload.interface_name = currentNetworkAdapter.name;
         scanPayload.interface_index = currentNetworkAdapter.index;
