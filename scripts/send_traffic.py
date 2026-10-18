@@ -36,42 +36,68 @@ def get_project_root() -> Path:
 BASE_DIR = get_project_root()
 TEST_SET_PATH = str(BASE_DIR / "features_by_label.json")
 
+# ==============================================================================
+# SENDER CONFIGURATION: TARGET MONITORING COMPUTER
+#
+# Configure default destination in this SINGLE central location.
+# Change DEFAULT_MONITORING_HOST to your Monitoring Computer's Ethernet IPv4 address
+# (e.g. 192.168.1.11), or override it dynamically on the command line via:
+#   python scripts/send_traffic.py --host 192.168.1.11 --port 8080
+# or via the SOCNET_HOST environment variable.
+# ==============================================================================
+DEFAULT_MONITORING_HOST: str = os.environ.get("SOCNET_HOST", "192.168.1.11")
+DEFAULT_BENIGN_TRAFFIC_PORT: int = int(os.environ.get("SOCNET_TRAFFIC_PORT", 8080))
+DEFAULT_API_PORT: int = int(os.environ.get("SOCNET_PORT", 5000))
+
 
 def parse_args():
     p = argparse.ArgumentParser(
         description="SocNet / DDoS-Guard: Cross-Device Benign Network Traffic Generator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Send 20 benign HTTP test packets across Ethernet to Monitoring Computer:
-  python scripts/send_traffic.py --host 192.168.1.11 --port 8080 --count 20
+        epilog=f"""
+===============================================================================
+INSTRUCTIONS FOR TWO-COMPUTER ETHERNET DEPLOYMENT:
+===============================================================================
+1. On the MONITORING COMPUTER:
+   a. Connect the Ethernet cable and identify its IPv4 address (e.g. {DEFAULT_MONITORING_HOST}).
+   b. Configure Windows Firewall (run as Administrator once):
+      powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 ConfigureFirewall
+   c. Start the monitoring server:
+      python api.py
+   d. In your web browser, open http://127.0.0.1:5000 and click 'Start Monitoring'.
 
-  # Send continuous benign HTTP traffic at 0.5s interval until Ctrl+C:
-  python scripts/send_traffic.py --host 192.168.1.11 --port 8080 --continuous
+2. On the SENDER COMPUTER:
+   a. Connect the Ethernet cable on the same subnet (e.g. 192.168.1.X).
+   b. Run pre-flight connectivity check:
+      python scripts/send_traffic.py --host {DEFAULT_MONITORING_HOST} --check-only
+   c. Send 20 bounded, benign HTTP test packets:
+      python scripts/send_traffic.py --host {DEFAULT_MONITORING_HOST} --port {DEFAULT_BENIGN_TRAFFIC_PORT} --count 20
+   d. Or send continuous traffic at 0.5s intervals:
+      python scripts/send_traffic.py --host {DEFAULT_MONITORING_HOST} --port {DEFAULT_BENIGN_TRAFFIC_PORT} --continuous
 
-  # Check connectivity to Monitoring Computer API and test port without transmitting:
-  python scripts/send_traffic.py --host 192.168.1.11 --check-only
-
-  # Send TCP SYN frames to verify layer-4 capture:
-  python scripts/send_traffic.py --host 192.168.1.11 --port 8080 --protocol tcp --count 30
+NOTE:
+- The target host can be customized in one place by changing DEFAULT_MONITORING_HOST
+  at the top of scripts/send_traffic.py, or overridden dynamically using --host.
+- The sender NEVER silently falls back to 127.0.0.1 when a remote target is configured.
+===============================================================================
         """
     )
     # Destination Options
     p.add_argument(
         '--host', '-H', type=str, default=None,
-        help="Target Monitoring Computer Ethernet IPv4 address (e.g. 192.168.1.11, env: SOCNET_HOST)"
+        help=f"Target Monitoring Computer Ethernet IPv4 address (default: {DEFAULT_MONITORING_HOST}, env: SOCNET_HOST)"
     )
     p.add_argument(
         '--target', '-t', type=str, default=None,
-        help="Target server URL or host (e.g. http://192.168.1.11:8080, env: SOCNET_TARGET)"
+        help=f"Target server URL or host (e.g. http://{DEFAULT_MONITORING_HOST}:{DEFAULT_BENIGN_TRAFFIC_PORT}, env: SOCNET_TARGET)"
     )
     p.add_argument(
         '--port', '-p', type=int, default=None,
-        help="Target port for real benign traffic on Monitoring Computer (default: 8080, env: SOCNET_TRAFFIC_PORT)"
+        help=f"Target port for benign traffic on Monitoring Computer (default: {DEFAULT_BENIGN_TRAFFIC_PORT}, env: SOCNET_TRAFFIC_PORT)"
     )
     p.add_argument(
         '--api-port', type=int, default=None,
-        help="Target Flask API port on Monitoring Computer for health check (default: 5000, env: SOCNET_PORT)"
+        help=f"Target Flask API port on Monitoring Computer for health check (default: {DEFAULT_API_PORT}, env: SOCNET_PORT)"
     )
 
     # Traffic Flow Controls
@@ -112,8 +138,10 @@ Examples:
 def resolve_target_config(args) -> Tuple[str, int, int]:
     """
     Resolves target host, traffic port, and API port using CLI flags, environment variables,
-    and sensible defaults without hardcoded IP addresses.
+    and the central DEFAULT_MONITORING_HOST configuration variable.
+    Ensures that a remote target configuration is strictly honored and never silently reverts to 127.0.0.1.
     """
+    # Priority 1: Direct --host CLI argument
     host = args.host
 
     # Priority 2: Extract from --target URL if passed
@@ -124,42 +152,29 @@ def resolve_target_config(args) -> Tuple[str, int, int]:
         else:
             host = args.target.split(":")[0]
 
-    # Priority 3: Environment variables
+    # Priority 3: Central default configuration variable (or SOCNET_HOST env variable)
     if not host:
-        host = os.environ.get("SOCNET_HOST") or os.environ.get("SOCNET_TARGET") or os.environ.get("MONITORING_HOST")
+        host = DEFAULT_MONITORING_HOST
 
-    # Priority 4: Default localhost (with explicit remote warning)
+    # Validate that host is clean and non-empty
+    host = str(host).strip()
     if not host:
-        host = "127.0.0.1"
+        host = "192.168.1.11"
 
-    # Traffic port resolution
+    # Traffic port resolution: CLI -> --target URL -> central default
     traffic_port = args.port
-    if traffic_port is None:
-        env_traffic_port = os.environ.get("SOCNET_TRAFFIC_PORT")
-        if env_traffic_port:
-            try:
-                traffic_port = int(env_traffic_port)
-            except ValueError:
-                pass
     if traffic_port is None and args.target and ":" in args.target:
         try:
             traffic_port = int(urlparse(args.target).port or args.target.split(":")[-1].split("/")[0])
         except (ValueError, TypeError):
             pass
     if traffic_port is None:
-        traffic_port = 8080
+        traffic_port = DEFAULT_BENIGN_TRAFFIC_PORT
 
-    # API port resolution
+    # API port resolution: CLI -> central default
     api_port = args.api_port
     if api_port is None:
-        env_api_port = os.environ.get("SOCNET_PORT")
-        if env_api_port:
-            try:
-                api_port = int(env_api_port)
-            except ValueError:
-                pass
-    if api_port is None:
-        api_port = 5000
+        api_port = DEFAULT_API_PORT
 
     return host, traffic_port, api_port
 
@@ -167,7 +182,7 @@ def resolve_target_config(args) -> Tuple[str, int, int]:
 def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeout: float = 2.0) -> Dict[str, Any]:
     """
     Performs comprehensive pre-flight network diagnostics against the Monitoring Computer.
-    Tests TCP reachability on both the API port (5000) and traffic sink port (8080)
+    Tests TCP reachability on both the API port and traffic sink port
     with actionable error diagnoses for refused connections, timeouts, and unreachable hosts.
     """
     results: Dict[str, Any] = {
@@ -175,8 +190,9 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
         "traffic_port": traffic_port,
         "api_port": api_port,
         "host_resolvable": False,
-        "api_online": False,
+        "api_port_open": False,
         "traffic_port_open": False,
+        "api_online": False,
         "api_health": None,
         "error_reason": None,
         "remediation": None
@@ -190,12 +206,12 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
     except socket.gaierror as ge:
         results["error_reason"] = f"Host resolution failed for '{host}': {ge}"
         results["remediation"] = (
-            f"Could not resolve host '{host}'. Verify the IP address is correct. "
-            f"If connecting over an Ethernet cable, use the Monitoring Computer's Ethernet IPv4 address (e.g. 192.168.1.X)."
+            f"Could not resolve host '{host}'. Verify the IP address is correct.\n"
+            f"When connecting over an Ethernet cable, use the Monitoring Computer's Ethernet IPv4 address (e.g. 192.168.1.X)."
         )
         return results
 
-    # 2. Test API Port Reachability (Port 5000)
+    # 2. Test API Port Reachability (e.g. Port 5000)
     api_probe = False
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -257,7 +273,8 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
             results["remediation"] = (
                 "When running send_traffic.py on a separate Sender Computer, you MUST specify the Monitoring "
                 "Computer's Ethernet IPv4 address (not 127.0.0.1).\n"
-                "Example: python scripts/send_traffic.py --host 192.168.1.11 --port 8080"
+                "Example: python scripts/send_traffic.py --host 192.168.1.11 --port 8080\n"
+                "Or set DEFAULT_MONITORING_HOST at the top of scripts/send_traffic.py."
             )
         else:
             results["error_reason"] = f"Unable to establish TCP connection to {host} on ports {api_port} or {traffic_port}."
@@ -267,7 +284,7 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
                 f" 2. Subnet Config  : Confirm both computers share the same IPv4 subnet (e.g. Sender: 192.168.1.X, Monitor: 192.168.1.Y).\n"
                 f" 3. Service Status : On the Monitoring Computer, ensure 'python api.py' is running.\n"
                 f" 4. Firewall Rule  : On the Monitoring Computer, configure Windows Firewall to permit inbound TCP on ports {api_port} and {traffic_port}.\n"
-                f"    Run as Administrator on Monitor: 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Configure-Firewall'"
+                f"    Run as Administrator on Monitor: 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 ConfigureFirewall'"
             )
     elif results["api_port_open"] and not results["traffic_port_open"]:
         results["error_reason"] = f"API port {api_port} is reachable, but traffic sink port {traffic_port} is not responding."
@@ -509,44 +526,41 @@ def main():
         return
 
     # Pre-flight Connectivity & Health Verification
+    print("=" * 70)
+    print("        SOCNET SENDER: TARGET & CONNECTIVITY INITIALIZATION")
+    print("=" * 70)
+    print(f"  Configured Target IP : {host}")
+    print(f"  Benign Traffic Port  : {traffic_port}")
+    print(f"  Monitoring API Port  : {api_port}")
+    print("=" * 70)
     print(f"\n[PRE-FLIGHT] Testing network connectivity to Monitoring Computer ({host})...")
     conn = check_remote_connectivity(host, traffic_port=traffic_port, api_port=api_port, timeout=args.timeout)
 
-    if conn["host_resolvable"]:
-        print(f"  • Host IP Resolution     : {conn['resolved_ip']} [OK]")
-    else:
-        print(f"  • Host IP Resolution     : Failed ({host})")
+    print(f"  • Target IPv4 Address   : {host} (Resolved: {conn.get('resolved_ip', 'Failed')})")
+    print(f"  • Monitoring API Probe  : Port {api_port} -> {'REACHABLE [OK]' if conn['api_port_open'] else 'NOT RESPONDING'}")
+    if conn.get("api_health"):
+        h = conn["api_health"]
+        primary_ad = h.get("primary_adapter", {})
+        print(f"    - Remote Adapter Name : {primary_ad.get('name')} ({primary_ad.get('type')})")
+        print(f"    - Remote IP Reported  : {primary_ad.get('ip')}")
+        print(f"    - Capture Driver Ready: {h.get('can_capture_live')}")
+        print(f"    - Active Monitoring   : {h.get('monitoring')}")
+    traffic_status = 'OPEN [OK]' if conn['traffic_port_open'] else f"FAILED (Errno {conn.get('traffic_errno', 'N/A')})"
+    print(f"  • Benign Test Port Probe: Port {traffic_port} -> {traffic_status}")
 
-    if conn["api_port_open"]:
-        print(f"  • Monitoring API (Port {api_port}) : Reachable [OK]")
-        if conn.get("api_health"):
-            h = conn["api_health"]
-            primary_ad = h.get("primary_adapter", {})
-            print(f"    - Monitoring Interface : {primary_ad.get('name')} ({primary_ad.get('type')}) - IP: {primary_ad.get('ip')}")
-            print(f"    - Capture Driver Ready : {h.get('can_capture_live')}")
-            print(f"    - Active Monitoring    : {h.get('monitoring')}")
-    else:
-        print(f"  • Monitoring API (Port {api_port}) : Not Responding")
-
-    if conn["traffic_port_open"]:
-        print(f"  • Benign Test Port ({traffic_port}) : Open & Acknowledging [OK]")
-    else:
-        print(f"  • Benign Test Port ({traffic_port}) : Not Responding (Errno {conn.get('traffic_errno', 'N/A')})")
-
-    # If connectivity check failed completely, output actionable guidance
+    # Strict Validation: If connectivity check failed, output actionable guidance and abort
+    # NEVER silently fall back to 127.0.0.1 when a remote target is configured!
     if conn.get("error_reason"):
         print("\n" + "!" * 70)
-        print(f"❌ CONNECTIVITY ERROR: {conn['error_reason']}")
+        print(f"❌ CONNECTIVITY ERROR TO TARGET {host}:")
+        print(f"   {conn['error_reason']}")
         print("!" * 70)
         if conn.get("remediation"):
             print(f"\nActionable Remediation:\n{conn['remediation']}")
         print("!" * 70 + "\n")
-        if args.check_only:
-            sys.exit(1)
-        # Ask or confirm before attempting transmission
-        if not conn["traffic_port_open"] and not conn["api_port_open"]:
-            print("Cannot transmit traffic: Host is unreachable or target ports are closed.")
-            sys.exit(1)
+        print(f"CRITICAL: Traffic transmission aborted. The sender will NOT fall back to 127.0.0.1.")
+        print(f"Verify the Monitoring Computer ({host}) is reachable and api.py is running.")
+        sys.exit(1)
 
     if args.check_only:
         print("\n✅ Pre-flight connectivity check passed successfully.")

@@ -32,6 +32,10 @@ from modules.monitoring.capture_engine import (
     validate_flow_features
 )
 from scripts.send_traffic import (
+    DEFAULT_MONITORING_HOST,
+    DEFAULT_BENIGN_TRAFFIC_PORT,
+    DEFAULT_API_PORT,
+    parse_args,
     resolve_target_config,
     check_remote_connectivity,
     run_benign_traffic_generator
@@ -211,6 +215,54 @@ class TestRemoteConnectivityAndHealth(unittest.TestCase):
         self.assertIsNotNone(conn["error_reason"])
         self.assertIn("127.0.0.1", conn["error_reason"])
         self.assertIn("Monitoring Computer's Ethernet IPv4 address", conn["remediation"])
+
+    def test_06_default_monitoring_host_used_when_no_flags_provided(self):
+        """When no CLI flags are supplied, sender selects DEFAULT_MONITORING_HOST without hardcoding localhost."""
+        args = MagicMock()
+        args.host = None
+        args.target = None
+        args.port = None
+        args.api_port = None
+
+        host, traffic_port, api_port = resolve_target_config(args)
+        self.assertEqual(host, DEFAULT_MONITORING_HOST)
+        self.assertEqual(traffic_port, DEFAULT_BENIGN_TRAFFIC_PORT)
+        self.assertEqual(api_port, DEFAULT_API_PORT)
+
+    def test_07_cli_argument_parser_overrides(self):
+        """CLI arguments --host and --port override defaults accurately."""
+        with patch.object(sys, 'argv', ['send_traffic.py', '--host', '192.168.1.11', '--port', '8080', '--api-port', '5001']):
+            args = parse_args()
+            self.assertEqual(args.host, '192.168.1.11')
+            self.assertEqual(args.port, 8080)
+            self.assertEqual(args.api_port, 5001)
+
+            host, traffic_port, api_port = resolve_target_config(args)
+            self.assertEqual(host, '192.168.1.11')
+            self.assertEqual(traffic_port, 8080)
+            self.assertEqual(api_port, 5001)
+
+    def test_08_remote_unreachable_diagnostics_never_reverts_to_localhost(self):
+        """Unreachable remote target returns actionable remediation and never silently reverts to 127.0.0.1."""
+        target_ip = "192.0.2.1"  # TEST-NET-1 non-routable IP
+        conn = check_remote_connectivity(target_ip, traffic_port=8080, api_port=5000, timeout=0.2)
+        self.assertEqual(conn["host"], target_ip)
+        self.assertFalse(conn["api_port_open"])
+        self.assertFalse(conn["traffic_port_open"])
+        self.assertIsNotNone(conn["error_reason"])
+        self.assertIn(target_ip, conn["error_reason"])
+        self.assertIn("Troubleshooting checklist", conn["remediation"])
+
+    def test_09_sender_aborts_without_fallback_on_unreachable_remote(self):
+        """When remote host is unreachable, sender main() exits with code 1 and never falls back to 127.0.0.1."""
+        from scripts.send_traffic import main as sender_main
+        with patch.object(sys, 'argv', ['send_traffic.py', '--host', '192.0.2.1', '--timeout', '0.2']):
+            with patch("scripts.send_traffic.run_benign_traffic_generator") as mock_traffic_gen:
+                with self.assertRaises(SystemExit) as cm:
+                    sender_main()
+                self.assertEqual(cm.exception.code, 1)
+                # Ensure traffic generator was never invoked with 127.0.0.1 or anything else
+                mock_traffic_gen.assert_not_called()
 
 
 class TestBenignTrafficAndInferencePipeline(unittest.TestCase):
