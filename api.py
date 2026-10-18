@@ -25,7 +25,8 @@ import secrets
 
 from modules.common.network_detector import (
     auto_detect_primary_interface, check_capture_drivers,
-    get_windows_network_adapters, get_active_routable_ip
+    get_windows_network_adapters, get_active_routable_ip,
+    auto_detect_interface_with_rationale
 )
 from modules.monitoring.capture_engine import (
     FlowStatsCollector, RollingFlowStatsCollector, capture_window_scapy,
@@ -374,7 +375,9 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
             interface_name=adapter_name,
             interface_index=adapter_index,
             filter_str=filter_str,
-            continuous=continuous
+            continuous=continuous,
+            guid=adapter_info.get("guid") or adapter_info.get("scapy_guid"),
+            network_name=adapter_info.get("network_name")
         )
         if svc_start.get("status") == "error":
             err_msg = svc_start.get("message") or "Failed to start capture window on service."
@@ -646,10 +649,17 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
         # Local process: Run Scapy capture directly on resolved physical adapter
         adapter_name = adapter_info.get("name", "Active Adapter")
         adapter_index = adapter_info.get("index")
-        target_iface = resolve_scapy_interface(adapter_name, adapter_index)
+        adapter_guid = adapter_info.get("guid") or adapter_info.get("scapy_guid")
+        adapter_netname = adapter_info.get("network_name")
+        target_iface = resolve_scapy_interface(
+            adapter_name,
+            adapter_index,
+            guid=adapter_guid,
+            network_name=adapter_netname
+        )
         if not target_iface:
             err_msg = (
-                f"Interface resolution failed for adapter='{adapter_name}' (idx={adapter_index}). "
+                f"Interface resolution failed for adapter='{adapter_name}' (idx={adapter_index}, guid={adapter_guid}). "
                 f"No matching Scapy/Npcap network adapter found. Aborting capture to prevent silent default interface substitution."
             )
             log_diag("INTERFACE_NOT_FOUND", err_msg, scan_id=scan_id)
@@ -1120,9 +1130,15 @@ def home():
 
 @app.route('/api/adapter-info', methods=['GET'])
 def get_adapter_info():
-    """Returns the auto-detected primary network adapter, capture driver, Windows Service readiness, and available adapters."""
+    """Returns the auto-detected primary network adapter, capture driver, Windows Service readiness, available adapters, and candidate rationale."""
     try:
-        adapter, driver_status = auto_detect_primary_interface()
+        available_adapters = get_windows_network_adapters()
+        detect_result = auto_detect_interface_with_rationale(adapters=available_adapters)
+        adapter = detect_result["adapter"]
+        driver_status = detect_result["driver_status"]
+        selection_rationale = detect_result.get("selection_rationale", "")
+        candidates = detect_result.get("candidates", [])
+
         svc_probe = ipc_client.ping()
         service_online = bool(svc_probe.get("pong", False))
         svc_state = get_service_status()
@@ -1143,18 +1159,36 @@ def get_adapter_info():
             driver_status["can_capture_live"] = False
             driver_status["active_engine"] = "None"
             driver_status["remediation_guide"] = "DDoS-Guard Service is not installed. Run 'service_manager.ps1 Install' as Administrator."
+
         return jsonify({
             "status": "success",
             "adapter": adapter,
+            "auto_selected": adapter,
+            "selection_rationale": selection_rationale,
+            "candidates": candidates,
             "driver_status": driver_status,
             "service_state": svc_state,
-            "available_adapters": get_windows_network_adapters()
+            "available_adapters": available_adapters
         }), 200
     except Exception as e:
+        log_diag("ADAPTER_INFO_WARN", f"Auto-detection rationale raised: {e}")
+        available = []
+        try:
+            available = get_windows_network_adapters()
+        except Exception:
+            pass
+        driver_status = check_capture_drivers()
         return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+            "status": "warning" if available else "error",
+            "message": str(e),
+            "selection_rationale": str(e),
+            "adapter": None,
+            "auto_selected": None,
+            "candidates": [],
+            "driver_status": driver_status,
+            "service_state": get_service_status(),
+            "available_adapters": available
+        }), 200 if available else 500
 
 
 @app.route('/api/health', methods=['GET'])
@@ -1228,6 +1262,7 @@ def start_scan():
         continuous = True
         req_adapter_name = None
         req_adapter_idx = None
+        req_adapter_guid = None
 
         if request.is_json and request.get_json():
             req_data = request.get_json(silent=True) or {}
@@ -1237,6 +1272,7 @@ def start_scan():
                 continuous = bool(req_data["continuous"])
             req_adapter_name = req_data.get("interface_name") or req_data.get("adapter") or req_data.get("interface")
             req_adapter_idx = req_data.get("interface_index")
+            req_adapter_guid = req_data.get("guid") or req_data.get("scapy_guid")
         elif request.args:
             if "continuous" in request.args:
                 continuous = request.args.get("continuous", "true").lower() in ("true", "1")
@@ -1246,8 +1282,9 @@ def start_scan():
                 min_packets = int(request.args.get("min_packets", 3))
             req_adapter_name = request.args.get("interface_name") or request.args.get("adapter") or request.args.get("interface")
             req_adapter_idx = request.args.get("interface_index")
+            req_adapter_guid = request.args.get("guid") or request.args.get("scapy_guid")
 
-        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: adapter={req_adapter_name} (idx={req_adapter_idx}), continuous={continuous}, duration={duration}s, min_packets={min_packets}")
+        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: adapter={req_adapter_name} (idx={req_adapter_idx}, guid={req_adapter_guid}), continuous={continuous}, duration={duration}s, min_packets={min_packets}")
 
         # Wipe previous scan predictions, packet counts, and errors immediately
         current_scan_session.update({
@@ -1264,25 +1301,51 @@ def start_scan():
 
         # Resolve requested network adapter or auto-detect primary
         try:
-            if req_adapter_name or req_adapter_idx is not None:
+            is_auto_mode = (not req_adapter_name or str(req_adapter_name).strip().lower() in ["auto", "default", "none"]) and (req_adapter_idx is None) and (not req_adapter_guid)
+
+            if not is_auto_mode:
                 adapters = get_windows_network_adapters()
                 matched_ad = None
-                for ad in adapters:
-                    if req_adapter_idx is not None and int(ad.get("index", -1)) == int(req_adapter_idx):
-                        matched_ad = dict(ad)
-                        break
-                    if req_adapter_name and str(ad.get("name", "")).strip().lower() == str(req_adapter_name).strip().lower():
-                        matched_ad = dict(ad)
-                        break
-                    if req_adapter_name and str(req_adapter_name).strip().lower() in str(ad.get("description", "")).strip().lower():
-                        matched_ad = dict(ad)
-                        break
+
+                # 1. Match by exact GUID if provided
+                if req_adapter_guid:
+                    for ad in adapters:
+                        if str(ad.get("guid", "")).strip().lower() == str(req_adapter_guid).strip().lower():
+                            matched_ad = dict(ad)
+                            break
+
+                # 2. Match by exact interface index if provided
+                if not matched_ad and req_adapter_idx is not None:
+                    for ad in adapters:
+                        if int(ad.get("index", -1)) == int(req_adapter_idx):
+                            matched_ad = dict(ad)
+                            break
+
+                # 3. Match by exact name or network_name (case-insensitive)
+                if not matched_ad and req_adapter_name:
+                    clean_req = str(req_adapter_name).strip().lower()
+                    for ad in adapters:
+                        if str(ad.get("name", "")).strip().lower() == clean_req:
+                            matched_ad = dict(ad)
+                            break
+                        if str(ad.get("network_name", "")).strip().lower() == clean_req:
+                            matched_ad = dict(ad)
+                            break
+
+                # 4. Match by exact description (strictly equal, no loose substring)
+                if not matched_ad and req_adapter_name:
+                    clean_req = str(req_adapter_name).strip().lower()
+                    for ad in adapters:
+                        if str(ad.get("description", "")).strip().lower() == clean_req:
+                            matched_ad = dict(ad)
+                            break
 
                 if matched_ad:
                     if matched_ad.get("status") in ["Disconnected", "Disabled"]:
                         err_msg = (
-                            f"Requested network adapter '{matched_ad.get('name')}' is {matched_ad.get('status')}. "
-                            f"Monitoring cannot start on a disconnected or disabled interface. Please connect the cable or enable the adapter."
+                            f"Selected network adapter '{matched_ad.get('name')}' is {matched_ad.get('status')}. "
+                            f"Live packet capture cannot start on a disconnected or disabled interface. "
+                            f"Please connect the network cable, enable the adapter, or select an operational interface."
                         )
                         log_diag("ADAPTER_OFFLINE", err_msg)
                         current_scan_session.update({
@@ -1296,20 +1359,20 @@ def start_scan():
                         return jsonify(current_scan_session), 200
 
                     adapter_info = matched_ad
-                    active_ip = get_active_routable_ip()
                     valid_ips = [ip for ip in adapter_info.get("ips", []) if ip and not ip.startswith("169.254.") and not ip.startswith("127.")]
-                    adapter_info["primary_ip"] = (active_ip if active_ip in adapter_info.get("ips", []) else (valid_ips[0] if valid_ips else None))
+                    adapter_info["primary_ip"] = valid_ips[0] if valid_ips else (adapter_info.get("ips", [None])[0] if adapter_info.get("ips") else None)
                     adapter_info["is_connected"] = bool(adapter_info.get("primary_ip") and adapter_info.get("status") == "Up")
                     driver_info = check_capture_drivers()
                     adapter_info["driver_status"] = driver_info
                 else:
-                    scapy_dev = resolve_scapy_interface(req_adapter_name, req_adapter_idx)
+                    scapy_dev = resolve_scapy_interface(req_adapter_name, req_adapter_idx, guid=req_adapter_guid)
                     if scapy_dev:
                         scapy_name = getattr(scapy_dev, "name", req_adapter_name)
                         scapy_desc = getattr(scapy_dev, "description", "")
                         scapy_idx = getattr(scapy_dev, "index", req_adapter_idx)
                         scapy_ip = getattr(scapy_dev, "ip", None)
                         scapy_netname = getattr(scapy_dev, "network_name", None)
+                        scapy_guid = getattr(scapy_dev, "guid", req_adapter_guid)
                         is_wifi = any(k in str(scapy_name).lower() or k in str(scapy_desc).lower() for k in ["wi-fi", "wireless", "802.11"])
                         adapter_info = {
                             "name": scapy_name,
@@ -1321,14 +1384,15 @@ def start_scan():
                             "primary_ip": scapy_ip,
                             "is_connected": bool(scapy_ip),
                             "is_virtual": False,
-                            "network_name": scapy_netname
+                            "network_name": scapy_netname,
+                            "guid": scapy_guid
                         }
                         driver_info = check_capture_drivers()
                         adapter_info["driver_status"] = driver_info
                     else:
                         err_msg = (
-                            f"Requested network adapter '{req_adapter_name}' (idx={req_adapter_idx}) "
-                            f"could not be resolved. Aborting capture to prevent silent default interface substitution."
+                            f"Requested network adapter '{req_adapter_name}' (idx={req_adapter_idx}, guid={req_adapter_guid}) "
+                            f"could not be resolved. Aborting capture to prevent silent interface substitution."
                         )
                         log_diag("ADAPTER_NOT_FOUND", err_msg)
                         current_scan_session.update({
@@ -1345,7 +1409,11 @@ def start_scan():
 
             # Ensure Scapy Npcap device identifier is linked
             if not adapter_info.get("network_name"):
-                scapy_dev = resolve_scapy_interface(adapter_info.get("name"), adapter_info.get("index"))
+                scapy_dev = resolve_scapy_interface(
+                    adapter_info.get("name"),
+                    adapter_info.get("index"),
+                    guid=adapter_info.get("guid") or adapter_info.get("scapy_guid")
+                )
                 if scapy_dev:
                     adapter_info["network_name"] = getattr(scapy_dev, "network_name", None)
                     adapter_info["scapy_guid"] = getattr(scapy_dev, "guid", None)

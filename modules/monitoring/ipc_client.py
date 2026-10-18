@@ -245,7 +245,9 @@ class DDoSGuardIPCClient:
         interface_name: Optional[str] = None,
         interface_index: Optional[int] = None,
         filter_str: Optional[str] = None,
-        continuous: bool = True
+        continuous: bool = True,
+        guid: Optional[str] = None,
+        network_name: Optional[str] = None
     ) -> Dict[str, Any]:
         args = {
             "duration": duration,
@@ -259,6 +261,10 @@ class DDoSGuardIPCClient:
             args["interface_index"] = int(interface_index)
         if filter_str:
             args["filter_str"] = str(filter_str)
+        if guid:
+            args["guid"] = str(guid)
+        if network_name:
+            args["network_name"] = str(network_name)
         return self._send_command("START_SCAN", args)
 
     def start_monitoring(
@@ -267,7 +273,9 @@ class DDoSGuardIPCClient:
         scan_id: Optional[str] = None,
         interface_name: Optional[str] = None,
         interface_index: Optional[int] = None,
-        filter_str: Optional[str] = None
+        filter_str: Optional[str] = None,
+        guid: Optional[str] = None,
+        network_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """Convenience method to initiate continuous real-time traffic monitoring."""
         return self.start_scan(
@@ -277,7 +285,9 @@ class DDoSGuardIPCClient:
             interface_name=interface_name,
             interface_index=interface_index,
             filter_str=filter_str,
-            continuous=True
+            continuous=True,
+            guid=guid,
+            network_name=network_name
         )
 
     def get_scan_status(self, scan_id: Optional[str] = None) -> Dict[str, Any]:

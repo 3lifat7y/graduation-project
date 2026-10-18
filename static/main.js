@@ -85,7 +85,50 @@ document.addEventListener("DOMContentLoaded", () => {
   const adapterIcon = document.getElementById("adapterIcon");
   const headerHealthDot = document.getElementById("headerHealthDot");
   const headerHealthLabel = document.getElementById("headerHealthLabel");
+
+  // Adapter Selection Hub Elements
+  const adapterSelectionHub = document.getElementById("adapterSelectionHub");
+  const monitoringAdapterSelect = document.getElementById("monitoringAdapterSelect");
+  const autoSelectAdapterBtn = document.getElementById("autoSelectAdapterBtn");
+  const refreshAdaptersBtn = document.getElementById("refreshAdaptersBtn");
+  const refreshAdaptersIcon = document.getElementById("refreshAdaptersIcon");
+  const refreshAdaptersText = document.getElementById("refreshAdaptersText");
+  const adapterModeBadge = document.getElementById("adapterModeBadge");
+  const adapterCountPill = document.getElementById("adapterCountPill");
+  const adapterDetailsGrid = document.getElementById("adapterDetailsGrid");
+  const adapterTypeMeta = document.getElementById("adapterTypeMeta");
+  const adapterGatewayMeta = document.getElementById("adapterGatewayMeta");
+  const adapterStatusPill = document.getElementById("adapterStatusPill");
+  const adapterLinkSpeedMeta = document.getElementById("adapterLinkSpeedMeta");
+  const adapterDriverMeta = document.getElementById("adapterDriverMeta");
+  const adapterEmptyCard = document.getElementById("adapterEmptyCard");
+  const adapterRationaleText = document.getElementById("adapterRationaleText");
+  const candidatesTray = document.getElementById("candidatesTray");
+  const candidatesChips = document.getElementById("candidatesChips");
+  const adapterDisappearedAlert = document.getElementById("adapterDisappearedAlert");
+  const adapterDisappearedTitle = document.getElementById("adapterDisappearedTitle");
+  const adapterDisappearedMessage = document.getElementById("adapterDisappearedMessage");
+  const monitoringAdapterError = document.getElementById("monitoringAdapterError");
+  const adapterErrorTitle = document.getElementById("adapterErrorTitle");
+  const adapterErrorMessage = document.getElementById("adapterErrorMessage");
+  const adapterStatusDot = document.getElementById("adapterStatusDot");
+  const adapterStatusText = document.getElementById("adapterStatusText");
+
+  // State Management for Network Interface Hub
+  let discoveredAdapters = [];
+  let selectedAdapterMode = "auto"; // "auto" or "manual"
+  let selectedAdapterKey = "auto";
+  let autoSelectedAdapter = null;
   let currentNetworkAdapter = null;
+  let lastSelectedManualAdapter = null;
+  let selectedAdapterDisappeared = false;
+  let selectionRationale = "";
+  let evaluatedCandidates = [];
+
+  // Refresh Concurrency, Sequence Guard & Abort Controller
+  let isAdapterRefreshing = false;
+  let adapterRefreshSequence = 0;
+  let activeRefreshAbortController = null;
 
   // Navigation & UI Elements
   const menuToggle = document.getElementById("menuToggle");
@@ -180,37 +223,388 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function loadAdapterInfo() {
+  function getAdapterKey(ad) {
+    if (!ad) return "";
+    return ad.guid || ad.network_name || (ad.index !== undefined && ad.index !== null ? `idx_${ad.index}` : ad.name);
+  }
+
+  function renderAdapterDropdown(preserveSelection = true) {
+    if (!monitoringAdapterSelect) return;
+
+    const previousKey = selectedAdapterKey;
+    monitoringAdapterSelect.innerHTML = "";
+
+    // Empty state handling
+    if (!discoveredAdapters || discoveredAdapters.length === 0) {
+      if (adapterEmptyCard) adapterEmptyCard.style.display = "flex";
+      if (adapterDetailsGrid) adapterDetailsGrid.style.display = "none";
+      if (adapterCountPill) adapterCountPill.textContent = "0 Discovered";
+
+      const emptyOpt = document.createElement("option");
+      emptyOpt.value = "";
+      emptyOpt.disabled = true;
+      emptyOpt.selected = true;
+      emptyOpt.textContent = "No Network Adapters Detected";
+      monitoringAdapterSelect.appendChild(emptyOpt);
+      return;
+    }
+
+    if (adapterEmptyCard) adapterEmptyCard.style.display = "none";
+    if (adapterDetailsGrid) adapterDetailsGrid.style.display = "grid";
+    if (adapterCountPill) adapterCountPill.textContent = `${discoveredAdapters.length} Discovered`;
+
+    // 1. Auto Select option
+    const autoOpt = document.createElement("option");
+    autoOpt.value = "auto";
+    const autoRec = autoSelectedAdapter
+      ? `${autoSelectedAdapter.name} (${autoSelectedAdapter.primary_ip || 'No IPv4'})`
+      : "OS Default";
+    autoOpt.textContent = `⚡ Auto Select (Recommended: ${autoRec})`;
+    monitoringAdapterSelect.appendChild(autoOpt);
+
+    // 2. Discovered adapters
+    discoveredAdapters.forEach((ad) => {
+      const opt = document.createElement("option");
+      const key = getAdapterKey(ad);
+      opt.value = key;
+
+      const typeTag = `[${ad.type || 'Adapter'}]`;
+      const ipStr = ad.primary_ip ? ` — ${ad.primary_ip}` : (ad.status !== 'Up' ? ` — ${ad.status}` : ' — No IP');
+      const descStr = ad.description ? ` (${ad.description})` : '';
+      const captureStr = ad.can_capture ? ' [Capture Ready]' : '';
+
+      opt.textContent = `${typeTag} ${ad.name}${ipStr}${descStr}${captureStr}`;
+
+      if (ad.status === "Disconnected" || ad.status === "Disabled") {
+        opt.textContent += " (Offline)";
+      }
+      monitoringAdapterSelect.appendChild(opt);
+    });
+
+    // 3. Selection preservation logic
+    if (preserveSelection && selectedAdapterMode === "manual" && previousKey !== "auto") {
+      const matched = discoveredAdapters.find(ad => getAdapterKey(ad) === previousKey);
+      if (matched) {
+        monitoringAdapterSelect.value = previousKey;
+        selectedAdapterKey = previousKey;
+        currentNetworkAdapter = matched;
+        lastSelectedManualAdapter = matched;
+        selectedAdapterDisappeared = false;
+        if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
+        return;
+      } else {
+        // Previously selected manual adapter disappeared from operating system!
+        selectedAdapterDisappeared = true;
+        const missingName = lastSelectedManualAdapter ? lastSelectedManualAdapter.name : previousKey;
+        if (adapterDisappearedAlert) {
+          adapterDisappearedAlert.style.display = "flex";
+          if (adapterDisappearedMessage) {
+            adapterDisappearedMessage.textContent = `Previously selected adapter '${missingName}' was disconnected or removed. Live capture cannot proceed with a missing adapter. Please select an operational adapter from the dropdown or click 'Auto Select'.`;
+          }
+        }
+        const disOpt = document.createElement("option");
+        disOpt.value = previousKey;
+        disOpt.disabled = true;
+        disOpt.selected = true;
+        disOpt.textContent = `⚠️ [Unavailable] ${missingName} (Disconnected / Removed)`;
+        monitoringAdapterSelect.appendChild(disOpt);
+        monitoringAdapterSelect.value = previousKey;
+        return;
+      }
+    }
+
+    // Default to auto mode
+    monitoringAdapterSelect.value = "auto";
+    selectedAdapterKey = "auto";
+    selectedAdapterMode = "auto";
+    currentNetworkAdapter = autoSelectedAdapter;
+    selectedAdapterDisappeared = false;
+    if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
+  }
+
+  function updateSelectedAdapterDisplay() {
+    const isAuto = (selectedAdapterMode === "auto");
+
+    // Mode badge
+    if (adapterModeBadge) {
+      if (selectedAdapterDisappeared) {
+        adapterModeBadge.textContent = "Selection Missing";
+        adapterModeBadge.className = "adapter-mode-badge manual-mode";
+      } else if (isAuto) {
+        adapterModeBadge.textContent = "Auto Select Active";
+        adapterModeBadge.className = "adapter-mode-badge auto-mode";
+      } else {
+        adapterModeBadge.textContent = "Manual Selection";
+        adapterModeBadge.className = "adapter-mode-badge manual-mode";
+      }
+    }
+
+    // Handle missing / disappeared adapter state
+    if (selectedAdapterDisappeared) {
+      const missingName = lastSelectedManualAdapter ? lastSelectedManualAdapter.name : selectedAdapterKey;
+      if (adapterName) adapterName.textContent = `${missingName} [Unavailable]`;
+      if (adapterTypeMeta) adapterTypeMeta.textContent = "Hardware Disconnected / Removed";
+      if (adapterIp) adapterIp.textContent = "IPv4: Offline";
+      if (adapterGatewayMeta) adapterGatewayMeta.textContent = "Default Gateway: Unavailable";
+      if (adapterStatusText) adapterStatusText.textContent = "Disconnected / Removed";
+      if (adapterStatusDot) adapterStatusDot.className = "chip-dot dot-red";
+      if (adapterLinkSpeedMeta) adapterLinkSpeedMeta.textContent = "Physical Link: Severed";
+      if (driverStatusBadge) {
+        driverStatusBadge.textContent = "Capture: Blocked";
+        driverStatusBadge.className = "driver-badge driver-stopped";
+      }
+      if (adapterDriverMeta) adapterDriverMeta.textContent = "Hardware unavailable for Npcap binding";
+      if (adapterRationaleText) {
+        adapterRationaleText.textContent = `Manual adapter selection '${missingName}' is missing. The system enforces strict zero-fallback: live capture will NOT silently switch to another adapter. Please choose an active adapter or click Auto Select.`;
+      }
+      if (candidatesTray) candidatesTray.style.display = "none";
+      return;
+    }
+
+    const activeAd = isAuto ? autoSelectedAdapter : currentNetworkAdapter;
+
+    if (activeAd) {
+      // Card 1: Device Name, Type & Icon
+      if (adapterName) {
+        adapterName.textContent = activeAd.name || "Unknown Adapter";
+      }
+      if (adapterTypeMeta) {
+        const typeLabel = activeAd.type || "Physical";
+        const desc = activeAd.description ? ` • ${activeAd.description}` : "";
+        adapterTypeMeta.textContent = `${typeLabel} Hardware${desc}`;
+      }
+      if (adapterIcon) {
+        if (activeAd.type === "Ethernet") {
+          adapterIcon.className = "fas fa-ethernet";
+        } else if (activeAd.type === "Wi-Fi") {
+          adapterIcon.className = "fas fa-wifi";
+        } else if (activeAd.type === "VirtualBox" || activeAd.is_virtual) {
+          adapterIcon.className = "fas fa-server";
+        } else {
+          adapterIcon.className = "fas fa-network-wired";
+        }
+      }
+
+      // Card 2: IPv4 Address & Gateway
+      if (adapterIp) {
+        adapterIp.textContent = `IPv4: ${activeAd.primary_ip || (activeAd.status === 'Up' ? 'DHCP Pending' : 'None')}`;
+      }
+      if (adapterGatewayMeta) {
+        adapterGatewayMeta.textContent = activeAd.gateway
+          ? `Default Gateway: ${activeAd.gateway}`
+          : "Default Gateway: None / Direct Subnet";
+      }
+
+      // Card 3: Connection State & Link Speed
+      if (adapterStatusText) {
+        adapterStatusText.textContent = `Status: ${activeAd.status || 'Unknown'}`;
+      }
+      if (adapterStatusDot) {
+        if (activeAd.status === "Up") {
+          adapterStatusDot.className = "chip-dot dot-green";
+        } else if (activeAd.status === "Disconnected" || activeAd.status === "Disabled") {
+          adapterStatusDot.className = "chip-dot dot-red";
+        } else {
+          adapterStatusDot.className = "chip-dot dot-gray";
+        }
+      }
+      if (adapterLinkSpeedMeta) {
+        if (activeAd.link_speed) {
+          adapterLinkSpeedMeta.textContent = `Link Speed: ${activeAd.link_speed}`;
+        } else if (activeAd.mac) {
+          adapterLinkSpeedMeta.textContent = `MAC: ${activeAd.mac}`;
+        } else {
+          adapterLinkSpeedMeta.textContent = "Physical Link Active";
+        }
+      }
+
+      // Card 4: Capture Driver Readiness
+      if (driverStatusBadge) {
+        if (activeAd.can_capture) {
+          driverStatusBadge.textContent = "Npcap: Capture Ready";
+          driverStatusBadge.className = "driver-badge driver-ready";
+        } else {
+          driverStatusBadge.textContent = "Driver: Unavailable";
+          driverStatusBadge.className = "driver-badge driver-stopped";
+        }
+      }
+      if (adapterDriverMeta) {
+        adapterDriverMeta.textContent = activeAd.can_capture
+          ? "Scapy Kernel Driver Bound"
+          : "Npcap Binding Not Detected";
+      }
+
+      // Rationale and Candidates
+      if (adapterRationaleText) {
+        if (isAuto) {
+          adapterRationaleText.textContent = selectionRationale ||
+            `Auto-selected '${activeAd.name}' based on active routing and packet capture capability.`;
+        } else {
+          adapterRationaleText.textContent =
+            `Manually selected '${activeAd.name}' for packet capture. Hardware: ${activeAd.description || activeAd.type}. Operational status: ${activeAd.status}. IPv4: ${activeAd.primary_ip || 'None'}. Scapy driver binding: ${activeAd.can_capture ? 'Ready' : 'Pending'}. Strict zero-fallback policy active.`;
+        }
+      }
+
+      // Evaluated candidates tray
+      if (candidatesTray && candidatesChips) {
+        if (isAuto && evaluatedCandidates && evaluatedCandidates.length > 0) {
+          candidatesTray.style.display = "flex";
+          candidatesChips.innerHTML = "";
+          evaluatedCandidates.forEach(c => {
+            const chip = document.createElement("span");
+            chip.className = "candidate-chip" + (c.is_selected ? " selected" : "");
+            chip.textContent = `${c.name} (${c.type}: ${c.primary_ip || c.status})`;
+            candidatesChips.appendChild(chip);
+          });
+        } else {
+          candidatesTray.style.display = "none";
+        }
+      }
+
+      // Check offline warning
+      if (monitoringAdapterError && adapterErrorMessage) {
+        if (activeAd.status === "Disconnected" || activeAd.status === "Disabled") {
+          monitoringAdapterError.style.display = "flex";
+          adapterErrorMessage.textContent = `Selected interface '${activeAd.name}' is currently ${activeAd.status}. Live capture cannot start on an offline adapter. Please connect the cable, enable the interface, or choose another adapter.`;
+        } else {
+          monitoringAdapterError.style.display = "none";
+        }
+      }
+    } else {
+      if (adapterName) adapterName.textContent = "No Adapter Detected";
+      if (adapterTypeMeta) adapterTypeMeta.textContent = "Hardware Interface";
+      if (adapterIp) adapterIp.textContent = "IPv4: None";
+      if (adapterGatewayMeta) adapterGatewayMeta.textContent = "Default Gateway: None";
+      if (adapterStatusText) adapterStatusText.textContent = "Status: Offline";
+      if (adapterStatusDot) adapterStatusDot.className = "chip-dot dot-red";
+      if (adapterLinkSpeedMeta) adapterLinkSpeedMeta.textContent = "Physical Link: Down";
+      if (driverStatusBadge) {
+        driverStatusBadge.textContent = "Driver: Inactive";
+        driverStatusBadge.className = "driver-badge driver-stopped";
+      }
+      if (adapterDriverMeta) adapterDriverMeta.textContent = "No Adapter Bound";
+      if (monitoringAdapterError && adapterErrorMessage) {
+        monitoringAdapterError.style.display = "flex";
+        adapterErrorMessage.textContent = "No active physical network adapter was detected on the host. Please connect to Wi-Fi or plug in an Ethernet cable.";
+      }
+    }
+  }
+
+  async function discoverInterfaces(preserveSelection = true, isUserInitiated = false) {
+    // 1. Concurrency guard: reject duplicate overlapping requests
+    if (isAdapterRefreshing) {
+      console.log("[AdapterHub] Refresh operation already in progress. Ignoring duplicate click.");
+      return;
+    }
+
+    isAdapterRefreshing = true;
+    const reqSeq = ++adapterRefreshSequence;
+
+    // 2. Visual loading state on button and hub
+    if (refreshAdaptersBtn) {
+      refreshAdaptersBtn.disabled = true;
+    }
+    if (refreshAdaptersText) {
+      refreshAdaptersText.textContent = "Refreshing...";
+    }
+    if (refreshAdaptersIcon) {
+      refreshAdaptersIcon.classList.add("fa-spin");
+    }
+    if (adapterSelectionHub) {
+      adapterSelectionHub.classList.add("hub-refreshing");
+    }
+
+    // 3. Setup timeout abort controller (8 seconds)
+    if (activeRefreshAbortController) {
+      try { activeRefreshAbortController.abort(); } catch (e) {}
+    }
+    activeRefreshAbortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      if (activeRefreshAbortController) {
+        try { activeRefreshAbortController.abort(); } catch (e) {}
+      }
+    }, 8000);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/adapter-info`);
-      if (!res.ok) throw new Error("Failed to query adapter info");
+      const res = await fetch(`${API_BASE_URL}/adapter-info`, {
+        signal: activeRefreshAbortController.signal
+      });
+      clearTimeout(timeoutId);
+
+      // Guard against stale response race conditions
+      if (reqSeq !== adapterRefreshSequence) {
+        console.log(`[AdapterHub] Discarding stale response (seq ${reqSeq} < current ${adapterRefreshSequence})`);
+        return;
+      }
+
+      if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
       const data = await res.json();
 
-      if (data.status === "success" && data.adapter) {
-        const ad = data.adapter;
-        currentNetworkAdapter = ad;
+      if (reqSeq !== adapterRefreshSequence) return;
+
+      if (data.status === "success" || data.status === "warning") {
+        discoveredAdapters = Array.isArray(data.available_adapters) ? data.available_adapters : [];
+        autoSelectedAdapter = data.adapter || data.auto_selected || null;
+        selectionRationale = data.selection_rationale || "";
+        evaluatedCandidates = Array.isArray(data.candidates) ? data.candidates : [];
+
         const drv = data.driver_status || {};
         const svc = data.service_state || drv.service_state || {};
-
-        if (adapterName) adapterName.textContent = `${ad.name} (${ad.type})`;
-        if (adapterIp) adapterIp.textContent = `IPv4: ${ad.primary_ip || "DHCP"}`;
-
-        if (adapterIcon) {
-          adapterIcon.className = (ad.type === "Ethernet") ? "fas fa-ethernet" : "fas fa-wifi";
-        }
-
         updateServiceBadge(svc, drv);
+
+        renderAdapterDropdown(preserveSelection);
+        updateSelectedAdapterDisplay();
+
+        if (monitoringAdapterError && !selectedAdapterDisappeared) {
+          monitoringAdapterError.style.display = "none";
+        }
       }
     } catch (err) {
-      console.warn("Could not load adapter info:", err);
-      if (adapterName) adapterName.textContent = "Network Adapter: Ready";
+      clearTimeout(timeoutId);
+      if (reqSeq !== adapterRefreshSequence) return;
+
+      console.warn("[AdapterHub] Interface discovery failed:", err);
+      const isTimeout = (err.name === "AbortError");
+      const errorMsg = isTimeout
+        ? "Network interface discovery timed out after 8 seconds. Please check host connectivity and retry."
+        : `Interface discovery error: ${err.message || err}.`;
+
+      if (adapterRationaleText) {
+        adapterRationaleText.textContent = `${errorMsg} Retaining previous adapter configurations.`;
+      }
+      if (isUserInitiated && monitoringAdapterError && adapterErrorMessage) {
+        monitoringAdapterError.style.display = "flex";
+        adapterErrorMessage.textContent = errorMsg;
+      }
+    } finally {
+      // 4. Always restore button state (never leave permanently disabled)
+      if (reqSeq === adapterRefreshSequence) {
+        isAdapterRefreshing = false;
+        activeRefreshAbortController = null;
+        if (refreshAdaptersIcon) {
+          refreshAdaptersIcon.classList.remove("fa-spin");
+        }
+        if (refreshAdaptersText) {
+          refreshAdaptersText.textContent = "Refresh Interfaces";
+        }
+        if (refreshAdaptersBtn) {
+          refreshAdaptersBtn.disabled = false;
+        }
+        if (adapterSelectionHub) {
+          adapterSelectionHub.classList.remove("hub-refreshing");
+        }
+      }
     }
+  }
+
+  async function loadAdapterInfo() {
+    await discoverInterfaces(true);
   }
 
   async function syncServiceStatus() {
     if (isScanning) return;
     try {
-      await loadAdapterInfo();
+      // Light status polling without triggering heavy OS adapter enumeration
       const res = await fetch(`${API_BASE_URL}/service-status`);
       if (!res.ok) return;
       const data = await res.json();
@@ -222,8 +616,54 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Initial queries and heartbeat interval
-  loadAdapterInfo();
+  // Bind Adapter Hub Controls
+  if (monitoringAdapterSelect) {
+    monitoringAdapterSelect.addEventListener("change", (e) => {
+      const val = e.target.value;
+      selectedAdapterKey = val;
+      selectedAdapterDisappeared = false;
+      if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
+      if (monitoringAdapterError) monitoringAdapterError.style.display = "none";
+
+      if (val === "auto") {
+        selectedAdapterMode = "auto";
+        currentNetworkAdapter = autoSelectedAdapter;
+      } else {
+        selectedAdapterMode = "manual";
+        const found = discoveredAdapters.find(ad => getAdapterKey(ad) === val);
+        if (found) {
+          currentNetworkAdapter = found;
+          lastSelectedManualAdapter = found;
+        }
+      }
+      updateSelectedAdapterDisplay();
+    });
+  }
+
+  if (autoSelectAdapterBtn) {
+    autoSelectAdapterBtn.addEventListener("click", () => {
+      selectedAdapterMode = "auto";
+      selectedAdapterKey = "auto";
+      selectedAdapterDisappeared = false;
+      if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
+      if (monitoringAdapterError) monitoringAdapterError.style.display = "none";
+      currentNetworkAdapter = autoSelectedAdapter;
+      if (monitoringAdapterSelect) {
+        monitoringAdapterSelect.value = "auto";
+      }
+      updateSelectedAdapterDisplay();
+    });
+  }
+
+  if (refreshAdaptersBtn) {
+    refreshAdaptersBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      discoverInterfaces(true, true);
+    });
+  }
+
+  // Initial interface discovery and heartbeat interval
+  discoverInterfaces(false);
   setInterval(syncServiceStatus, 5000);
 
   // ============================================================================
@@ -695,21 +1135,46 @@ document.addEventListener("DOMContentLoaded", () => {
     scanStartTime = Date.now();
 
     try {
-      // Refresh adapter information immediately before dispatching start request
-      await loadAdapterInfo();
+      // Guard against starting capture on a disappeared or removed adapter
+      if (selectedAdapterDisappeared) {
+        if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "flex";
+        const missingMsg = "Cannot start live monitoring: The previously selected network adapter was disconnected or removed. Please select an active interface from the dropdown or click 'Auto Select'.";
+        if (monitoringAdapterError && adapterErrorMessage) {
+          monitoringAdapterError.style.display = "flex";
+          adapterErrorMessage.textContent = missingMsg;
+        }
+        setUIState("error", { message: missingMsg });
+        return;
+      }
+
+      // Validate selected adapter before dispatching start request
+      const activeAd = (selectedAdapterMode === "auto") ? autoSelectedAdapter : currentNetworkAdapter;
+      if (activeAd && (activeAd.status === "Disconnected" || activeAd.status === "Disabled")) {
+        const offMsg = `Selected adapter '${activeAd.name}' is ${activeAd.status}. Live packet capture cannot start on a disconnected or disabled interface. Please connect the cable, enable the adapter, or choose another interface.`;
+        if (monitoringAdapterError && adapterErrorMessage) {
+          monitoringAdapterError.style.display = "flex";
+          adapterErrorMessage.textContent = offMsg;
+        }
+        setUIState("error", { message: offMsg });
+        return;
+      }
+
+      if (monitoringAdapterError) {
+        monitoringAdapterError.style.display = "none";
+      }
 
       const scanPayload = { continuous: true, min_packets: 3 };
-      if (currentNetworkAdapter) {
-        if (currentNetworkAdapter.status === "Disconnected" || currentNetworkAdapter.status === "Disabled") {
-          setUIState("error", {
-            message: `Selected adapter '${currentNetworkAdapter.name}' is ${currentNetworkAdapter.status}. Please connect an Ethernet cable or enable your network interface.`
-          });
-          return;
-        }
+      if (selectedAdapterMode === "auto") {
+        scanPayload.adapter = "auto";
+      } else if (currentNetworkAdapter) {
         scanPayload.adapter = currentNetworkAdapter.name;
         scanPayload.interface_name = currentNetworkAdapter.name;
         scanPayload.interface_index = currentNetworkAdapter.index;
+        if (currentNetworkAdapter.guid) {
+          scanPayload.guid = currentNetworkAdapter.guid;
+        }
       }
+
       const res = await fetch(`${API_BASE_URL}/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -719,6 +1184,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         console.error("[DDoS-Guard] /api/scan returned HTTP error:", res.status, errData);
+        if (monitoringAdapterError && adapterErrorMessage) {
+          monitoringAdapterError.style.display = "flex";
+          adapterErrorMessage.textContent = errData.message || errData.error || "Capture start failed.";
+        }
         setUIState("error", errData);
         return;
       }
@@ -736,9 +1205,13 @@ document.addEventListener("DOMContentLoaded", () => {
         setUIState("uac_cancelled", startData);
         return;
       }
-      if (startData.status === "error" || startData.error_type === "SERVICE_START_FAILED" || startData.error_type === "SERVICE_NOT_INSTALLED") {
+      if (startData.status === "error" || startData.error_type === "ADAPTER_OFFLINE" || startData.error_type === "InterfaceNotFound" || startData.error_type === "SERVICE_START_FAILED" || startData.error_type === "SERVICE_NOT_INSTALLED") {
         console.error("[DDoS-Guard] Service error on startup:", startData);
         activeScanId = null;
+        if (monitoringAdapterError && adapterErrorMessage) {
+          monitoringAdapterError.style.display = "flex";
+          adapterErrorMessage.textContent = startData.message || startData.error || "Capture start failed on selected adapter.";
+        }
         setUIState("error", startData);
         return;
       }
@@ -1245,6 +1718,7 @@ document.addEventListener("DOMContentLoaded", () => {
       setSidebarActive("monitoring");
       setTopNavActive("monitoring");
       window.scrollTo({ top: 0, behavior: "smooth" });
+      discoverInterfaces(true);
 
       if (updateHistory) {
         history.pushState({ view: "monitoring" }, "", "?view=monitoring");

@@ -313,21 +313,145 @@
             </p>
           </div>
 
-          <!-- Adapter Discovery & Driver HUD -->
-          <div class="adapter-chip-container">
-            <div class="adapter-chip" id="adapterChip" role="status" aria-live="polite">
-              <div class="chip-segment">
-                <i class="fas fa-wifi" id="adapterIcon" aria-hidden="true"></i>
-                <span id="adapterName">Detecting Network Adapter...</span>
+          <!-- Network Interface Discovery & Selection Hub (Redesigned & Responsive) -->
+          <div class="adapter-selection-hub" id="adapterSelectionHub" role="region" aria-label="Network Interface Selection Hub">
+            <!-- Header: Title, Operational Mode Indicator & Action Controls -->
+            <div class="adapter-hub-header">
+              <div class="adapter-hub-title-group">
+                <div class="adapter-hub-icon-badge">
+                  <i class="fas fa-network-wired" aria-hidden="true"></i>
+                </div>
+                <div class="adapter-hub-text-block">
+                  <h3 class="adapter-hub-heading">Capture Network Interface</h3>
+                  <p class="adapter-hub-subheading">Scapy & Npcap packet inspection hardware binding</p>
+                </div>
+                <span class="adapter-mode-badge auto-mode" id="adapterModeBadge" aria-live="polite">Auto Select Active</span>
               </div>
-              <span class="chip-divider" aria-hidden="true">|</span>
-              <div class="chip-segment">
-                <i class="fas fa-network-wired" aria-hidden="true"></i>
-                <span id="adapterIp">IPv4: Checking...</span>
+              <div class="adapter-hub-actions">
+                <button type="button" class="btn-subtle" id="autoSelectAdapterBtn" title="Automatically select best active adapter based on OS routing">
+                  <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                  <span>Auto Select</span>
+                </button>
+                <button type="button" class="btn-subtle" id="refreshAdaptersBtn" title="Discover network adapters from the operating system">
+                  <i class="fas fa-arrows-rotate" id="refreshAdaptersIcon" aria-hidden="true"></i>
+                  <span id="refreshAdaptersText">Refresh Interfaces</span>
+                </button>
               </div>
-              <span class="chip-divider" aria-hidden="true">|</span>
-              <div class="chip-segment">
-                <span id="driverStatusBadge" class="driver-badge">Driver: Checking...</span>
+            </div>
+
+            <!-- Primary Selector Row: Dropdown & Counter -->
+            <div class="adapter-selector-container">
+              <div class="adapter-field-header">
+                <label for="monitoringAdapterSelect" class="adapter-field-label">
+                  <i class="fas fa-microchip" aria-hidden="true"></i> Selected Adapter for Live Monitoring
+                </label>
+                <span class="adapter-count-pill" id="adapterCountPill">0 Discovered</span>
+              </div>
+              <div class="adapter-select-wrapper">
+                <select id="monitoringAdapterSelect" class="monitoring-adapter-select" aria-label="Select Network Adapter">
+                  <option value="auto">⚡ Auto Select (Recommended: Initializing...)</option>
+                </select>
+                <div class="select-dropdown-arrow" aria-hidden="true">
+                  <i class="fas fa-chevron-down"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Selected Interface Details: 4 Responsive Structured Cards -->
+            <div class="adapter-details-grid" id="adapterDetailsGrid" role="status" aria-live="polite">
+              <!-- Card 1: Device Name & Type -->
+              <div class="adapter-card" id="cardDevice">
+                <div class="adapter-card-header">
+                  <span class="adapter-card-icon"><i class="fas fa-wifi" id="adapterIcon" aria-hidden="true"></i></span>
+                  <span class="adapter-card-label">Active Device</span>
+                </div>
+                <div class="adapter-card-value" id="adapterName">Detecting Adapter...</div>
+                <div class="adapter-card-meta" id="adapterTypeMeta">Hardware Interface</div>
+              </div>
+
+              <!-- Card 2: IPv4 Address & Gateway -->
+              <div class="adapter-card" id="cardIp">
+                <div class="adapter-card-header">
+                  <span class="adapter-card-icon"><i class="fas fa-location-dot" aria-hidden="true"></i></span>
+                  <span class="adapter-card-label">IPv4 Configuration</span>
+                </div>
+                <div class="adapter-card-value" id="adapterIp">Checking...</div>
+                <div class="adapter-card-meta" id="adapterGatewayMeta">Default Gateway: Checking...</div>
+              </div>
+
+              <!-- Card 3: Connection State -->
+              <div class="adapter-card" id="cardStatus">
+                <div class="adapter-card-header">
+                  <span class="adapter-card-icon"><i class="fas fa-signal" aria-hidden="true"></i></span>
+                  <span class="adapter-card-label">Operational State</span>
+                </div>
+                <div class="adapter-card-value">
+                  <span class="status-pill" id="adapterStatusPill">
+                    <span class="chip-dot dot-gray" id="adapterStatusDot" aria-hidden="true"></span>
+                    <span id="adapterStatusText">Checking</span>
+                  </span>
+                </div>
+                <div class="adapter-card-meta" id="adapterLinkSpeedMeta">Physical Link Status</div>
+              </div>
+
+              <!-- Card 4: Capture Driver Readiness -->
+              <div class="adapter-card" id="cardDriver">
+                <div class="adapter-card-header">
+                  <span class="adapter-card-icon"><i class="fas fa-shield-halved" aria-hidden="true"></i></span>
+                  <span class="adapter-card-label">Capture Readiness</span>
+                </div>
+                <div class="adapter-card-value">
+                  <span id="driverStatusBadge" class="driver-badge">Driver: Checking...</span>
+                </div>
+                <div class="adapter-card-meta" id="adapterDriverMeta">Npcap / Scapy Engine</div>
+              </div>
+            </div>
+
+            <!-- Empty State Card (if 0 adapters found) -->
+            <div class="adapter-empty-card" id="adapterEmptyCard" style="display: none;" role="status">
+              <i class="fas fa-plug-circle-xmark" aria-hidden="true"></i>
+              <div class="empty-text-group">
+                <h4 class="empty-heading">No Network Adapters Detected</h4>
+                <p class="empty-description">The operating system reported zero network adapters. Ensure network drivers are installed, connect Wi-Fi or Ethernet, and click "Refresh Interfaces".</p>
+              </div>
+            </div>
+
+            <!-- Adapter Selection Rationale Card -->
+            <div class="adapter-rationale-card" id="adapterRationaleCard">
+              <div class="rationale-top">
+                <div class="rationale-title">
+                  <i class="fas fa-circle-info" aria-hidden="true"></i>
+                  <span id="rationaleTitle">Selection Rationale</span>
+                </div>
+                <span class="rationale-tag" id="rationaleTag">Live OS Routing</span>
+              </div>
+              <p class="rationale-body" id="adapterRationaleText">
+                Querying operating system interfaces and network routing tables...
+              </p>
+              <div class="candidates-tray" id="candidatesTray" style="display: none;">
+                <span class="candidates-heading">Evaluated Candidates:</span>
+                <div class="candidates-chips" id="candidatesChips"></div>
+              </div>
+            </div>
+
+            <!-- Disappeared / Removed Adapter Alert Banner -->
+            <div class="adapter-alert-card warning-card" id="adapterDisappearedAlert" style="display: none;" role="alert">
+              <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+              <div class="adapter-alert-body">
+                <strong id="adapterDisappearedTitle">Selected Interface Disconnected or Removed</strong>
+                <p id="adapterDisappearedMessage">
+                  The previously selected network adapter is no longer detected by the operating system.
+                  Please select an operational adapter from the dropdown or click "Auto Select".
+                </p>
+              </div>
+            </div>
+
+            <!-- Capture Error Alert Banner -->
+            <div class="adapter-alert-card error-card" id="monitoringAdapterError" style="display: none;" role="alert">
+              <i class="fas fa-circle-exclamation" aria-hidden="true"></i>
+              <div class="adapter-alert-body">
+                <strong id="adapterErrorTitle">Interface Offline or Incompatible</strong>
+                <p id="adapterErrorMessage">The selected interface cannot capture traffic.</p>
               </div>
             </div>
           </div>

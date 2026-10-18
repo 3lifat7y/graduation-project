@@ -595,37 +595,73 @@ class RollingFlowStatsCollector:
         return base_res
 
 
-def resolve_scapy_interface(interface_name: Optional[str] = None, interface_index: Optional[int] = None) -> Any:
-    """
-    Resolves the target network adapter name or index to a Scapy-compatible interface.
-    Searches Scapy's conf.ifaces by friendly name (e.g. 'Wi-Fi', 'Ethernet'),
-    description, Windows index, or GUID/network_name.
-    Returns the resolved Scapy interface object or its valid network identifier.
+def resolve_scapy_interface(
+    interface_name: Optional[str] = None,
+    interface_index: Optional[int] = None,
+    guid: Optional[str] = None,
+    network_name: Optional[str] = None,
+    conf_ifaces: Optional[Any] = None
+) -> Any:
+    r"""
+    Resolves the target network adapter name, index, GUID, or device path to a Scapy-compatible interface.
+    Searches with a strict priority:
+    1. Exact GUID match
+    2. Exact Npcap device path (network_name or \Device\NPF_{...})
+    3. Windows Interface Index
+    4. Exact interface name equality (case-insensitive)
+    5. Exact description equality (case-insensitive)
+    NEVER performs loose substring matching (e.g. 'Ethernet' will NEVER match 'VirtualBox Host-Only Ethernet Adapter').
     Returns None if no matching interface exists (NEVER silently substitutes a default interface).
     """
-    if not HAS_SCAPY:
+    if conf_ifaces is not None:
+        ifaces = conf_ifaces
+    elif HAS_SCAPY:
+        try:
+            from scapy.all import conf
+            ifaces = conf.ifaces
+        except Exception:
+            return None
+    else:
         return None
 
-    try:
-        from scapy.all import conf
-        ifaces = conf.ifaces
-    except Exception:
+    if not ifaces:
         return None
 
-    if not interface_name and interface_index is None:
+    if not interface_name and interface_index is None and not guid and not network_name:
         return None
 
-    # 1. Match by Windows Interface Index
+    norm_guid = str(guid).strip().lower() if guid else None
+    norm_netname = str(network_name).strip().lower() if network_name else None
+    norm_name = str(interface_name).strip().lower() if interface_name else None
+
+    # Priority 1: Match by exact GUID
+    if norm_guid:
+        for if_key, if_obj in ifaces.items():
+            obj_guid = str(getattr(if_obj, "guid", "")).strip().lower()
+            if obj_guid and obj_guid == norm_guid:
+                return if_obj
+
+    # Priority 2: Match by exact Npcap device path / network_name
+    if norm_netname:
+        for if_key, if_obj in ifaces.items():
+            obj_net = str(getattr(if_obj, "network_name", "")).strip().lower()
+            if obj_net and obj_net == norm_netname:
+                return if_obj
+            if str(if_key).strip().lower() == norm_netname:
+                return if_obj
+
+    # Priority 3: Match by Windows Interface Index
     if interface_index is not None:
         try:
             target_idx = int(interface_index)
             if target_idx > 0:
-                try:
-                    dev = ifaces.dev_from_index(target_idx)
-                    if dev:
-                        return dev
-                except Exception:
-                    pass
+                if hasattr(ifaces, "dev_from_index"):
+                    try:
+                        dev = ifaces.dev_from_index(target_idx)
+                        if dev:
+                            return dev
+                    except Exception:
+                        pass
                 for if_key, if_obj in ifaces.items():
                     obj_idx = getattr(if_obj, "index", None)
                     obj_widx = getattr(if_obj, "win_index", None)
@@ -635,44 +671,41 @@ def resolve_scapy_interface(interface_name: Optional[str] = None, interface_inde
         except (ValueError, TypeError):
             pass
 
-    # 2. Match by exact Scapy iface name or dev_from_name
-    if interface_name:
-        try:
-            dev = ifaces.dev_from_name(str(interface_name))
-            if dev:
-                return dev
-        except Exception:
-            pass
+    # Priority 4: Match by exact Scapy interface name
+    if norm_name:
+        if hasattr(ifaces, "dev_from_name"):
+            try:
+                dev = ifaces.dev_from_name(str(interface_name))
+                if dev and str(getattr(dev, "name", "")).strip().lower() == norm_name:
+                    return dev
+            except Exception:
+                pass
 
-        norm_name = str(interface_name).strip().lower()
-
-        # Match exact name
+        # Exact name match
         for if_key, if_obj in ifaces.items():
             name_str = str(getattr(if_obj, "name", "")).strip().lower()
-            if name_str == norm_name:
+            win_name = str(getattr(if_obj, "win_name", "")).strip().lower()
+            if name_str == norm_name or win_name == norm_name:
                 return if_obj
 
-        # Match exact description
+        # Exact description match
         for if_key, if_obj in ifaces.items():
             desc_str = str(getattr(if_obj, "description", "")).strip().lower()
             if desc_str == norm_name:
                 return if_obj
 
-        # Match description substring
-        for if_key, if_obj in ifaces.items():
-            desc_str = str(getattr(if_obj, "description", "")).strip().lower()
-            if norm_name in desc_str or ("wi-fi" in norm_name and any(k in desc_str for k in ["wireless", "802.11", "wi-fi"])):
-                return if_obj
+        # Exact device key match (e.g. \Device\NPF_{...})
+        if norm_name.startswith(r"\device\npf_") or norm_name.startswith(r"\\device\\npf_"):
+            for if_key, if_obj in ifaces.items():
+                if str(if_key).strip().lower() == norm_name:
+                    return if_obj
+                obj_net = str(getattr(if_obj, "network_name", "")).strip().lower()
+                if obj_net == norm_name:
+                    return if_obj
 
-        # Match GUID or network_name
-        for if_key, if_obj in ifaces.items():
-            net_name = str(getattr(if_obj, "network_name", "")).strip().lower()
-            guid = str(getattr(if_obj, "guid", "")).strip().lower()
-            if norm_name in net_name or (guid and guid in norm_name):
-                return if_obj
-
-    # No match found - Return None. Never silently substitute default interface!
+    # No match found - Return None. NEVER silently substitute default interface!
     return None
+
 
 
 def parse_scapy_packet(packet: Any, target_if_idx: Optional[int] = None) -> Optional[Dict[str, Any]]:

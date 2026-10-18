@@ -137,7 +137,9 @@ class CaptureWorker:
         filter_str: Optional[str] = None,
         interface_name: Optional[str] = None,
         interface_index: Optional[int] = None,
-        continuous: bool = True
+        continuous: bool = True,
+        guid: Optional[str] = None,
+        network_name: Optional[str] = None
     ):
         with self.lock:
             if self.is_capturing:
@@ -163,6 +165,8 @@ class CaptureWorker:
                 "min_packets": min_packets,
                 "interface_name": interface_name,
                 "interface_index": interface_index,
+                "guid": guid,
+                "network_name": network_name,
                 "packets_captured": 0,
                 "last_packet_time": None,
                 "features": None,
@@ -175,7 +179,7 @@ class CaptureWorker:
 
         thread = threading.Thread(
             target=self._capture_loop,
-            args=(scan_id, duration, min_packets, filter_str, interface_name, interface_index, continuous),
+            args=(scan_id, duration, min_packets, filter_str, interface_name, interface_index, continuous, guid, network_name),
             daemon=True
         )
         thread.start()
@@ -233,7 +237,9 @@ class CaptureWorker:
         filter_str: Optional[str],
         interface_name: Optional[str],
         interface_index: Optional[int],
-        continuous: bool = True
+        continuous: bool = True,
+        guid: Optional[str] = None,
+        network_name: Optional[str] = None
     ):
         collector = FlowStatsCollector(target_interface_index=interface_index)
         start_t = time.time()
@@ -250,7 +256,7 @@ class CaptureWorker:
                     }
             return
 
-        target_iface = resolve_scapy_interface(interface_name, interface_index)
+        target_iface = resolve_scapy_interface(interface_name, interface_index, guid=guid, network_name=network_name)
         if not target_iface:
             err_msg = (
                 f"Interface resolution failed for adapter='{interface_name}' (idx={interface_index}). "
@@ -632,6 +638,8 @@ class SecureIPCServer:
             interface_index = req.get("interface_index")
             filter_str = req.get("filter_str")
             continuous = bool(req.get("continuous", True))
+            guid = req.get("guid")
+            network_name = req.get("network_name")
             return self.worker.start_window(
                 scan_id=scan_id,
                 duration=duration,
@@ -639,7 +647,9 @@ class SecureIPCServer:
                 filter_str=filter_str,
                 interface_name=interface_name,
                 interface_index=interface_index,
-                continuous=continuous
+                continuous=continuous,
+                guid=guid,
+                network_name=network_name
             )
 
         elif cmd == "GET_SCAN_STATUS":
