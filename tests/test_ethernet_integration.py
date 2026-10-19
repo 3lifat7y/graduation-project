@@ -256,7 +256,7 @@ class TestRemoteConnectivityAndHealth(unittest.TestCase):
     def test_09_sender_aborts_without_fallback_on_unreachable_remote(self):
         """When remote host is unreachable, sender main() exits with code 1 and never falls back to 127.0.0.1."""
         from scripts.send_traffic import main as sender_main
-        with patch.object(sys, 'argv', ['send_traffic.py', '--host', '192.0.2.1', '--timeout', '0.2']):
+        with patch.object(sys, 'argv', ['send_traffic.py', '--wire-traffic', '--host', '192.0.2.1', '--timeout', '0.2']):
             with patch("scripts.send_traffic.run_benign_traffic_generator") as mock_traffic_gen:
                 with self.assertRaises(SystemExit) as cm:
                     sender_main()

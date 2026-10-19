@@ -445,9 +445,10 @@ def validate_flow_features(features_dict: Any, min_packets: int = 3) -> Tuple[bo
     fwd_bytes = float(features_dict.get("Fwd Packets Length Total", 0))
     bwd_bytes = float(features_dict.get("Bwd Packets Length Total", 0))
     total_bytes = fwd_bytes + bwd_bytes
+    header_bytes = float(features_dict.get("Fwd Header Length", 0)) + float(features_dict.get("Bwd Header Length", 0))
 
-    if total_bytes <= 0:
-        return False, "Total packet bytes is zero. No valid network flow payload or headers."
+    if total_bytes <= 0 and header_bytes <= 0:
+        return False, "Total packet bytes and header lengths are zero. No valid network flow payload or headers."
 
     non_zero_count = sum(1 for k, v in features_dict.items() if isinstance(v, (int, float)) and abs(float(v)) > 1e-9)
     if non_zero_count < 5:

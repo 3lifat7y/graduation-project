@@ -40,24 +40,28 @@ TEST_SET_PATH = str(BASE_DIR / "features_by_label.json")
 
 # ==================== USER CONFIGURATION ====================
 
-TARGET_HOST = "192.168.1.11"
+TARGET_HOST = "192.168.1.12"
 TARGET_PORT = 8080
 API_PORT = 5000
 
-TRAFFIC_PROTOCOL = "http"       # http, tcp, or udp
-TRAFFIC_COUNT = 20              # Number of transmissions
-TRAFFIC_INTERVAL_SECONDS = 0.5  # Delay between transmissions
+# Workflow Configuration: Dataset Replay is the DEFAULT
+DEFAULT_WORKFLOW = "dataset"
+ENABLE_DATASET_MODE = True
+
+# Dataset Replay settings
+DATASET_LABEL: Optional[str] = None         # None = prompt user interactively to choose
+DATASET_RECORD_COUNT: Optional[int] = None # None = continuous until Ctrl+C; or int for bounded
+DATASET_CONTINUOUS = True                   # Continuous replay by default
+DATASET_INTERVAL_SECONDS = 0.5              # Delay between replay requests
+
+# Real Wire Traffic settings (USED ONLY when --wire-traffic or --probe is explicitly specified)
+TRAFFIC_PROTOCOL = "http"                   # http, tcp, or udp
+TRAFFIC_COUNT = 200                         # Count when real wire traffic is explicitly chosen
+TRAFFIC_INTERVAL_SECONDS = 0.5              # Delay between real traffic transmissions
 CONNECT_TIMEOUT_SECONDS = 3
 CONNECTIVITY_CHECK_INTERVAL_SECONDS = 5
-
 CONTINUOUS_MODE = False
 TRAFFIC_PAYLOAD_SIZE_BYTES = 256
-
-# Dataset feature streaming settings
-ENABLE_DATASET_MODE = False
-DATASET_LABEL = "BENIGN"
-DATASET_RECORD_COUNT = 20
-DATASET_INTERVAL_SECONDS = 0.5
 
 # ============================================================
 
@@ -341,28 +345,36 @@ NOTE:
 
     # Mode Selection & Dataset Options
     p.add_argument(
-        '--probe', action='store_true',
-        help="Explicit real network traffic mode: transmit genuine Layer-4/Layer-7 network packets"
+        '--dataset-mode', '--dataset-replay', dest='dataset_mode', action='store_true',
+        help="Dataset Replay mode (DEFAULT): stream pre-extracted 77-feature flow records to /api/replay-feature"
     )
     p.add_argument(
-        '--dataset-mode', action='store_true',
-        help="Explicit dataset feature streaming mode: post pre-extracted flow feature records to /api/receive-packet"
+        '--wire-traffic', '--real-traffic', dest='wire_traffic', action='store_true',
+        help="Explicit real network traffic mode: transmit genuine Layer-4/Layer-7 network packets across the wire"
+    )
+    p.add_argument(
+        '--probe', dest='probe', action='store_true',
+        help="Legacy alias for --wire-traffic: transmit genuine Layer-4/Layer-7 network packets"
     )
     p.add_argument(
         '--label', '-l', type=str, default=None,
-        help="Target dataset traffic label name or 1-based index (e.g. 'BENIGN', 'DDoS', or '2')"
+        help="Target dataset traffic label name or 1-based index (e.g. 'Benign', 'DDoS', or '2')"
     )
     p.add_argument(
         '--dataset', type=str, default=None,
-        help="Path to feature dataset JSON file (default: features_by_label_test.json or features_by_label.json)"
+        help="Path to feature dataset JSON file (default: features_by_label.json)"
     )
     p.add_argument(
         '--list-labels', action='store_true',
         help="List available traffic labels in the dataset JSON with record counts, then exit"
     )
+    p.add_argument(
+        '--yes', '-y', dest='auto_confirm', action='store_true',
+        help="Automatically confirm transmission prompts without interactive prompt"
+    )
 
     # Backward Compatibility Aliases
-    p.add_argument('--simulate-dataset', action='store_true', help="Legacy alias for dataset feature streaming")
+    p.add_argument('--simulate-dataset', dest='simulate_dataset', action='store_true', help="Legacy alias for dataset feature streaming")
     p.add_argument('--attack', '-a', type=str, default=None, help="Legacy alias for --label: attack label name or index")
     p.add_argument('--list', action='store_true', help="Alias for --list-labels: list available labels then exit")
 
@@ -445,47 +457,73 @@ def resolve_effective_config(args) -> Dict[str, Any]:
         raise ValueError(f"Invalid API port {api_port}. Must be between 1 and 65535.")
 
     # 4. Mode Selection
-    probe_flag = bool(_safe_get(args, "probe", bool, default=False))
-    dataset_mode_flag = bool(_safe_get(args, "dataset_mode", bool, default=False))
-    simulate_dataset_flag = bool(_safe_get(args, "simulate_dataset", bool, default=False))
+    wire_flag = bool(
+        _safe_get(args, "wire_traffic", bool, default=False) or
+        _safe_get(args, "real_traffic", bool, default=False) or
+        _safe_get(args, "probe", bool, default=False)
+    )
+    dataset_flag = bool(
+        _safe_get(args, "dataset_mode", bool, default=False) or
+        _safe_get(args, "dataset_replay", bool, default=False) or
+        _safe_get(args, "simulate_dataset", bool, default=False)
+    )
     label_arg = _safe_get(args, "label", str, default=None) or _safe_get(args, "attack", str, default=None)
     dataset_arg = _safe_get(args, "dataset", str, default=None)
 
-    if probe_flag:
+    # Real wire traffic is ONLY selected if explicitly requested via wire flags,
+    # and no dataset flags or arguments were provided
+    if wire_flag and not (dataset_flag or label_arg or dataset_arg):
         mode = "real_traffic"
-    elif dataset_mode_flag or simulate_dataset_flag or (label_arg is not None) or (dataset_arg is not None):
-        mode = "dataset"
-    elif ENABLE_DATASET_MODE:
-        mode = "dataset"
     else:
-        mode = "real_traffic"
+        # DEFAULT WORKFLOW IS ALWAYS DATASET REPLAY
+        mode = "dataset"
 
     # 5. Continuous Mode Resolution
     continuous_arg = _safe_get(args, "continuous", bool, default=None)
-    if continuous_arg is not None:
-        is_continuous = bool(continuous_arg)
-    else:
-        is_continuous = bool(CONTINUOUS_MODE)
-
-    # 6. Count Resolution
     count_arg = _safe_get(args, "count", int, default=None)
-    if is_continuous:
-        count = None
-    elif count_arg is not None:
-        count = max(0, int(count_arg))
-    elif mode == "dataset":
-        count = max(0, int(DATASET_RECORD_COUNT))
+
+    if mode == "dataset":
+        if continuous_arg is True:
+            is_continuous = True
+            count = None
+        elif continuous_arg is False:
+            is_continuous = False
+            count = max(1, int(count_arg)) if count_arg is not None else 20
+        elif count_arg is not None:
+            # Explicit --count provided on CLI -> bounded test
+            is_continuous = False
+            count = max(1, int(count_arg))
+        elif DATASET_RECORD_COUNT is not None:
+            is_continuous = False
+            count = max(1, int(DATASET_RECORD_COUNT))
+        else:
+            # Default for Dataset Replay: CONTINUOUS (indefinitely until Ctrl+C)
+            is_continuous = True
+            count = None
     else:
-        count = max(0, int(TRAFFIC_COUNT))
+        # Real wire traffic mode
+        if continuous_arg is not None:
+            is_continuous = bool(continuous_arg)
+        else:
+            is_continuous = bool(CONTINUOUS_MODE)
+
+        if is_continuous:
+            count = None
+        elif count_arg is not None:
+            count = max(0, int(count_arg))
+        else:
+            count = max(0, int(TRAFFIC_COUNT))
+
+    # 6. Count Resolution (already handled above for both modes)
 
     # 7. Interval Resolution
     interval_arg = _safe_get(args, "interval", float, default=None)
     if interval_arg is not None:
-        interval = max(0.0, float(interval_arg))
+        interval = max(0.001, float(interval_arg))
     elif mode == "dataset":
-        interval = max(0.0, float(DATASET_INTERVAL_SECONDS))
+        interval = max(0.001, float(DATASET_INTERVAL_SECONDS))
     else:
-        interval = max(0.0, float(TRAFFIC_INTERVAL_SECONDS))
+        interval = max(0.001, float(TRAFFIC_INTERVAL_SECONDS))
 
     # 8. Protocol Resolution (for real traffic mode)
     proto_arg = _safe_get(args, "protocol", str, default=None)
@@ -521,6 +559,8 @@ def resolve_effective_config(args) -> Dict[str, Any]:
     if not label and mode == "dataset" and DATASET_LABEL:
         label = DATASET_LABEL
 
+    auto_confirm = bool(_safe_get(args, "auto_confirm", bool, default=False))
+
     return {
         "host": host,
         "resolved_ip": resolved_ip,
@@ -536,6 +576,7 @@ def resolve_effective_config(args) -> Dict[str, Any]:
         "check_interval": check_interval,
         "label": label,
         "dataset_path": dataset_arg,
+        "auto_confirm": auto_confirm,
         "check_only": bool(_safe_get(args, "check_only", bool, default=False)),
         "list_labels": bool(_safe_get(args, "list_labels", bool, default=False) or _safe_get(args, "list", bool, default=False))
     }
@@ -743,10 +784,10 @@ def resolve_dataset_path(custom_path: Optional[str] = None) -> Path:
         raise FileNotFoundError(f"Specified dataset file '{custom_path}' does not exist.")
 
     candidates = [
-        BASE_DIR / "features_by_label_test.json",
-        BASE_DIR / "scripts" / "features_by_label_test.json",
         BASE_DIR / "features_by_label.json",
         BASE_DIR / "scripts" / "features_by_label.json",
+        BASE_DIR / "features_by_label_test.json",
+        BASE_DIR / "scripts" / "features_by_label_test.json",
     ]
     for c in candidates:
         if c.exists():
@@ -861,8 +902,48 @@ def resolve_label_argument(label_arg: str, sorted_label_counts: List[Tuple[str, 
     return None
 
 
+def confirm_replay_transmission(
+    label: str,
+    target_url: str,
+    record_count: int,
+    is_continuous: bool = True,
+    interval: float = 0.5,
+    auto_confirm: bool = False
+) -> bool:
+    """
+    Displays the selected label and session details and requires explicit
+    user confirmation before any dataset replay transmission begins.
+    """
+    if auto_confirm:
+        return True
+
+    count_desc = "Continuous (Ctrl+C to stop)" if is_continuous else f"{record_count} records"
+
+    print("\n" + "=" * 75)
+    print("                 CONFIRMATION REQUIRED: DATASET REPLAY")
+    print("=" * 75)
+    print(f"  Target Destination    : {target_url.rstrip('/')}/api/replay-feature")
+    print(f"  Selected Label        : {label}")
+    print(f"  Available Records     : {record_count}")
+    print(f"  Transmission Mode     : {count_desc}")
+    print(f"  Transmission Interval : {interval}s")
+    print(f"  Workflow Architecture : Layer-7 Feature Replay (Dedicated ML Evaluation)")
+    print("=" * 75)
+
+    try:
+        confirm = input(f"Start replaying '{label}' dataset records to {target_url}? [y/N]: ").strip().lower()
+        if confirm in ['y', 'yes']:
+            return True
+        else:
+            print(f"\n[CANCELLED] Replay of '{label}' cancelled by user.")
+            return False
+    except (KeyboardInterrupt, EOFError):
+        print("\n[CANCELLED] Operation aborted by user.")
+        return False
+
+
 def confirm_attack_transmission(label: str, target_url: str, record_count: int) -> bool:
-    """Prompts for user confirmation before sending attack-labelled records."""
+    """Legacy helper: prompts for user confirmation before sending attack-labelled records."""
     if label.lower() in ["benign", "safe", "normal"]:
         return True
 
@@ -898,12 +979,13 @@ def run_dataset_feature_stream(
     check_interval: float = 5.0
 ):
     """
-    Streams pre-extracted flow feature JSON records directly to /api/receive-packet.
+    Streams pre-extracted flow feature JSON records directly to /api/replay-feature
+    for real-time ML model classification and precision evaluation.
     Periodically checks API connectivity during continuous transmission.
     """
     import random
 
-    endpoint = f"{target_api_url.rstrip('/')}/api/receive-packet"
+    endpoint = f"{target_api_url.rstrip('/')}/api/replay-feature"
     total_available = len(records)
     count_desc = "Continuous (Ctrl+C to stop)" if (continuous or count is None or count <= 0) else f"{count}"
 
@@ -912,22 +994,26 @@ def run_dataset_feature_stream(
     api_port = parsed_url.port or 5000
 
     print("\n" + "=" * 75)
-    print("           SOCNET: DATASET FEATURE STREAMING WORKFLOW")
+    print("        SOCNET: DATASET REPLAY & INFERENCE EVALUATION WORKFLOW")
     print("=" * 75)
-    print(f"  Target Destination   : {endpoint}")
-    print(f"  Selected Label       : {label} ({total_available} records available)")
-    print(f"  Payload Architecture : Pre-extracted 77-feature flow JSON via HTTP POST")
-    print(f"                         (API inference evaluation, NOT raw wire L2/L3 packets)")
-    print(f"  Transmission Count   : {count_desc}")
-    print(f"  Transmission Interval: {interval}s")
+    print(f"  Target Destination    : {endpoint}")
+    print(f"  Selected Label        : {label} ({total_available} records available)")
+    print(f"  Payload Architecture  : Pre-extracted 77-feature flow JSON + Ground Truth")
+    print(f"                          (Real-time ML Model Evaluation, NOT raw wire L2/L3 packets)")
+    print(f"  Transmission Count    : {count_desc}")
+    print(f"  Transmission Interval : {interval}s")
+    print(f"  Request Timeout       : {timeout}s")
     if continuous or count is None or count <= 0:
-        print(f"  Periodic Re-check    : Every {check_interval}s")
+        print(f"  Periodic Re-check     : Every {check_interval}s")
     print("=" * 75)
-    print(f"Streaming '{label}' flow records to {endpoint}...\n")
+    print(f"Replaying '{label}' flow records to {endpoint}...\n")
 
     sent = 0
-    successful = 0
-    failed = 0
+    successful_inferences = 0
+    correct_predictions = 0
+    mismatched_predictions = 0
+    failed_requests = 0
+    consecutive_errors = 0
     latencies = []
     start_time = time.time()
     last_check_time = time.time()
@@ -943,11 +1029,16 @@ def run_dataset_feature_stream(
                     api_host, api_port, protocol="tcp", timeout=min(timeout, 2.0), check_http_endpoint=True, http_path="/api/health"
                 )
                 if not is_alive:
-                    print(f"\n[STOP] Target is no longer reachable ({check_err}). Transmission stopped.")
+                    print(f"\n[STOP] Target is no longer reachable ({check_err}). Replay stopped.")
                     break
 
             pkt = random.choice(records)
-            payload = {k: v for k, v in pkt.items() if k != "Label"}
+            features = {k: v for k, v in pkt.items() if k != "Label"}
+            record_label = str(pkt.get("Label", label)).strip()
+            payload = {
+                "features": features,
+                "ground_truth": record_label
+            }
             frame_start = time.time()
 
             req_bytes = json.dumps(payload).encode('utf-8')
@@ -956,63 +1047,108 @@ def run_dataset_feature_stream(
                 data=req_bytes,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "SocNet-DatasetStreamer/2.5"
+                    "User-Agent": "SocNet-DatasetReplayStreamer/2.5"
                 },
                 method="POST"
             )
 
-            limit_total = count_desc if is_continuous else f"{count}"
-            progress_str = f"{sent + 1}/{limit_total}"
+            seq_num = sent + 1
+            seq_str = f"#{seq_num}" if (is_continuous or count is None) else f"#{seq_num}/{count}"
 
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
                     dur_ms = (time.time() - frame_start) * 1000
-                    latencies.append(dur_ms)
-                    _ = resp.read()
-                    sent += 1
-                    successful += 1
-                    print(f"[SEND] {progress_str:>8} | Label={label:<10} | Result=success | Latency={dur_ms:.1f}ms [HTTP {resp.status}]")
+                    resp_bytes = resp.read()
+                    try:
+                        resp_data = json.loads(resp_bytes.decode('utf-8'))
+                    except Exception:
+                        resp_data = {}
+
+                    status = resp_data.get("status")
+                    if status == "success" and ("predicted_label" in resp_data or "prediction" in resp_data):
+                        sent += 1
+                        successful_inferences += 1
+                        consecutive_errors = 0
+                        latencies.append(dur_ms)
+
+                        pred_label = resp_data.get("predicted_label", "Unknown")
+                        truth_label = resp_data.get("ground_truth", record_label)
+                        conf = float(resp_data.get("confidence", 0.0))
+                        match = bool(resp_data.get("match", False))
+
+                        if match:
+                            correct_predictions += 1
+                            match_str = "YES"
+                        else:
+                            mismatched_predictions += 1
+                            match_str = "NO "
+
+                        print(f"[REPLAY] {seq_str:>8} | Truth={truth_label:<14} | Prediction={pred_label:<14} | Confidence={conf:>5.1f}% | Match={match_str} | Latency={dur_ms:.1f}ms")
+                    else:
+                        sent += 1
+                        failed_requests += 1
+                        consecutive_errors += 1
+                        err_msg = resp_data.get("error", "Invalid inference response from receiver")
+                        print(f"[REPLAY] {seq_str:>8} | Truth={record_label:<14} | Result=invalid_response | Error={err_msg}")
+
             except urllib.error.HTTPError as he:
                 dur_ms = (time.time() - frame_start) * 1000
                 sent += 1
-                failed += 1
-                print(f"[SEND] {progress_str:>8} | Label={label:<10} | Result=failed  | Error=HTTP {he.code}: {he.reason} ({dur_ms:.1f}ms)")
+                failed_requests += 1
+                consecutive_errors += 1
+                err_body = ""
+                try:
+                    raw_err = he.read().decode('utf-8', errors='replace')
+                    err_json = json.loads(raw_err)
+                    err_body = err_json.get("error", raw_err)
+                except Exception:
+                    pass
+                print(f"[REPLAY] {seq_str:>8} | Truth={record_label:<14} | Result=failed  | Error=HTTP {he.code}: {err_body or he.reason}")
+
             except Exception as ex:
                 dur_ms = (time.time() - frame_start) * 1000
                 sent += 1
-                failed += 1
-                print(f"[SEND] {progress_str:>8} | Label={label:<10} | Result=failed  | Error={ex}")
+                failed_requests += 1
+                consecutive_errors += 1
+                print(f"[REPLAY] {seq_str:>8} | Truth={record_label:<14} | Result=failed  | Error={ex}")
+
+            if consecutive_errors >= 10:
+                print(f"\n[STOP] Reached 10 consecutive transmission errors. Replay stopped cleanly.")
+                break
 
             if not is_continuous and count is not None and sent >= count:
                 break
             time.sleep(interval)
 
     except KeyboardInterrupt:
-        print("\n\n[STOP] Streaming stopped cleanly by user (Ctrl+C).")
+        print("\n\n[STOP] Replay stopped cleanly by user (Ctrl+C).")
 
     elapsed = max(0.001, round(time.time() - start_time, 2))
-    achieved_rate = round(sent / elapsed, 2)
+    throughput = round(sent / elapsed, 2)
     avg_lat = round(sum(latencies) / len(latencies), 1) if latencies else 0.0
+    acc_pct = round((correct_predictions / successful_inferences) * 100, 1) if successful_inferences > 0 else 0.0
+    mismatch_pct = round((mismatched_predictions / successful_inferences) * 100, 1) if successful_inferences > 0 else 0.0
 
     print("\n" + "=" * 75)
-    print("                   STREAMING SUMMARY")
+    print("                  DATASET REPLAY INFERENCE SUMMARY")
     print("=" * 75)
-    print(f"  Target Destination : {endpoint}")
-    print(f"  Streamed Label     : {label}")
-    print(f"  Total Streamed     : {sent}")
-    print(f"  Successful Posts   : {successful}")
-    print(f"  Failed Posts       : {failed}")
-    print(f"  Success Rate       : {round((successful / sent) * 100, 1) if sent > 0 else 0.0}%")
-    print(f"  Total Elapsed Time : {elapsed}s")
-    print(f"  Achieved Rate      : {achieved_rate} records/sec")
+    print(f"  Target Destination    : {endpoint}")
+    print(f"  Replayed Label        : {label}")
+    print(f"  Total Requests Sent   : {sent}")
+    print(f"  Successful Inferences : {successful_inferences}")
+    print(f"  Correct Predictions   : {correct_predictions} ({acc_pct}%)")
+    print(f"  Prediction Mismatches : {mismatched_predictions} ({mismatch_pct}%)")
+    print(f"  Failed Requests       : {failed_requests}")
+    print(f"  Total Elapsed Time    : {elapsed}s")
+    print(f"  Measured Throughput   : {throughput} records/sec")
     if latencies:
-        print(f"  Average Latency    : {avg_lat} ms (Min: {round(min(latencies), 1)}ms, Max: {round(max(latencies), 1)}ms)")
+        print(f"  Average Latency       : {avg_lat} ms (Min: {round(min(latencies), 1)}ms, Max: {round(max(latencies), 1)}ms)")
     print("=" * 75)
-    if successful > 0:
-        print(f"✅ Successfully streamed {successful} '{label}' records.")
-        print("   Verify the prediction and confidence updates on the Monitoring Computer dashboard.\n")
+    if successful_inferences > 0:
+        print(f"✅ Successfully evaluated {successful_inferences} '{label}' records against AI model.")
+        print(f"   Model Accuracy on Session: {acc_pct}%\n")
     else:
-        print("⚠️ No records were successfully received by the Monitoring API.")
+        print("⚠️ No inference results were successfully obtained from the Monitoring API.")
         print(f"   Confirm that api.py is running on {target_api_url}.\n")
 
 
@@ -1062,48 +1198,40 @@ def main():
         print("=" * 75 + "\n")
         sys.exit(0)
 
-    # 4. Mode-Specific Target Reachability Verification
-    # CRITICAL: Validate target device connectivity before sending ANY traffic or features.
-    # Never silently fall back to 127.0.0.1 or send to a different device!
-    mode_desc = "Dataset Feature Streaming" if cfg["mode"] == "dataset" else f"Real Wire Traffic ({cfg['protocol'].upper()})"
-    count_desc = "Continuous" if cfg["continuous"] else f"{cfg['count']}"
-    target_service_str = f"{host}:{cfg['api_port']} (API)" if cfg["mode"] == "dataset" else f"{host}:{cfg['traffic_port']} ({cfg['protocol'].upper()})"
-
-    print("=" * 75)
-    print("        SOCNET SENDER: TARGET & CONNECTIVITY INITIALIZATION")
-    print("=" * 75)
-    print(f"  Target Host Address  : {host} (Resolved: {cfg['resolved_ip']})")
-    print(f"  Selected Workflow    : {mode_desc}")
-    print(f"  Destination Service  : {target_service_str}")
-    print(f"  Transmission Count   : {count_desc}")
-    print(f"  Transmission Interval: {cfg['interval']}s")
-    if cfg["mode"] == "real_traffic":
-        print(f"  Payload Size         : {cfg['payload_size']} bytes")
-    print("=" * 75)
-
-    if cfg["mode"] == "dataset":
-        # Dataset Mode requires API on port 5000 (does NOT require port 8080)
-        print(f"\n[CHECK] Checking target {host}:{cfg['api_port']} (API Endpoint)...")
+    # 4. Handle check-only diagnostics
+    if cfg["check_only"]:
+        target_check_port = cfg["api_port"] if cfg["mode"] == "dataset" else cfg["traffic_port"]
+        proto = "tcp" if cfg["mode"] == "dataset" else cfg["protocol"]
+        chk_http = (cfg["mode"] == "dataset")
+        http_pth = "/api/replay-status" if cfg["mode"] == "dataset" else "/api/health"
+        print(f"\n[CHECK] Pre-flight connectivity check to {host}:{target_check_port}...")
         reachable, err_reason = check_destination_service(
-            host, cfg["api_port"], protocol="tcp", timeout=cfg["timeout"], check_http_endpoint=True, http_path="/api/health"
+            host, target_check_port, protocol=proto, timeout=cfg["timeout"], check_http_endpoint=chk_http, http_path=http_pth
         )
-        if not reachable:
-            print("\n" + "!" * 75)
-            print(f"❌ TARGET API SERVICE UNREACHABLE: {host}:{cfg['api_port']}")
-            print(f"   Reason: {err_reason}")
-            print("!" * 75)
-            print("\n[STOP] Preflight check failed. Absolutely no feature records will be transmitted.")
-            print(f"Verify that api.py is running on {host} and port {cfg['api_port']} is accessible.")
-            print("Troubleshooting checklist:")
-            print(" 1. Physical Layer: Ensure Ethernet cable is connected between Sender and Monitor.")
-            print(" 2. Service Status: On Monitor, confirm 'python api.py' is running.")
-            print(f" 3. Firewall Rule : On Monitor, ensure inbound TCP port {cfg['api_port']} is permitted.\n")
+        if reachable:
+            print(f"✅ Pre-flight connectivity check passed ({host}:{target_check_port}).")
+            sys.exit(0)
+        else:
+            print(f"❌ Pre-flight check failed ({host}:{target_check_port}): {err_reason}")
             sys.exit(1)
 
-        print("[OK] Target service is reachable.")
+    # 5. Workflow Execution
+    if cfg["mode"] == "real_traffic":
+        # REAL WIRE TRAFFIC (Explicitly requested via --wire-traffic or --probe)
+        count_desc = "Continuous" if cfg["continuous"] else f"{cfg['count']}"
+        target_service_str = f"{host}:{cfg['traffic_port']} ({cfg['protocol'].upper()})"
 
-    else:
-        # Real Traffic Mode requires traffic sink port (does NOT require port 5000)
+        print("=" * 75)
+        print("        SOCNET SENDER: TARGET & CONNECTIVITY INITIALIZATION")
+        print("=" * 75)
+        print(f"  Target Host Address  : {host} (Resolved: {cfg['resolved_ip']})")
+        print(f"  Selected Workflow    : Real Wire Traffic ({cfg['protocol'].upper()})")
+        print(f"  Destination Service  : {target_service_str}")
+        print(f"  Transmission Count   : {count_desc}")
+        print(f"  Transmission Interval: {cfg['interval']}s")
+        print(f"  Payload Size         : {cfg['payload_size']} bytes")
+        print("=" * 75)
+
         print(f"\n[CHECK] Checking target {host}:{cfg['traffic_port']} (Protocol: {cfg['protocol'].upper()})...")
         reachable, err_reason = check_destination_service(
             host, cfg["traffic_port"], protocol=cfg["protocol"], timeout=cfg["timeout"], check_http_endpoint=False
@@ -1114,26 +1242,9 @@ def main():
             print(f"   Reason: {err_reason}")
             print("!" * 75)
             print("\n[STOP] Preflight check failed. Absolutely no network traffic will be transmitted.")
-            print(f"Verify that the destination service is listening on {host}:{cfg['traffic_port']}.")
-            print("Troubleshooting checklist:")
-            print(" 1. Physical Layer: Ensure Ethernet cable is connected between Sender and Monitor.")
-            print(" 2. Service Status: On Monitor, ensure benign traffic server is active (default in api.py).")
-            print(f" 3. Firewall Rule : On Monitor, ensure inbound port {cfg['traffic_port']} is permitted.\n")
             sys.exit(1)
 
         print("[OK] Target service is reachable.")
-
-    # Show effective configuration confirmation before transmission begins
-    payload_str = f" | Payload={cfg['payload_size']}B" if cfg['mode'] == 'real_traffic' else ""
-    proto_str = f" | Protocol={cfg['protocol']}" if cfg['mode'] == 'real_traffic' else ""
-    print(f"\n[CONFIG] Mode={cfg['mode']} | Target={host}:{cfg['traffic_port' if cfg['mode'] == 'real_traffic' else 'api_port']}{proto_str} | Count={count_desc} | Interval={cfg['interval']}s{payload_str}\n")
-
-    if cfg["check_only"]:
-        print("✅ Pre-flight connectivity check passed successfully.")
-        sys.exit(0)
-
-    # 5. Execute Selected Mode
-    if cfg["mode"] == "real_traffic":
         run_benign_traffic_generator(
             host=host,
             port=cfg["traffic_port"],
@@ -1146,11 +1257,12 @@ def main():
         )
 
     else:
-        # Dataset Feature Mode
+        # DATASET REPLAY WORKFLOW (DEFAULT)
         if dataset_error:
             print(f"\n❌ DATASET FILE ERROR: {dataset_error}\n")
             sys.exit(1)
 
+        # 5a. Label selection: prompt interactively if not passed on CLI
         selected_label = None
         if cfg["label"]:
             selected_label = resolve_label_argument(cfg["label"], sorted_label_counts)
@@ -1164,6 +1276,7 @@ def main():
         if not selected_label:
             selected_label = select_dataset_label_interactively(sorted_label_counts)
             if not selected_label:
+                # User cancelled, exited, or entered invalid selection -> send NOTHING
                 sys.exit(0)
 
         records_to_send = records_by_label.get(selected_label, [])
@@ -1171,10 +1284,40 @@ def main():
             print(f"\n❌ Error: Selected label '{selected_label}' has zero available records.")
             sys.exit(1)
 
-        confirmed = confirm_attack_transmission(selected_label, target_api_url, len(records_to_send))
+        # 5b. Explicit confirmation before starting
+        auto_confirm = bool(cfg.get("auto_confirm", False))
+        confirmed = confirm_replay_transmission(
+            label=selected_label,
+            target_url=target_api_url,
+            record_count=len(records_to_send),
+            is_continuous=cfg["continuous"],
+            interval=cfg["interval"],
+            auto_confirm=auto_confirm
+        )
         if not confirmed:
             sys.exit(0)
 
+        # 5c. Target Reachability Check (against Replay API endpoint, NOT port 8080)
+        print(f"\n[CHECK] Checking target {host}:{cfg['api_port']} (Replay API Endpoint)...")
+        reachable, err_reason = check_destination_service(
+            host, cfg["api_port"], protocol="tcp", timeout=cfg["timeout"], check_http_endpoint=True, http_path="/api/replay-status"
+        )
+        if not reachable:
+            print("\n" + "!" * 75)
+            print(f"❌ TARGET REPLAY API SERVICE UNREACHABLE: {host}:{cfg['api_port']}")
+            print(f"   Reason: {err_reason}")
+            print("!" * 75)
+            print("\n[STOP] Preflight check failed. Absolutely no feature records will be transmitted.")
+            print(f"Verify that api.py is running on {host} and port {cfg['api_port']} is accessible.")
+            print("Troubleshooting checklist:")
+            print(" 1. Physical Layer: Ensure Ethernet cable is connected between Sender and Monitor.")
+            print(" 2. Service Status: On Monitor, confirm 'python api.py' is running.")
+            print(f" 3. Firewall Rule : On Monitor, ensure inbound TCP port {cfg['api_port']} is permitted.\n")
+            sys.exit(1)
+
+        print("[OK] Target Replay API is reachable.")
+
+        # 5d. Launch Replay Stream
         run_dataset_feature_stream(
             records=records_to_send,
             label=selected_label,

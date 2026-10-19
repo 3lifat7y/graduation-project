@@ -2015,6 +2015,161 @@ def predict_direct():
 
 
 # ==============================================================================
+# Dedicated Dataset Replay Inference Endpoints
+# Architecture: Isolated Layer-7 feature evaluation, zero interference with live
+# Scapy/Npcap packet capture, zero side effects on current_scan_session.
+# ==============================================================================
+replay_stats_lock = threading.Lock()
+replay_session_stats = {
+    "total_replayed": 0,
+    "last_prediction": None,
+    "last_predicted_label": None,
+    "last_ground_truth": None,
+    "last_match": None,
+    "last_confidence": 0.0,
+    "last_latency_ms": 0.0,
+    "last_timestamp": None,
+    "matches": 0,
+    "mismatches": 0
+}
+
+
+@app.route('/api/replay-feature', methods=['POST'])
+def replay_feature():
+    """
+    Dedicated endpoint for dataset feature replay and inference verification.
+    Expects JSON structure:
+      {
+        "features": { ... 77 flow features ... },
+        "ground_truth": "DDoS"
+      }
+    Validates features, executes model inference via prepare_features() and best_model.joblib,
+    compares prediction with ground truth, and returns structured feedback without
+    altering live monitoring session state or live_collector.
+    """
+    global model, CLASS_LABELS, BENIGN_IDX, replay_session_stats
+    inf_start = time.time()
+    try:
+        data = request.get_json(force=True, silent=True)
+        if not data or not isinstance(data, dict):
+            return jsonify({
+                "status": "error",
+                "error": "Invalid input JSON. Expected a JSON object with 'features' and optional 'ground_truth'."
+            }), 400
+
+        # Extract features dictionary
+        if "features" in data and isinstance(data["features"], dict):
+            features_dict = data["features"]
+        else:
+            # Also support features passed directly at top-level alongside ground_truth
+            features_dict = {
+                k: v for k, v in data.items()
+                if k not in ("ground_truth", "groundTruth", "Label", "label", "features")
+            }
+
+        if not features_dict or not isinstance(features_dict, dict):
+            return jsonify({
+                "status": "error",
+                "error": "Missing or empty 'features' dictionary. Exactly 77 flow features required."
+            }), 400
+
+        # Extract ground truth label separately
+        raw_truth = data.get("ground_truth")
+        if raw_truth is None:
+            raw_truth = data.get("groundTruth")
+        if raw_truth is None:
+            raw_truth = data.get("Label")
+        if raw_truth is None:
+            raw_truth = data.get("label")
+        ground_truth = str(raw_truth).strip() if raw_truth is not None else "Unknown"
+
+        # Prepare and validate features (strict 77-feature validation and scaling)
+        try:
+            X = prepare_features(features_dict)
+        except ValueError as ve:
+            return jsonify({
+                "status": "error",
+                "error": f"Feature validation or transformation error: {ve}"
+            }), 400
+        except Exception as fe:
+            return jsonify({
+                "status": "error",
+                "error": f"Feature preprocessing exception: {fe}"
+            }), 400
+
+        if model is None:
+            return jsonify({
+                "status": "error",
+                "error": "Model is not loaded on server."
+            }), 500
+
+        # Run inference
+        prediction = int(model.predict(X)[0])
+        predicted_label = CLASS_LABELS.get(prediction, "Unknown")
+        is_attack = bool(prediction != BENIGN_IDX and str(predicted_label).lower() not in ["normal", "benign", "safe"])
+
+        confidence = 100.0
+        if hasattr(model, 'predict_proba'):
+            try:
+                proba = model.predict_proba(X)[0]
+                confidence = round(float(proba[prediction]) * 100, 2)
+            except Exception:
+                pass
+
+        # Compare ground truth with predicted label (normalized case & whitespace)
+        norm_pred = str(predicted_label).strip().lower().replace("_", " ").replace("-", " ")
+        norm_truth = str(ground_truth).strip().lower().replace("_", " ").replace("-", " ")
+        match = bool(norm_pred == norm_truth)
+
+        latency_ms = round((time.time() - inf_start) * 1000, 2)
+
+        # Update dedicated replay session statistics (thread-safe, completely isolated from live monitoring)
+        with replay_stats_lock:
+            replay_session_stats["total_replayed"] += 1
+            replay_session_stats["last_prediction"] = prediction
+            replay_session_stats["last_predicted_label"] = predicted_label
+            replay_session_stats["last_ground_truth"] = ground_truth
+            replay_session_stats["last_match"] = match
+            replay_session_stats["last_confidence"] = confidence
+            replay_session_stats["last_latency_ms"] = latency_ms
+            replay_session_stats["last_timestamp"] = time.strftime("%H:%M:%S")
+            if match:
+                replay_session_stats["matches"] += 1
+            else:
+                replay_session_stats["mismatches"] += 1
+
+        return jsonify({
+            "status": "success",
+            "predicted_label": predicted_label,
+            "prediction": prediction,
+            "ground_truth": ground_truth,
+            "match": match,
+            "confidence": confidence,
+            "is_attack": is_attack,
+            "latency_ms": latency_ms
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": f"Internal replay inference error: {e}"
+        }), 500
+
+
+@app.route('/api/replay-status', methods=['GET'])
+def get_replay_status():
+    """Returns dedicated replay telemetry without touching live monitoring state."""
+    with replay_stats_lock:
+        stats = dict(replay_session_stats)
+    return jsonify({
+        "status": "success",
+        "replay_stats": stats
+    }), 200
+
+
+
+
+# ==============================================================================
 # Isolated Port & Network Scanner Endpoints
 # Architecture: Independent async manager, zero interference with DDoS core.
 # ==============================================================================
