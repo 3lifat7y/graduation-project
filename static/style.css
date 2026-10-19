@@ -3494,6 +3494,8 @@ body.dedicated-mode-port-scanner .site-footer {
 
 .ps-table tbody tr {
   animation: portRowEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 @keyframes portRowEnter {
@@ -5227,6 +5229,8 @@ body.dedicated-mode-port-scanner .site-footer {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
   animation: deviceCardEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 @keyframes deviceCardEnter {

@@ -82,11 +82,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateTelemetryCounter(el, newText) {
     if (!el) return;
-    if (el.textContent !== String(newText)) {
-      el.textContent = newText;
-      el.classList.remove("counter-pop");
-      void el.offsetWidth;
-      el.classList.add("counter-pop");
+    const str = String(newText);
+    if (el.textContent !== str) {
+      el.textContent = str;
     }
   }
 
@@ -2546,6 +2544,108 @@ document.addEventListener("DOMContentLoaded", () => {
       if (progressBar) progressBar.classList.remove("scanning");
     }
 
+    function reconcilePortsTable(container, ports) {
+      if (!container) return;
+      if (!ports || ports.length === 0) {
+        let emptyState = container.querySelector(".ps-empty-state");
+        const tableWrap = container.querySelector(".ps-table-responsive-wrap");
+        if (tableWrap) tableWrap.remove();
+        if (!emptyState) {
+          emptyState = document.createElement("div");
+          emptyState.className = "ps-empty-state";
+          emptyState.innerHTML = '<i class="fas fa-shield-halved"></i>No open ports detected in this category.';
+          container.appendChild(emptyState);
+        }
+        return;
+      }
+
+      const emptyState = container.querySelector(".ps-empty-state");
+      if (emptyState) emptyState.remove();
+
+      let tableWrap = container.querySelector(".ps-table-responsive-wrap");
+      if (!tableWrap) {
+        tableWrap = document.createElement("div");
+        tableWrap.className = "ps-table-responsive-wrap";
+        tableWrap.innerHTML = `
+          <table class="ps-table">
+            <thead>
+              <tr>
+                <th>Port</th>
+                <th>Protocol</th>
+                <th>State</th>
+                <th>Service</th>
+                <th>Banner / Info</th>
+                <th>Latency</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        `;
+        container.appendChild(tableWrap);
+      }
+
+      const tbody = tableWrap.querySelector("tbody");
+      if (!tbody) return;
+
+      const currentKeys = new Set(ports.map(p => `${p.port}_${p.protocol || "TCP"}`));
+
+      // Remove rows no longer present
+      tbody.querySelectorAll("tr[data-port]").forEach(tr => {
+        const key = `${tr.getAttribute("data-port")}_${tr.getAttribute("data-proto")}`;
+        if (!currentKeys.has(key)) {
+          tr.remove();
+        }
+      });
+
+      ports.forEach((p, idx) => {
+        const proto = p.protocol || "TCP";
+        const stateClass = p.state === "open" ? "state-open" : (p.state === "filtered" ? "state-filtered" : (p.state === "error" ? "state-error" : "state-closed"));
+        const stateIcon = p.state === "open" ? "fa-circle-check" : (p.state === "filtered" ? "fa-circle-exclamation" : (p.state === "error" ? "fa-triangle-exclamation" : "fa-circle-xmark"));
+        const latencyText = p.latency_ms !== null && p.latency_ms !== undefined ? `${p.latency_ms} ms` : "--";
+        const bannerHtml = p.banner ? `<code class="ps-banner-code" title="${escapeHtml(p.banner)}">${escapeHtml(p.banner)}</code>` : '<span class="text-muted">--</span>';
+        const portSig = `${p.state}|${p.service}|${p.banner}|${p.latency_ms}`;
+
+        let tr = tbody.querySelector(`tr[data-port="${p.port}"][data-proto="${proto}"]`);
+        if (!tr) {
+          tr = document.createElement("tr");
+          tr.setAttribute("data-port", String(p.port));
+          tr.setAttribute("data-proto", proto);
+          tr.setAttribute("data-sig", portSig);
+          tr.style.animationDelay = `${Math.min(idx * 28, 400)}ms`;
+          tr.innerHTML = `
+            <td class="ps-port-num">${p.port}</td>
+            <td><span class="ps-proto-tag">${proto}</span></td>
+            <td>
+              <span class="ps-state-tag ${stateClass}">
+                <i class="fas ${stateIcon}"></i> ${(p.state || "closed").toUpperCase()}
+              </span>
+            </td>
+            <td><strong>${escapeHtml(p.service || "Unknown")}</strong></td>
+            <td>${bannerHtml}</td>
+            <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-muted);">${latencyText}</td>
+          `;
+          tbody.appendChild(tr);
+        } else {
+          if (tr.getAttribute("data-sig") !== portSig) {
+            tr.setAttribute("data-sig", portSig);
+            tr.innerHTML = `
+              <td class="ps-port-num">${p.port}</td>
+              <td><span class="ps-proto-tag">${proto}</span></td>
+              <td>
+                <span class="ps-state-tag ${stateClass}">
+                  <i class="fas ${stateIcon}"></i> ${(p.state || "closed").toUpperCase()}
+                </span>
+              </td>
+              <td><strong>${escapeHtml(p.service || "Unknown")}</strong></td>
+              <td>${bannerHtml}</td>
+              <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-muted);">${latencyText}</td>
+            `;
+          }
+          tbody.appendChild(tr);
+        }
+      });
+    }
+
     function renderResults(hosts) {
       if (!resultsWrapper || !resultsContent) return;
       resultsWrapper.style.display = "block";
@@ -2565,8 +2665,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Render based on scan mode
       if (currentMode === "network") {
-        // Multi-host accordion cards
-        let html = "";
+        // Multi-host accordion cards (reconciled in place to preserve open/close state and avoid flicker)
+        const singleCard = resultsContent.querySelector(".ps-table-card");
+        if (singleCard) singleCard.remove();
+
+        const currentHostIps = new Set(hosts.map(h => h.host));
+
+        // Remove cards no longer in hosts list
+        resultsContent.querySelectorAll(".ps-host-card").forEach(card => {
+          const hostIp = card.getAttribute("data-host");
+          if (!currentHostIps.has(hostIp)) {
+            card.remove();
+          }
+        });
+
+        if (hosts.length === 0) {
+          let emptyState = resultsContent.querySelector(".ps-empty-state");
+          if (!emptyState) {
+            resultsContent.innerHTML = `<div class="ps-empty-state"><i class="fas fa-search"></i>No hosts or ports match the current filter.</div>`;
+          }
+          return;
+        }
+
+        const globalEmpty = resultsContent.querySelector(":scope > .ps-empty-state");
+        if (globalEmpty) globalEmpty.remove();
+
         hosts.forEach((h, idx) => {
           const portsList = (activeFilter === "open") ? (h.open_ports || []) : (h.all_ports || []);
           const filteredPorts = portsList.filter(p => {
@@ -2574,38 +2697,58 @@ document.addEventListener("DOMContentLoaded", () => {
             return String(p.port).includes(q) || (p.service || "").toLowerCase().includes(q) || (p.banner || "").toLowerCase().includes(q);
           });
 
-          const isOpenByDefault = idx === 0 || (h.open_ports && h.open_ports.length > 0);
+          const isOpenByDefault = (idx === 0) || (h.open_ports && h.open_ports.length > 0);
           const openBadgeClass = (h.open_ports_count > 0) ? "ps-state-tag state-open" : "ps-state-tag state-closed";
+          const openIconClass = (h.open_ports_count > 0) ? "fa-circle-check" : "fa-circle-xmark";
 
-          html += `
-            <div class="ps-host-card ${isOpenByDefault ? "open" : ""}">
-              <div class="ps-host-header" onclick="this.parentElement.classList.toggle('open')">
+          let hostCard = resultsContent.querySelector(`.ps-host-card[data-host="${escapeHtml(h.host)}"]`);
+
+          if (!hostCard) {
+            hostCard = document.createElement("div");
+            hostCard.className = `ps-host-card ${isOpenByDefault ? "open" : ""}`;
+            hostCard.setAttribute("data-host", h.host);
+            hostCard.innerHTML = `
+              <div class="ps-host-header">
                 <div class="ps-host-title">
                   <span class="ps-host-ip"><i class="fas fa-server"></i> ${escapeHtml(h.host)}</span>
                   ${h.hostname && h.hostname !== h.host ? `<span class="ps-host-name">(${escapeHtml(h.hostname)})</span>` : ""}
                 </div>
                 <div class="ps-host-meta">
                   <span class="${openBadgeClass}">
-                    <i class="fas ${h.open_ports_count > 0 ? "fa-circle-check" : "fa-circle-xmark"}"></i>
-                    ${h.open_ports_count} Open
+                    <i class="fas ${openIconClass}"></i>
+                    <span class="ps-host-open-count">${h.open_ports_count} Open</span>
                   </span>
                   <i class="fas fa-chevron-down ps-chevron"></i>
                 </div>
               </div>
-              <div class="ps-host-body">
-                ${renderPortsTable(filteredPorts)}
-              </div>
-            </div>
-          `;
-        });
+              <div class="ps-host-body"></div>
+            `;
+            resultsContent.appendChild(hostCard);
+          } else {
+            // Host card exists - update meta while preserving open/close class
+            const metaTag = hostCard.querySelector(".ps-host-meta .ps-state-tag");
+            if (metaTag) {
+              metaTag.className = openBadgeClass;
+              metaTag.innerHTML = `<i class="fas ${openIconClass}"></i> <span class="ps-host-open-count">${h.open_ports_count} Open</span>`;
+            }
+            const hostTitle = hostCard.querySelector(".ps-host-title");
+            if (hostTitle) {
+              const nameSpan = h.hostname && h.hostname !== h.host ? `<span class="ps-host-name">(${escapeHtml(h.hostname)})</span>` : "";
+              hostTitle.innerHTML = `<span class="ps-host-ip"><i class="fas fa-server"></i> ${escapeHtml(h.host)}</span>${nameSpan}`;
+            }
+            resultsContent.appendChild(hostCard);
+          }
 
-        if (!html) {
-          html = `<div class="ps-empty-state"><i class="fas fa-search"></i>No hosts or ports match the current filter.</div>`;
-        }
-        resultsContent.innerHTML = html;
+          const hostBody = hostCard.querySelector(".ps-host-body");
+          reconcilePortsTable(hostBody, filteredPorts);
+        });
 
       } else {
         // Single host table (Localhost or Target IP)
+        resultsContent.querySelectorAll(".ps-host-card").forEach(c => c.remove());
+        const globalEmpty = resultsContent.querySelector(":scope > .ps-empty-state");
+        if (globalEmpty) globalEmpty.remove();
+
         const host = hosts[0] || {};
         const portsList = (activeFilter === "open") ? (host.open_ports || []) : (host.all_ports || []);
         const filteredPorts = portsList.filter(p => {
@@ -2613,61 +2756,15 @@ document.addEventListener("DOMContentLoaded", () => {
           return String(p.port).includes(q) || (p.service || "").toLowerCase().includes(q) || (p.banner || "").toLowerCase().includes(q);
         });
 
-        resultsContent.innerHTML = `
-          <div class="ps-table-card">
-            ${renderPortsTable(filteredPorts)}
-          </div>
-        `;
+        let tableCard = resultsContent.querySelector(".ps-table-card");
+        if (!tableCard) {
+          tableCard = document.createElement("div");
+          tableCard.className = "ps-table-card";
+          resultsContent.appendChild(tableCard);
+        }
+
+        reconcilePortsTable(tableCard, filteredPorts);
       }
-    }
-
-    function renderPortsTable(ports) {
-      if (!ports || ports.length === 0) {
-        return `<div class="ps-empty-state"><i class="fas fa-shield-halved"></i>No open ports detected in this category.</div>`;
-      }
-
-      let rows = "";
-      ports.forEach((p, idx) => {
-        const stateClass = p.state === "open" ? "state-open" : (p.state === "filtered" ? "state-filtered" : (p.state === "error" ? "state-error" : "state-closed"));
-        const stateIcon = p.state === "open" ? "fa-circle-check" : (p.state === "filtered" ? "fa-circle-exclamation" : (p.state === "error" ? "fa-triangle-exclamation" : "fa-circle-xmark"));
-        const latencyText = p.latency_ms !== null ? `${p.latency_ms} ms` : "--";
-        const bannerHtml = p.banner ? `<code class="ps-banner-code" title="${escapeHtml(p.banner)}">${escapeHtml(p.banner)}</code>` : '<span class="text-muted">--</span>';
-
-        rows += `
-          <tr style="animation-delay: ${Math.min(idx * 28, 400)}ms">
-            <td class="ps-port-num">${p.port}</td>
-            <td><span class="ps-proto-tag">${p.protocol || "TCP"}</span></td>
-            <td>
-              <span class="ps-state-tag ${stateClass}">
-                <i class="fas ${stateIcon}"></i> ${(p.state || "closed").toUpperCase()}
-              </span>
-            </td>
-            <td><strong>${escapeHtml(p.service || "Unknown")}</strong></td>
-            <td>${bannerHtml}</td>
-            <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-muted);">${latencyText}</td>
-          </tr>
-        `;
-      });
-
-      return `
-        <div class="ps-table-responsive-wrap">
-          <table class="ps-table">
-            <thead>
-              <tr>
-                <th>Port</th>
-                <th>Protocol</th>
-                <th>State</th>
-                <th>Service</th>
-                <th>Banner / Info</th>
-                <th>Latency</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </div>
-      `;
     }
 
     function escapeHtml(str) {
@@ -2772,6 +2869,19 @@ document.addEventListener("DOMContentLoaded", () => {
           searchQuery = e.target.value;
           if (lastScanData && lastScanData.results) {
             renderResults(lastScanData.results);
+          }
+        });
+      }
+
+      // Delegated Accordion Toggle for Host Cards (stable, registered once)
+      if (resultsContent) {
+        resultsContent.addEventListener("click", (e) => {
+          const header = e.target.closest(".ps-host-header");
+          if (header) {
+            const card = header.closest(".ps-host-card");
+            if (card) {
+              card.classList.toggle("open");
+            }
           }
         });
       }

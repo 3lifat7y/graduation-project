@@ -525,18 +525,17 @@
     };
   }
 
-  // 5. Inventory Rendering: Cards & Compact Table
+  // 5. Inventory Rendering: Cards & Compact Table (Keyed In-Place Reconciliation)
   function renderDeviceInventory() {
     const list = filterAndSortDevices();
     renderDeviceCards(list);
     renderCompactTable(list);
-    attachDeviceActionListeners();
   }
 
   // Backward compatibility alias for polling loop
   const renderDeviceTable = renderDeviceInventory;
 
-  // 5a. Responsive Cards Grid (Default View)
+  // 5a. Responsive Cards Grid (Default View with In-Place Keyed Reconciliation)
   function renderDeviceCards(list) {
     if (!elements.ndCardsGrid) return;
 
@@ -558,12 +557,26 @@
       return;
     }
 
-    const cardsHtml = list.map((dev, idx) => {
+    // Remove empty state if present
+    const emptyState = elements.ndCardsGrid.querySelector('.nd-empty-state');
+    if (emptyState) emptyState.remove();
+
+    const currentIps = new Set(list.map(d => d.ip));
+
+    // Remove cards no longer in the filtered/sorted device list
+    elements.ndCardsGrid.querySelectorAll('.nd-device-card').forEach(card => {
+      const ip = card.getAttribute('data-ip');
+      if (!currentIps.has(ip)) {
+        card.remove();
+      }
+    });
+
+    list.forEach((dev, idx) => {
       const icon = getDeviceIcon(dev.device_type, dev.vendor, dev.is_gateway, dev.is_local_host);
       const isOnline = dev.status === 'Online';
       const isNew = state.scanStatus === 'scanning' && !state.knownIps.has(dev.ip);
       if (isNew) state.knownIps.add(dev.ip);
-      
+
       const hostnameDisplay = (!dev.hostname || dev.hostname === 'Unknown')
         ? `<span class="nd-text-muted">Unknown</span>`
         : `<span class="nd-card-hostname-text">${escapeHtml(dev.hostname)}</span>`;
@@ -605,8 +618,24 @@
         `;
       }
 
-      return `
-        <div class="nd-device-card ${isNew ? 'new-discovery-glow' : ''}" data-ip="${escapeHtml(dev.ip)}" style="animation-delay: ${Math.min(idx * 35, 500)}ms">
+      const statusPillHtml = (dev.verified || dev.status === 'Online')
+        ? `<span class="nd-status-pill online" title="Confirmed reachable via ARP/ICMP/TCP probe"><span class="status-pulse-dot"></span> Confirmed Active</span>`
+        : dev.status === 'Unverified'
+        ? `<span class="nd-status-pill unverified" title="Present in ARP neighbor cache but unverified by direct probes"><i class="fas fa-clock"></i> Unverified</span>`
+        : `<span class="nd-status-pill offline">${escapeHtml(dev.status || 'Offline')}</span>`;
+
+      const cardSig = `${dev.status}|${dev.verified}|${dev.hostname}|${dev.mac}|${categoryClean}|${vendorClean}|${portsInfo.count}|${dev.is_gateway}|${dev.is_local_host}`;
+
+      let card = elements.ndCardsGrid.querySelector(`.nd-device-card[data-ip="${escapeHtml(dev.ip)}"]`);
+
+      if (!card) {
+        card = document.createElement('div');
+        card.className = `nd-device-card ${isNew ? 'new-discovery-glow' : ''}`;
+        card.setAttribute('data-ip', dev.ip);
+        card.setAttribute('data-sig', cardSig);
+        card.style.animationDelay = `${Math.min(idx * 35, 500)}ms`;
+
+        card.innerHTML = `
           <div class="nd-card-header">
             <div class="nd-card-avatar" title="${escapeHtml(categoryClean)}">
               <i class="fas ${icon}"></i>
@@ -620,13 +649,7 @@
                 ${escapeHtml(categoryClean)} • ${escapeHtml(vendorClean)}
               </span>
             </div>
-            ${
-              dev.verified || dev.status === 'Online'
-                ? `<span class="nd-status-pill online" title="Confirmed reachable via ARP/ICMP/TCP probe"><span class="status-pulse-dot"></span> Confirmed Active</span>`
-                : dev.status === 'Unverified'
-                ? `<span class="nd-status-pill unverified" title="Present in ARP neighbor cache but unverified by direct probes"><i class="fas fa-clock"></i> Unverified</span>`
-                : `<span class="nd-status-pill offline">${escapeHtml(dev.status || 'Offline')}</span>`
-            }
+            ${statusPillHtml}
           </div>
 
           <div class="nd-card-body">
@@ -659,14 +682,49 @@
               <i class="fas fa-circle-info"></i> View Details
             </button>
           </div>
-        </div>
-      `;
-    }).join('');
+        `;
+        elements.ndCardsGrid.appendChild(card);
+      } else {
+        // Card already exists in DOM - only update if data actually changed
+        if (card.getAttribute('data-sig') !== cardSig) {
+          card.setAttribute('data-sig', cardSig);
 
-    elements.ndCardsGrid.innerHTML = cardsHtml;
+          const avatar = card.querySelector('.nd-card-avatar');
+          if (avatar) {
+            avatar.title = categoryClean;
+            avatar.innerHTML = `<i class="fas ${icon}"></i>`;
+          }
+          const nameRow = card.querySelector('.nd-card-name-row');
+          if (nameRow) {
+            nameRow.innerHTML = `<h4 class="nd-card-hostname" title="${escapeHtml(dev.hostname || dev.ip)}">${hostnameDisplay}</h4>${roleBadge}`;
+          }
+          const sub = card.querySelector('.nd-card-sub');
+          if (sub) {
+            sub.title = `${categoryClean} • ${vendorClean}`;
+            sub.textContent = `${categoryClean} • ${vendorClean}`;
+          }
+          const header = card.querySelector('.nd-card-header');
+          const oldPill = header ? header.querySelector('.nd-status-pill') : null;
+          if (oldPill) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = statusPillHtml;
+            const newPill = tempDiv.firstElementChild;
+            if (newPill) header.replaceChild(newPill, oldPill);
+          }
+          const macEl = card.querySelector('.nd-card-prop:nth-child(2) .nd-prop-val');
+          if (macEl) macEl.innerHTML = macDisplay;
+          const portsEl = card.querySelector('.nd-card-prop:nth-child(3) .nd-prop-val');
+          if (portsEl) portsEl.innerHTML = portsDisplay;
+          const scanLink = card.querySelector('.nd-btn-scan-ports');
+          if (scanLink) scanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}`;
+        }
+        // Preserve DOM sort order without re-triggering animations
+        elements.ndCardsGrid.appendChild(card);
+      }
+    });
   }
 
-  // 5b. Compact Table View (Secondary Option)
+  // 5b. Compact Table View (Secondary Option with In-Place Keyed Reconciliation)
   function renderCompactTable(list) {
     if (!elements.ndTableBody) return;
 
@@ -692,10 +750,24 @@
       return;
     }
 
-    const rowsHtml = list.map((dev, idx) => {
+    // Remove empty row if present
+    const emptyRow = elements.ndTableBody.querySelector('.nd-empty-row');
+    if (emptyRow) emptyRow.remove();
+
+    const currentIps = new Set(list.map(d => d.ip));
+
+    // Remove rows no longer in list
+    elements.ndTableBody.querySelectorAll('.nd-device-row').forEach(row => {
+      const ip = row.getAttribute('data-ip');
+      if (!currentIps.has(ip)) {
+        row.remove();
+      }
+    });
+
+    list.forEach((dev, idx) => {
       const icon = getDeviceIcon(dev.device_type, dev.vendor, dev.is_gateway, dev.is_local_host);
       const isOnline = dev.status === 'Online';
-      
+
       const hostnameDisplay = (!dev.hostname || dev.hostname === 'Unknown')
         ? `<span class="nd-text-muted">Unknown</span>`
         : `<span class="nd-hostname-text" title="${escapeHtml(dev.hostname)}">${escapeHtml(dev.hostname)}</span>`;
@@ -731,8 +803,24 @@
         `;
       }
 
-      return `
-        <tr class="nd-device-row" data-ip="${escapeHtml(dev.ip)}" style="animation-delay: ${Math.min(idx * 28, 450)}ms">
+      const statusPillHtml = (dev.verified || dev.status === 'Online')
+        ? `<span class="nd-status-pill online" title="Confirmed reachable"><span class="status-pulse-dot"></span> Confirmed Active</span>`
+        : dev.status === 'Unverified'
+        ? `<span class="nd-status-pill unverified" title="Present in ARP neighbor cache but unverified by direct probes"><i class="fas fa-clock"></i> Unverified</span>`
+        : `<span class="nd-status-pill offline">${escapeHtml(dev.status || 'Offline')}</span>`;
+
+      const rowSig = `${dev.status}|${dev.verified}|${dev.hostname}|${dev.mac}|${dev.device_type}|${portsInfo.count}|${dev.is_gateway}|${dev.is_local_host}`;
+
+      let row = elements.ndTableBody.querySelector(`.nd-device-row[data-ip="${escapeHtml(dev.ip)}"]`);
+
+      if (!row) {
+        row = document.createElement('tr');
+        row.className = 'nd-device-row';
+        row.setAttribute('data-ip', dev.ip);
+        row.setAttribute('data-sig', rowSig);
+        row.style.animationDelay = `${Math.min(idx * 28, 450)}ms`;
+
+        row.innerHTML = `
           <td class="col-hostname">
             <div class="nd-device-cell">
               <div class="nd-avatar-circle" title="${escapeHtml(dev.device_type || 'Device')}">
@@ -749,13 +837,7 @@
           </td>
           <td class="col-mac">${macDisplay}</td>
           <td class="col-status">
-            ${
-              dev.verified || dev.status === 'Online'
-                ? `<span class="nd-status-pill online" title="Confirmed reachable"><span class="status-pulse-dot"></span> Confirmed Active</span>`
-                : dev.status === 'Unverified'
-                ? `<span class="nd-status-pill unverified" title="Present in ARP neighbor cache but unverified by direct probes"><i class="fas fa-clock"></i> Unverified</span>`
-                : `<span class="nd-status-pill offline">${escapeHtml(dev.status || 'Offline')}</span>`
-            }
+            ${statusPillHtml}
           </td>
           <td class="col-ports">${portsDisplay}</td>
           <td class="col-actions">
@@ -766,55 +848,29 @@
               <i class="fas fa-circle-info"></i> Details
             </button>
           </td>
-        </tr>
-      `;
-    }).join('');
-
-    elements.ndTableBody.innerHTML = rowsHtml;
-  }
-
-  // Attach event listeners for card/table actions
-  function attachDeviceActionListeners() {
-    // Card click (opens modal if not clicking buttons)
-    if (elements.ndCardsGrid) {
-      elements.ndCardsGrid.querySelectorAll('.nd-device-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-          if (e.target.closest('button') || e.target.closest('a')) return;
-          const ip = card.getAttribute('data-ip');
-          if (ip) openDeviceModal(ip);
-        });
-      });
-    }
-
-    // Table row click
-    if (elements.ndTableBody) {
-      elements.ndTableBody.querySelectorAll('.nd-device-row').forEach(row => {
-        row.addEventListener('click', (e) => {
-          if (e.target.closest('button') || e.target.closest('a')) return;
-          const ip = row.getAttribute('data-ip');
-          if (ip) openDeviceModal(ip);
-        });
-      });
-    }
-
-    // View Details buttons (on both cards and table)
-    document.querySelectorAll('.nd-view-details-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const ip = btn.getAttribute('data-ip');
-        if (ip) openDeviceModal(ip);
-      });
-    });
-
-    // Mini copy buttons on cards
-    document.querySelectorAll('.nd-mini-copy-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const text = btn.getAttribute('data-copy-text');
-        if (text) copyDirectText(text, btn);
-      });
+        `;
+        elements.ndTableBody.appendChild(row);
+      } else {
+        if (row.getAttribute('data-sig') !== rowSig) {
+          row.setAttribute('data-sig', rowSig);
+          const nameMeta = row.querySelector('.nd-name-meta');
+          if (nameMeta) nameMeta.innerHTML = `${hostnameDisplay}${roleBadge}`;
+          const macCol = row.querySelector('.col-mac');
+          if (macCol) macCol.innerHTML = macDisplay;
+          const statusCol = row.querySelector('.col-status');
+          if (statusCol) statusCol.innerHTML = statusPillHtml;
+          const portsCol = row.querySelector('.col-ports');
+          if (portsCol) portsCol.innerHTML = portsDisplay;
+          const scanLink = row.querySelector('.nd-btn-scan-ports');
+          if (scanLink) scanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}`;
+        }
+        elements.ndTableBody.appendChild(row);
+      }
     });
   }
+
+  // Backward compatibility stub (delegated event listeners attached once in initEventListeners)
+  function attachDeviceActionListeners() {}
 
   // 6. Device Details Modal (Structured in 4 Sections)
   function openDeviceModal(ip) {
@@ -1073,6 +1129,51 @@
     }
     // Set initial view state
     setViewMode(state.viewMode);
+
+    // Delegated click handlers for Cards Grid (stable, registered once)
+    if (elements.ndCardsGrid) {
+      elements.ndCardsGrid.addEventListener('click', (e) => {
+        const copyBtn = e.target.closest('.nd-mini-copy-btn');
+        if (copyBtn) {
+          e.stopPropagation();
+          const text = copyBtn.getAttribute('data-copy-text');
+          if (text) copyDirectText(text, copyBtn);
+          return;
+        }
+        const detailsBtn = e.target.closest('.nd-view-details-btn');
+        if (detailsBtn) {
+          e.stopPropagation();
+          const ip = detailsBtn.getAttribute('data-ip');
+          if (ip) openDeviceModal(ip);
+          return;
+        }
+        if (e.target.closest('a') || e.target.closest('button')) return;
+        const card = e.target.closest('.nd-device-card');
+        if (card) {
+          const ip = card.getAttribute('data-ip');
+          if (ip) openDeviceModal(ip);
+        }
+      });
+    }
+
+    // Delegated click handlers for Table Body (stable, registered once)
+    if (elements.ndTableBody) {
+      elements.ndTableBody.addEventListener('click', (e) => {
+        const detailsBtn = e.target.closest('.nd-view-details-btn');
+        if (detailsBtn) {
+          e.stopPropagation();
+          const ip = detailsBtn.getAttribute('data-ip');
+          if (ip) openDeviceModal(ip);
+          return;
+        }
+        if (e.target.closest('a') || e.target.closest('button')) return;
+        const row = e.target.closest('.nd-device-row');
+        if (row) {
+          const ip = row.getAttribute('data-ip');
+          if (ip) openDeviceModal(ip);
+        }
+      });
+    }
 
     // Modal Drawer Close & Backdrop
     if (elements.modalCloseBtn) {
