@@ -229,6 +229,10 @@ class CaptureWorker:
                 }
             return dict(self.current_result)
 
+    def is_running(self) -> bool:
+        with self.lock:
+            return bool(self.is_capturing and not self.stop_requested)
+
     def _capture_loop(
         self,
         scan_id: str,

@@ -55,6 +55,12 @@
     ndStopBtn: document.getElementById('ndStopBtn'),
     ndRescanBtn: document.getElementById('ndRescanBtn'),
 
+    // History Ribbon
+    ndHistoryRibbon: document.getElementById('ndHistoryRibbon'),
+    ndHistoryTitle: document.getElementById('ndHistoryTitle'),
+    ndHistoryDetails: document.getElementById('ndHistoryDetails'),
+    ndHistoryCloseBtn: document.getElementById('ndHistoryCloseBtn'),
+
     // Progress & Alert
     ndProgressBox: document.getElementById('ndProgressBox'),
     ndProgressBar: document.getElementById('ndProgressBar'),
@@ -225,19 +231,25 @@
   }
 
   // 2. Scan Controls: Start, Stop, Rescan
-  async function startDiscoveryScan() {
+  async function startDiscoveryScan(isRescan = false) {
+    if (state.scanStatus === 'scanning' || state.scanStatus === 'starting') {
+      return;
+    }
     hideAlert();
     const subnet = (elements.ndSubnetInput ? elements.ndSubnetInput.value : '').trim();
     const timeout = parseFloat(elements.ndTimeoutSelect ? elements.ndTimeoutSelect.value : 0.6);
     const concurrency = parseInt(elements.ndConcurrencySelect ? elements.ndConcurrencySelect.value : 50, 10);
 
     if (!subnet) {
-      showAlert('Please specify a valid IPv4 subnet in CIDR notation (e.g. 192.168.1.0/24).');
+      showAlert('Please specify a valid IPv4 subnet (e.g. 192.168.1.0/24), host IP, or range.');
+      if (elements.ndSubnetInput) elements.ndSubnetInput.focus();
       return;
     }
 
     state.knownIps.clear();
     setScanUiState('starting');
+    if (elements.ndStartBtn) elements.ndStartBtn.disabled = true;
+    if (elements.ndRescanBtn) elements.ndRescanBtn.disabled = true;
 
     try {
       const res = await fetch('/api/network-discovery/start', {
@@ -254,10 +266,14 @@
         startStatusPolling();
       } else {
         setScanUiState('error');
+        if (elements.ndStartBtn) elements.ndStartBtn.disabled = false;
+        if (elements.ndRescanBtn) elements.ndRescanBtn.disabled = false;
         showAlert(data.message || 'Failed to initiate network discovery scan.');
       }
     } catch (err) {
       setScanUiState('error');
+      if (elements.ndStartBtn) elements.ndStartBtn.disabled = false;
+      if (elements.ndRescanBtn) elements.ndRescanBtn.disabled = false;
       showAlert('Error communicating with discovery service: ' + err.message);
     }
   }
@@ -279,10 +295,10 @@
   function rescanDiscovery() {
     if (state.scanStatus === 'scanning') {
       stopDiscoveryScan().then(() => {
-        setTimeout(startDiscoveryScan, 300);
+        setTimeout(() => startDiscoveryScan(true), 350);
       });
     } else {
-      startDiscoveryScan();
+      startDiscoveryScan(true);
     }
   }
 
@@ -305,7 +321,13 @@
       }
       if (elements.ndProgressBar) elements.ndProgressBar.classList.add('scanning');
     } else {
-      if (elements.ndStartBtn) elements.ndStartBtn.style.display = 'inline-flex';
+      if (elements.ndStartBtn) {
+        elements.ndStartBtn.style.display = 'inline-flex';
+        elements.ndStartBtn.disabled = false;
+      }
+      if (elements.ndRescanBtn) {
+        elements.ndRescanBtn.disabled = false;
+      }
       if (elements.ndStopBtn) elements.ndStopBtn.style.display = 'none';
       if (elements.ndProgressBox) {
         elements.ndProgressBox.classList.remove('scanning');
@@ -361,6 +383,28 @@
 
       // Render Table
       renderDeviceTable();
+
+      // Render Previous Scan Comparison
+      if (elements.ndHistoryRibbon) {
+        if (data.history_comparison && (data.status === 'completed' || data.status === 'scanning')) {
+          const hc = data.history_comparison;
+          if (elements.ndHistoryDetails) {
+            let detailParts = [];
+            detailParts.push(`Subnet rescan: ${(data.devices_count || 0)} total device(s) found in ${(data.duration_s || 0).toFixed(1)}s.`);
+            if (hc.new_hosts_count > 0) {
+              detailParts.push(`<strong>${hc.new_hosts_count} new host(s)</strong> active.`);
+            }
+            if (hc.offline_hosts_count > 0) {
+              detailParts.push(`<span>${hc.offline_hosts_count} host(s)</span> unverified / offline.`);
+            }
+            if (hc.new_hosts_count === 0 && hc.offline_hosts_count === 0) {
+              detailParts.push('Host states consistent with previous scan.');
+            }
+            elements.ndHistoryDetails.innerHTML = detailParts.join(' ');
+          }
+          elements.ndHistoryRibbon.style.display = 'flex';
+        }
+      }
 
       // Check Completion
       if (data.status === 'completed' || data.status === 'stopped' || data.status === 'error') {
@@ -568,10 +612,13 @@
                 ${escapeHtml(categoryClean)} • ${escapeHtml(vendorClean)}
               </span>
             </div>
-            <span class="nd-status-pill ${isOnline ? 'online' : 'offline'}">
-              <span class="status-pulse-dot"></span>
-              ${escapeHtml(dev.status || 'Offline')}
-            </span>
+            ${
+              dev.verified || dev.status === 'Online'
+                ? `<span class="nd-status-pill online" title="Confirmed reachable via ARP/ICMP/TCP probe"><span class="status-pulse-dot"></span> Confirmed Active</span>`
+                : dev.status === 'Unverified'
+                ? `<span class="nd-status-pill unverified" title="Present in ARP neighbor cache but unverified by direct probes"><i class="fas fa-clock"></i> Unverified</span>`
+                : `<span class="nd-status-pill offline">${escapeHtml(dev.status || 'Offline')}</span>`
+            }
           </div>
 
           <div class="nd-card-body">
@@ -597,6 +644,9 @@
           </div>
 
           <div class="nd-card-footer">
+            <a href="/?view=port-scanner&target=${encodeURIComponent(dev.ip)}" class="nd-btn-scan-ports" title="Scan ports for target ${escapeHtml(dev.ip)}">
+              <i class="fas fa-bullseye"></i> Scan Ports
+            </a>
             <button type="button" class="nd-btn-details nd-view-details-btn" data-ip="${escapeHtml(dev.ip)}" title="View complete hardware profile and scan details">
               <i class="fas fa-circle-info"></i> View Details
             </button>
@@ -691,13 +741,19 @@
           </td>
           <td class="col-mac">${macDisplay}</td>
           <td class="col-status">
-            <span class="nd-status-pill ${isOnline ? 'online' : 'offline'}">
-              <span class="status-pulse-dot"></span>
-              ${escapeHtml(dev.status || 'Offline')}
-            </span>
+            ${
+              dev.verified || dev.status === 'Online'
+                ? `<span class="nd-status-pill online" title="Confirmed reachable"><span class="status-pulse-dot"></span> Confirmed Active</span>`
+                : dev.status === 'Unverified'
+                ? `<span class="nd-status-pill unverified" title="Present in ARP neighbor cache but unverified by direct probes"><i class="fas fa-clock"></i> Unverified</span>`
+                : `<span class="nd-status-pill offline">${escapeHtml(dev.status || 'Offline')}</span>`
+            }
           </td>
           <td class="col-ports">${portsDisplay}</td>
           <td class="col-actions">
+            <a href="/?view=port-scanner&target=${encodeURIComponent(dev.ip)}" class="nd-table-btn nd-btn-scan-ports" title="Scan ports on ${escapeHtml(dev.ip)}">
+              <i class="fas fa-bullseye"></i> Ports
+            </a>
             <button type="button" class="nd-table-btn nd-view-details-btn" data-ip="${escapeHtml(dev.ip)}" title="View complete hardware profile">
               <i class="fas fa-circle-info"></i> Details
             </button>
@@ -923,6 +979,11 @@
     }
     if (elements.ndRescanBtn) {
       elements.ndRescanBtn.addEventListener('click', rescanDiscovery);
+    }
+    if (elements.ndHistoryCloseBtn) {
+      elements.ndHistoryCloseBtn.addEventListener('click', () => {
+        if (elements.ndHistoryRibbon) elements.ndHistoryRibbon.style.display = 'none';
+      });
     }
     if (elements.ndUseLocalSubnetBtn) {
       elements.ndUseLocalSubnetBtn.addEventListener('click', () => {

@@ -2252,6 +2252,16 @@ body.dedicated-mode-port-scanner .site-footer {
     font-size: 0.86rem;
     padding: 10px 36px 10px 12px;
   }
+
+  .btn-group-scan {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .check-btn, .rescan-btn, .stop-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .driver-badge {
@@ -2530,6 +2540,181 @@ body.dedicated-mode-port-scanner .site-footer {
 
 .stop-btn:hover {
   background: #B33020;
+}
+
+/* Rescan Button — Matched in size & aesthetic, placed between Live and Stop */
+.rescan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: 1.5px solid var(--accent);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.rescan-btn:hover:not(:disabled) {
+  background: var(--accent-subtle);
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.rescan-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.rescan-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Rescan Health Status Banner */
+.rescan-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  margin-top: 14px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  position: relative;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.rescan-status-icon-wrap {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.rescan-status-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rescan-status-title {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.rescan-status-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* Rescan Banner State Variants */
+.rescan-status-banner.state-healthy {
+  background: var(--status-benign-bg);
+  border-color: var(--status-benign-border);
+}
+.rescan-status-banner.state-healthy .rescan-status-icon-wrap i,
+.rescan-status-banner.state-healthy .rescan-status-title {
+  color: var(--status-benign);
+}
+
+.rescan-status-banner.state-quiet {
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+}
+.rescan-status-banner.state-quiet .rescan-status-icon-wrap i,
+.rescan-status-banner.state-quiet .rescan-status-title {
+  color: var(--status-info);
+}
+
+.rescan-status-banner.state-warning {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+}
+.rescan-status-banner.state-warning .rescan-status-icon-wrap i,
+.rescan-status-banner.state-warning .rescan-status-title {
+  color: var(--status-warning);
+}
+
+.rescan-status-banner.state-error {
+  background: var(--status-attack-bg);
+  border-color: var(--status-attack-border);
+}
+.rescan-status-banner.state-error .rescan-status-icon-wrap i,
+.rescan-status-banner.state-error .rescan-status-title {
+  color: var(--status-attack);
+}
+
+.rescan-recovery-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-recovery-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: #FFFFFF;
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-recovery-action:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-recovery-action.secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-recovery-action.secondary:hover {
+  background: var(--bg-secondary);
+}
+
+.rescan-status-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px;
+  margin: -4px -4px 0 0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+}
+
+.rescan-status-dismiss:hover {
+  color: var(--text-primary);
 }
 
 .connection-status {
@@ -3442,6 +3627,25 @@ body.dedicated-mode-port-scanner .site-footer {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-muted);
+}
+
+.ps-state-tag.state-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+
+.ps-results-timestamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
 }
 
 .ps-proto-tag {
@@ -5413,6 +5617,94 @@ body.dedicated-mode-port-scanner .site-footer {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-muted);
+}
+
+.nd-status-pill.unverified {
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #ca8a04;
+}
+
+[data-theme="dark"] .nd-status-pill.unverified {
+  background: rgba(234, 179, 8, 0.18);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #facc15;
+}
+
+.nd-btn-scan-ports {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+  border: 1px solid var(--border-medium);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.nd-btn-scan-ports:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.nd-history-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  margin-top: 14px;
+  margin-bottom: 6px;
+  animation: fadeIn 0.3s ease;
+}
+
+.nd-history-icon {
+  font-size: 1.1rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.nd-history-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-grow: 1;
+}
+
+.nd-history-title {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nd-history-details {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.nd-history-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+}
+
+.nd-history-close-btn:hover {
+  color: var(--text-primary);
 }
 
 .status-pulse-dot {

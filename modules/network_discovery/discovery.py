@@ -352,6 +352,93 @@ def read_windows_arp_cache() -> Dict[str, str]:
     return arp_entries
 
 
+def probe_host_tcp(ip_str: str, ports: Optional[List[int]] = None, timeout_s: float = 0.3) -> bool:
+    """
+    Lightweight TCP connect probe across high-frequency ports (80, 443, 445, 135, 22).
+    Verifies reachable devices that drop ICMP or Win32 SendARP.
+    Receiving either full connection or RST proves host network stack is active.
+    """
+    if ports is None:
+        ports = [80, 443, 445, 135, 22]
+    for p in ports:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout_s)
+            res = s.connect_ex((ip_str, p))
+            s.close()
+            # 0 = Connection succeeded; WSAECONNREFUSED (10061 in Windows, 111 in Linux) = host active & refused
+            if res == 0 or res in [10061, 111]:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def validate_and_normalize_subnet(
+    raw_input: Optional[str],
+    default_cidr: Optional[str] = "192.168.1.0/24"
+) -> Tuple[ipaddress.IPv4Network, List[str]]:
+    """
+    Validates and normalizes user subnet/IP inputs into an IPv4Network and target host list.
+    Supports:
+      1. Standard CIDR: '192.168.1.0/24', '10.0.0.0/22'
+      2. Single Host IP: '192.168.1.15' -> auto-expanded to local '/24' subnet '192.168.1.0/24'
+      3. Dash Range: '192.168.1.1-192.168.1.50' or '192.168.1.1-50' -> targets in range
+    Enforces maximum 1024 addresses (minimum prefix /22) to prevent dangerous broadcast storms.
+    """
+    raw = (raw_input or "").strip()
+    if not raw:
+        raw = (default_cidr or "192.168.1.0/24").strip()
+
+    # 1. Check for dash range (e.g. 192.168.1.1-192.168.1.50 or 192.168.1.1-50)
+    if "-" in raw:
+        parts = [p.strip() for p in raw.split("-")]
+        if len(parts) == 2:
+            start_str, end_str = parts[0], parts[1]
+            try:
+                start_ip = ipaddress.IPv4Address(start_str)
+                if "." not in end_str:
+                    octets = start_str.split(".")
+                    end_str = f"{octets[0]}.{octets[1]}.{octets[2]}.{end_str}"
+                end_ip = ipaddress.IPv4Address(end_str)
+                if int(start_ip) > int(end_ip):
+                    start_ip, end_ip = end_ip, start_ip
+                count = int(end_ip) - int(start_ip) + 1
+                if count > 1024:
+                    raise ValueError(f"Range contains {count} hosts. Maximum allowed is 1,024 hosts.")
+                targets = [str(ipaddress.IPv4Address(ip_int)) for ip_int in range(int(start_ip), int(end_ip) + 1)]
+                enclosing_net = ipaddress.IPv4Interface(f"{start_str}/24").network
+                return enclosing_net, targets
+            except (ValueError, ipaddress.AddressValueError) as e:
+                raise ValueError(f"Invalid IP range '{raw}': {e}")
+
+    # 2. Check for single IP without CIDR mask (e.g. 192.168.1.15)
+    if "/" not in raw:
+        try:
+            ip_obj = ipaddress.IPv4Address(raw)
+            deduced_net = ipaddress.IPv4Interface(f"{raw}/24").network
+            targets = [str(ip) for ip in deduced_net.hosts()]
+            return deduced_net, targets
+        except ValueError:
+            pass
+
+    # 3. Standard CIDR (e.g. 192.168.1.0/24)
+    try:
+        network_obj = ipaddress.IPv4Network(raw, strict=False)
+    except ValueError as ve:
+        raise ValueError(f"Invalid IPv4 subnet format '{raw}'. Expected CIDR (e.g. 192.168.1.0/24) or IP range: {ve}")
+
+    if network_obj.num_addresses > 1024:
+        raise ValueError(f"Subnet '{raw}' contains {network_obj.num_addresses} addresses. Subnets must be /22 or smaller (maximum 1,024 hosts).")
+
+    if network_obj.prefixlen >= 31:
+        targets = [str(ip) for ip in network_obj]
+    else:
+        targets = [str(ip) for ip in network_obj.hosts()]
+
+    return network_obj, targets
+
+
 def probe_netbios_name(ip_str: str, timeout: float = 0.35) -> Optional[str]:
     """
     Sends a standard NetBIOS Node Status query (UDP 137) to resolve computer name on Windows/Samba hosts.
@@ -465,6 +552,7 @@ class NetworkDiscoveryManager:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._active_thread: Optional[threading.Thread] = None
+        self.last_completed_scan: Optional[Dict[str, Any]] = None
         self.session: Dict[str, Any] = {
             "status": "idle",  # "idle" | "scanning" | "completed" | "stopped" | "error"
             "scan_id": None,
@@ -478,6 +566,8 @@ class NetworkDiscoveryManager:
             "online_count": 0,
             "devices": [],
             "network_info": {},
+            "last_completed_scan": None,
+            "history_comparison": None,
             "message": "Ready to initiate network discovery scan."
         }
 
@@ -487,6 +577,7 @@ class NetworkDiscoveryManager:
             state = dict(self.session)
             state["devices"] = list(self.session.get("devices", []))
             state["network_info"] = dict(self.session.get("network_info", {}))
+            state["last_completed_scan"] = dict(self.last_completed_scan) if self.last_completed_scan else None
             if state["status"] == "scanning" and state.get("started_at"):
                 state["duration_s"] = round(time.time() - state["started_at"], 1)
             return state
@@ -520,23 +611,28 @@ class NetworkDiscoveryManager:
                     "message": "A network discovery scan is already in progress."
                 }
 
+            # If previous scan completed, store it in last_completed_scan for comparison
+            if self.session.get("status") == "completed" and self.session.get("scan_id"):
+                self.last_completed_scan = {
+                    "scan_id": self.session.get("scan_id"),
+                    "timestamp": self.session.get("completed_at", time.strftime("%H:%M:%S")),
+                    "subnet": self.session.get("subnet"),
+                    "devices_count": self.session.get("devices_count", 0),
+                    "online_count": self.session.get("online_count", 0),
+                    "duration_s": self.session.get("duration_s", 0.0),
+                    "devices": list(self.session.get("devices", []))
+                }
+
             # 1. Auto-detect local network configuration
             net_info = get_network_discovery_info()
-            target_subnet = (subnet_cidr or "").strip() or net_info.get("subnet_cidr")
 
-            # 2. Validate IPv4 network CIDR
-            try:
-                network_obj = ipaddress.IPv4Network(target_subnet, strict=False)
-            except ValueError as ve:
-                raise ValueError(f"Invalid IPv4 subnet format '{target_subnet}': {ve}")
-
-            # Safety restriction: Enforce max 1024 hosts (e.g. /22 minimum prefix) to prevent catastrophic network loops
-            num_addrs = network_obj.num_addresses
-            if num_addrs > 1024:
-                raise ValueError(f"Subnet '{target_subnet}' contains {num_addrs} addresses. Subnets must be /22 or smaller (maximum 1,024 hosts).")
+            # 2. Validate and normalize IPv4 subnet / range input
+            network_obj, usable_hosts = validate_and_normalize_subnet(
+                subnet_cidr,
+                default_cidr=net_info.get("subnet_cidr")
+            )
 
             scan_id = f"net_{int(time.time()*1000)}"
-            usable_hosts = [str(ip) for ip in network_obj.hosts()]
             total_hosts = len(usable_hosts)
 
             self._stop_event.clear()
@@ -553,6 +649,8 @@ class NetworkDiscoveryManager:
                 "online_count": 0,
                 "devices": [],
                 "network_info": net_info,
+                "last_completed_scan": self.last_completed_scan,
+                "history_comparison": None,
                 "message": f"Discovering active devices across {network_obj}..."
             }
 
@@ -568,6 +666,7 @@ class NetworkDiscoveryManager:
                 "scan_id": scan_id,
                 "subnet": str(network_obj),
                 "total_hosts": total_hosts,
+                "has_previous_scan": bool(self.last_completed_scan),
                 "message": f"Scan initiated for {total_hosts} hosts."
             }
 
@@ -589,7 +688,7 @@ class NetworkDiscoveryManager:
         discovered_map: Dict[str, Dict[str, Any]] = {}
 
         # ----------------------------------------------------------------------
-        # Phase 1: Pre-populate from Windows Neighbor / ARP Cache
+        # Phase 1: Pre-populate from Windows Neighbor / ARP Cache (Marked Unverified)
         # ----------------------------------------------------------------------
         arp_cache = read_windows_arp_cache()
         for ip, mac in arp_cache.items():
@@ -606,7 +705,8 @@ class NetworkDiscoveryManager:
                         "vendor": vendor,
                         "device_type": dev_type,
                         "device_type_basis": type_basis,
-                        "status": "Online",
+                        "status": "Unverified",
+                        "verified": False,
                         "methods": ["Neighbor Cache"],
                         "last_seen": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "is_gateway": is_gw,
@@ -630,6 +730,7 @@ class NetworkDiscoveryManager:
                         "device_type": dev_type,
                         "device_type_basis": type_basis,
                         "status": "Online",
+                        "verified": True,
                         "methods": ["Local Interface"],
                         "last_seen": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "is_gateway": False,
@@ -642,10 +743,10 @@ class NetworkDiscoveryManager:
             if self.session.get("scan_id") == scan_id:
                 self.session["devices"] = list(discovered_map.values())
                 self.session["devices_count"] = len(discovered_map)
-                self.session["online_count"] = len(discovered_map)
+                self.session["online_count"] = sum(1 for d in discovered_map.values() if d.get("verified"))
 
         # ----------------------------------------------------------------------
-        # Phase 2: Active Concurrent ARP & ICMP Subnet Sweep
+        # Phase 2: Active Concurrent Multi-Method Subnet Sweep (ARP, ICMP, TCP)
         # ----------------------------------------------------------------------
         total_targets = len(target_ips)
         scanned_count = 0
@@ -654,7 +755,7 @@ class NetworkDiscoveryManager:
             if self._stop_event.is_set():
                 return None
 
-            # Skip self (already added)
+            # Skip self (already added as verified)
             if ip == local_ip:
                 return None
 
@@ -662,28 +763,28 @@ class NetworkDiscoveryManager:
             mac = None
             is_responsive = False
 
-            # 1. Win32 SendARP (Direct kernel ARP probe)
+            # 1. Win32 SendARP (Direct kernel ARP probe - sub-millisecond on LAN)
             arp_mac = probe_host_arp(ip)
             if arp_mac:
                 mac = arp_mac
                 is_responsive = True
                 methods_used.append("ARP")
 
-            # 2. ICMP Echo probe fallback/complement
-            if not is_responsive or not mac:
-                if probe_host_icmp(ip, timeout_ms=int(timeout * 1000)):
+            # 2. ICMP Echo probe
+            if probe_host_icmp(ip, timeout_ms=int(timeout * 1000)):
+                is_responsive = True
+                methods_used.append("ICMP")
+                if not mac:
+                    mac = probe_host_arp(ip)
+
+            # 3. TCP Connect Liveness probe (ports 80, 443, 445, 135, 22)
+            # Reaches devices that strictly drop ICMP or SendARP
+            if not is_responsive:
+                if probe_host_tcp(ip, timeout_s=min(0.35, timeout)):
                     is_responsive = True
-                    methods_used.append("ICMP")
-                    # Try SendARP again now that target was prompted by ICMP
+                    methods_used.append("TCP")
                     if not mac:
                         mac = probe_host_arp(ip)
-
-            if not is_responsive and ip in discovered_map:
-                # Existing neighbor entry that didn't reply to active ping
-                return None
-
-            if not is_responsive:
-                return None
 
             is_gw = (ip == default_gw)
             final_mac = mac or discovered_map.get(ip, {}).get("mac") or "Unavailable"
@@ -697,19 +798,31 @@ class NetworkDiscoveryManager:
                     if m not in methods_used:
                         methods_used.append(m)
 
-            return {
-                "ip": ip,
-                "hostname": hostname,
-                "mac": final_mac,
-                "vendor": vendor,
-                "device_type": dev_type,
-                "device_type_basis": type_basis,
-                "status": "Online",
-                "methods": methods_used or ["Probed"],
-                "last_seen": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "is_gateway": is_gw,
-                "is_local_host": False
-            }
+            if is_responsive:
+                return {
+                    "ip": ip,
+                    "hostname": hostname,
+                    "mac": final_mac,
+                    "vendor": vendor,
+                    "device_type": dev_type,
+                    "device_type_basis": type_basis,
+                    "status": "Online",
+                    "verified": True,
+                    "methods": methods_used or ["Probed"],
+                    "last_seen": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "is_gateway": is_gw,
+                    "is_local_host": False
+                }
+            elif ip in discovered_map:
+                # Retain neighbor cache entry as Unverified, but update resolved metadata
+                entry = dict(discovered_map[ip])
+                if hostname != "Unknown":
+                    entry["hostname"] = hostname
+                entry["verified"] = False
+                entry["status"] = "Unverified"
+                return entry
+
+            return None
 
         workers_count = min(concurrency, max(10, total_targets))
         with ThreadPoolExecutor(max_workers=workers_count) as executor:
@@ -739,20 +852,39 @@ class NetworkDiscoveryManager:
                                 key=lambda d: ipaddress.IPv4Address(d["ip"])
                             )
                             self.session["devices_count"] = len(discovered_map)
-                            self.session["online_count"] = sum(1 for d in discovered_map.values() if d["status"] == "Online")
+                            self.session["online_count"] = sum(1 for d in discovered_map.values() if d.get("verified"))
                             self.session["duration_s"] = round(time.time() - start_t, 1)
 
         # ----------------------------------------------------------------------
-        # Phase 3: Finalize Results
+        # Phase 3: Finalize Results & Compute History Comparison
         # ----------------------------------------------------------------------
         with self._lock:
             if self.session.get("scan_id") == scan_id and self.session.get("status") == "scanning":
                 total_duration = round(time.time() - start_t, 1)
+                completed_time = time.strftime("%H:%M:%S")
                 sorted_devices = sorted(
                     discovered_map.values(),
                     key=lambda d: ipaddress.IPv4Address(d["ip"])
                 )
-                online_num = sum(1 for d in sorted_devices if d["status"] == "Online")
+                online_num = sum(1 for d in sorted_devices if d.get("verified"))
+
+                # Calculate diff vs previous scan if available
+                history_comp = None
+                if self.last_completed_scan:
+                    prev_ips = set(d["ip"] for d in self.last_completed_scan.get("devices", []) if d.get("verified"))
+                    curr_ips = set(d["ip"] for d in sorted_devices if d.get("verified"))
+                    new_ips = list(curr_ips - prev_ips)
+                    offline_ips = list(prev_ips - curr_ips)
+                    history_comp = {
+                        "has_previous": True,
+                        "previous_scan_id": self.last_completed_scan.get("scan_id"),
+                        "previous_time": self.last_completed_scan.get("timestamp"),
+                        "previous_online_count": self.last_completed_scan.get("online_count", 0),
+                        "new_hosts_count": len(new_ips),
+                        "offline_hosts_count": len(offline_ips),
+                        "new_ips": new_ips,
+                        "offline_ips": offline_ips
+                    }
 
                 self.session.update({
                     "status": "completed",
@@ -762,7 +894,9 @@ class NetworkDiscoveryManager:
                     "online_count": online_num,
                     "devices": sorted_devices,
                     "duration_s": total_duration,
-                    "message": f"Discovery completed in {total_duration}s. Found {len(sorted_devices)} active device(s) on {network_obj}."
+                    "completed_at": completed_time,
+                    "history_comparison": history_comp,
+                    "message": f"Discovery completed in {total_duration}s. Found {online_num} confirmed active device(s) on {network_obj}."
                 })
 
 

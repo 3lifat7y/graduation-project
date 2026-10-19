@@ -285,6 +285,16 @@
           <i class="fas fa-triangle-exclamation nd-alert-icon"></i>
           <div class="nd-alert-content" id="ndAlertMessage">Error occurred.</div>
         </div>
+
+        <!-- Previous Scan Comparison Ribbon -->
+        <div class="nd-history-ribbon" id="ndHistoryRibbon" style="display:none;">
+          <div class="nd-history-icon"><i class="fas fa-clock-rotate-left"></i></div>
+          <div class="nd-history-content">
+            <span class="nd-history-title" id="ndHistoryTitle">Subnet Rescan Comparison</span>
+            <span class="nd-history-details" id="ndHistoryDetails">Comparing against previous discovery results...</span>
+          </div>
+          <button type="button" class="nd-history-close-btn" id="ndHistoryCloseBtn" aria-label="Dismiss comparison">&times;</button>
+        </div>
       </section>
 
       <!-- Discovered Devices Inventory Section -->

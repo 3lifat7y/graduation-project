@@ -1248,21 +1248,14 @@ def start_scan():
     """Initiates a continuous or discrete live network traffic monitoring session."""
     global current_scan_session, is_monitoring, live_collector, last_injected_flow
     with scan_session_lock:
-        if current_scan_session["status"] in ["scanning", "monitoring"]:
-            log_diag("SCAN_REJECT", "Scan request rejected: a monitoring session is already in progress.",
-                     scan_id=current_scan_session.get("scan_id"))
-            return jsonify({
-                "status": "already_scanning",
-                "message": "A network monitoring session is already in progress.",
-                "scan_id": current_scan_session["scan_id"]
-            }), 200
-
         duration = 3.0
         min_packets = 3
         continuous = True
         req_adapter_name = None
         req_adapter_idx = None
         req_adapter_guid = None
+        req_adapter_netname = None
+        force_restart = False
 
         if request.is_json and request.get_json():
             req_data = request.get_json(silent=True) or {}
@@ -1273,6 +1266,8 @@ def start_scan():
             req_adapter_name = req_data.get("interface_name") or req_data.get("adapter") or req_data.get("interface")
             req_adapter_idx = req_data.get("interface_index")
             req_adapter_guid = req_data.get("guid") or req_data.get("scapy_guid")
+            req_adapter_netname = req_data.get("network_name")
+            force_restart = bool(req_data.get("force_restart", False) or req_data.get("restart", False))
         elif request.args:
             if "continuous" in request.args:
                 continuous = request.args.get("continuous", "true").lower() in ("true", "1")
@@ -1283,8 +1278,34 @@ def start_scan():
             req_adapter_name = request.args.get("interface_name") or request.args.get("adapter") or request.args.get("interface")
             req_adapter_idx = request.args.get("interface_index")
             req_adapter_guid = request.args.get("guid") or request.args.get("scapy_guid")
+            req_adapter_netname = request.args.get("network_name")
+            force_restart = request.args.get("force_restart", "false").lower() in ("true", "1") or request.args.get("restart", "false").lower() in ("true", "1")
 
-        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: adapter={req_adapter_name} (idx={req_adapter_idx}, guid={req_adapter_guid}), continuous={continuous}, duration={duration}s, min_packets={min_packets}")
+        if current_scan_session["status"] in ["scanning", "monitoring"]:
+            if force_restart:
+                log_diag("SCAN_RESTART", "Force restart requested: stopping active capture before starting new session on requested adapter.",
+                         scan_id=current_scan_session.get("scan_id"))
+                try:
+                    if ipc_client.is_service_running():
+                        ipc_client.stop_scan()
+                except Exception:
+                    pass
+                try:
+                    standalone_worker.stop_window()
+                except Exception:
+                    pass
+                is_monitoring = False
+                current_scan_session["status"] = "stopped"
+            else:
+                log_diag("SCAN_REJECT", "Scan request rejected: a monitoring session is already in progress.",
+                         scan_id=current_scan_session.get("scan_id"))
+                return jsonify({
+                    "status": "already_scanning",
+                    "message": "A network monitoring session is already in progress.",
+                    "scan_id": current_scan_session["scan_id"]
+                }), 200
+
+        log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: adapter={req_adapter_name} (idx={req_adapter_idx}, guid={req_adapter_guid}, net={req_adapter_netname}), continuous={continuous}, duration={duration}s, min_packets={min_packets}, force_restart={force_restart}")
 
         # Wipe previous scan predictions, packet counts, and errors immediately
         current_scan_session.update({
@@ -1301,7 +1322,7 @@ def start_scan():
 
         # Resolve requested network adapter or auto-detect primary
         try:
-            is_auto_mode = (not req_adapter_name or str(req_adapter_name).strip().lower() in ["auto", "default", "none"]) and (req_adapter_idx is None) and (not req_adapter_guid)
+            is_auto_mode = (not req_adapter_name or str(req_adapter_name).strip().lower() in ["auto", "default", "none"]) and (req_adapter_idx is None) and (not req_adapter_guid) and (not req_adapter_netname)
 
             if not is_auto_mode:
                 adapters = get_windows_network_adapters()
@@ -1329,6 +1350,14 @@ def start_scan():
                             matched_ad = dict(ad)
                             break
                         if str(ad.get("network_name", "")).strip().lower() == clean_req:
+                            matched_ad = dict(ad)
+                            break
+
+                # 3b. Match by explicit network_name if provided
+                if not matched_ad and req_adapter_netname:
+                    clean_net = str(req_adapter_netname).strip().lower()
+                    for ad in adapters:
+                        if str(ad.get("network_name", "")).strip().lower() == clean_net:
                             matched_ad = dict(ad)
                             break
 
@@ -1365,7 +1394,7 @@ def start_scan():
                     driver_info = check_capture_drivers()
                     adapter_info["driver_status"] = driver_info
                 else:
-                    scapy_dev = resolve_scapy_interface(req_adapter_name, req_adapter_idx, guid=req_adapter_guid)
+                    scapy_dev = resolve_scapy_interface(req_adapter_name, req_adapter_idx, guid=req_adapter_guid, network_name=req_adapter_netname)
                     if scapy_dev:
                         scapy_name = getattr(scapy_dev, "name", req_adapter_name)
                         scapy_desc = getattr(scapy_dev, "description", "")
@@ -1626,6 +1655,186 @@ def get_scan_status():
         resp = dict(current_scan_session)
     resp["service_state"] = get_service_status(include_ipc=True)
     return jsonify(resp), 200
+
+
+@app.route('/api/scan-rescan', methods=['GET', 'POST'])
+def rescan_active_session():
+    """
+    Performs a non-intrusive health inspection of the active monitoring session.
+    Verifies:
+      1. Currently selected adapter presence, connection state, and current IPv4.
+      2. Capture worker process/thread health (service or standalone).
+      3. Real packet receipt and recent packet arrival without restarting capture.
+    Does NOT stop or restart the capture worker.
+    Does NOT create duplicate workers or duplicate packet handlers.
+    Does NOT silently switch adapters.
+    """
+    with scan_session_lock:
+        session = dict(current_scan_session)
+        active = is_monitoring and session.get("status") in [
+            "scanning", "monitoring", "no_traffic", "insufficient_traffic", "prediction_available"
+        ]
+        scan_id = session.get("scan_id")
+        adapter_info = session.get("interface") or {}
+        initial_pkts = session.get("packets_captured", 0)
+        initial_win = session.get("window_packets", 0)
+        last_pkt_time = session.get("last_packet_time")
+
+    if not active or not scan_id:
+        return jsonify({
+            "status": "inactive",
+            "health_state": "inactive",
+            "scan_id": None,
+            "message": "No active monitoring session found. Click 'Start Monitoring' to begin.",
+            "adapter": None,
+            "worker": None,
+            "packets_observed": False,
+            "recovery_action": None
+        }), 200
+
+    target_name = adapter_info.get("name") or "Active Adapter"
+    target_guid = adapter_info.get("guid") or adapter_info.get("scapy_guid")
+    target_idx = adapter_info.get("index")
+
+    # 1. Real-time OS Adapter Verification
+    adapters = get_windows_network_adapters()
+    matched_adapter = None
+    if target_guid:
+        for ad in adapters:
+            if str(ad.get("guid", "")).strip().lower() == str(target_guid).strip().lower():
+                matched_adapter = ad
+                break
+    if not matched_adapter and target_idx is not None:
+        for ad in adapters:
+            if int(ad.get("index", -1)) == int(target_idx):
+                matched_adapter = ad
+                break
+    if not matched_adapter and target_name:
+        clean_name = str(target_name).strip().lower()
+        for ad in adapters:
+            if str(ad.get("name", "")).strip().lower() == clean_name:
+                matched_adapter = ad
+                break
+
+    if not matched_adapter:
+        adapter_available = False
+        adapter_status = "Disconnected / Removed"
+        current_ip = None
+        is_connected = False
+    else:
+        adapter_status = matched_adapter.get("status", "Unknown")
+        current_ip = matched_adapter.get("primary_ip")
+        is_connected = matched_adapter.get("is_connected", False)
+        is_disabled = (adapter_status in ["Disabled", "Disconnected"]) or not is_connected
+        adapter_available = not is_disabled
+
+    # 2. Capture Worker Health Check
+    service_running = ipc_client.is_service_running()
+    worker_alive = False
+    worker_mode = "standalone"
+    worker_err = None
+    live_pkts = initial_pkts
+    live_win = initial_win
+
+    if service_running:
+        worker_mode = "service"
+        try:
+            svc_st = ipc_client.get_scan_status(scan_id)
+            if svc_st and svc_st.get("status") not in ["error", "service_unavailable"]:
+                worker_alive = True
+                live_pkts = svc_st.get("packets_captured", initial_pkts)
+                live_win = svc_st.get("window_packets", initial_win)
+                if svc_st.get("last_packet_time"):
+                    last_pkt_time = svc_st["last_packet_time"]
+            else:
+                worker_err = svc_st.get("message") if svc_st else "Service unreachable"
+        except Exception as e:
+            worker_err = str(e)
+    else:
+        worker_mode = "standalone"
+        worker_alive = standalone_worker.is_running()
+        try:
+            w_st = standalone_worker.get_status(scan_id)
+            if w_st and w_st.get("status") not in ["error"]:
+                worker_alive = True
+                live_pkts = w_st.get("packets_captured", initial_pkts)
+                live_win = w_st.get("window_packets", initial_win)
+                if w_st.get("last_packet_time"):
+                    last_pkt_time = w_st["last_packet_time"]
+            else:
+                worker_err = w_st.get("message") if w_st else "Capture worker stopped"
+        except Exception as e:
+            worker_err = str(e)
+
+    # 3. Sample Packet Receipt over a brief observation interval (350ms)
+    time.sleep(0.35)
+    with scan_session_lock:
+        sampled_pkts = current_scan_session.get("packets_captured", live_pkts)
+        sampled_win = current_scan_session.get("window_packets", live_win)
+        sampled_last_time = current_scan_session.get("last_packet_time") or last_pkt_time
+
+    packets_delta = max(0, sampled_pkts - initial_pkts)
+    now = time.time()
+    has_recent_packet = (sampled_last_time is not None and (now - sampled_last_time < 5.0)) or (packets_delta > 0)
+    packets_arrived = bool(sampled_pkts > 0 and (has_recent_packet or sampled_win > 0 or packets_delta > 0))
+
+    # 4. Map to 4 Distinct Verification States
+    if not adapter_available:
+        health_state = "adapter_unavailable"
+        message = (
+            f"Selected interface '{target_name}' is unavailable ({adapter_status}). "
+            f"Packet capture cannot intercept packets on an offline or disconnected adapter."
+        )
+        recovery_action = "reconnect_adapter"
+    elif not worker_alive or worker_err:
+        health_state = "worker_failed"
+        message = (
+            f"Packet capture worker failure: {worker_err or 'Capture worker is not actively running.'}"
+        )
+        recovery_action = "restart_monitoring"
+    elif packets_arrived:
+        health_state = "healthy_active"
+        delta_str = f" (+{packets_delta} in check)" if packets_delta > 0 else ""
+        message = (
+            f"Capture is running on [{target_name}] ({current_ip or 'No IPv4'}) and "
+            f"packets are actively being received ({sampled_pkts} total captured{delta_str})."
+        )
+        recovery_action = None
+    else:
+        health_state = "healthy_quiet"
+        message = (
+            f"Capture is running on [{target_name}] ({current_ip or 'No IPv4'}), but "
+            f"zero packets were observed in the check window ({sampled_pkts} total captured). "
+            f"Generate traffic to test detection."
+        )
+        recovery_action = None
+
+    return jsonify({
+        "status": "success",
+        "health_state": health_state,
+        "scan_id": scan_id,
+        "adapter": {
+            "name": target_name,
+            "type": adapter_info.get("type", "Network"),
+            "primary_ip": current_ip or "None",
+            "status": adapter_status,
+            "is_connected": is_connected,
+            "available": adapter_available
+        },
+        "worker": {
+            "alive": worker_alive,
+            "mode": worker_mode,
+            "packets_captured": sampled_pkts,
+            "window_packets": sampled_win,
+            "packets_delta": packets_delta,
+            "last_packet_time": sampled_last_time,
+            "error": worker_err
+        },
+        "packets_observed": packets_arrived,
+        "message": message,
+        "recovery_action": recovery_action,
+        "timestamp": time.strftime("%H:%M:%S")
+    }), 200
 
 
 @app.route('/api/scan-stop', methods=['GET', 'POST'])

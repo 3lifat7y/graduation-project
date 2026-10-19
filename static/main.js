@@ -22,6 +22,19 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   // Controls & Badges
   const checkBtn = document.getElementById("checkBtn");
+  const rescanBtn = document.getElementById("rescanBtn");
+  const rescanIcon = document.getElementById("rescanIcon");
+  const rescanText = document.getElementById("rescanText");
+  const rescanStatusBanner = document.getElementById("rescanStatusBanner");
+  const rescanStatusIcon = document.getElementById("rescanStatusIcon");
+  const rescanStatusTitle = document.getElementById("rescanStatusTitle");
+  const rescanStatusDesc = document.getElementById("rescanStatusDesc");
+  const rescanRecoveryActions = document.getElementById("rescanRecoveryActions");
+  const rescanRestartBtn = document.getElementById("rescanRestartBtn");
+  const rescanSelectAdapterBtn = document.getElementById("rescanSelectAdapterBtn");
+  const rescanDismissBtn = document.getElementById("rescanDismissBtn");
+  let isRescanning = false;
+
   const stopBtn = document.getElementById("stopBtn");
   const stateBadge = document.getElementById("stateBadge");
   const statusEl = document.getElementById("connectionStatus");
@@ -129,6 +142,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let isAdapterRefreshing = false;
   let adapterRefreshSequence = 0;
   let activeRefreshAbortController = null;
+
+  // Live Monitoring Auto-Switch & Manual Stop Intent Tracking
+  let userManuallyStopped = false;
+  let adapterSwitchSeq = 0;
 
   // Navigation & UI Elements
   const menuToggle = document.getElementById("menuToggle");
@@ -296,6 +313,12 @@ document.addEventListener("DOMContentLoaded", () => {
         // Previously selected manual adapter disappeared from operating system!
         selectedAdapterDisappeared = true;
         const missingName = lastSelectedManualAdapter ? lastSelectedManualAdapter.name : previousKey;
+        if (isScanning) {
+          stopScan(true);
+          setUIState("error", {
+            message: `Selected adapter '${missingName}' was disconnected or removed. Packet capture stopped.`
+          });
+        }
         if (adapterDisappearedAlert) {
           adapterDisappearedAlert.style.display = "flex";
           if (adapterDisappearedMessage) {
@@ -616,42 +639,96 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ============================================================================
+  // 3b. Live Monitoring Automatic Interface Switching Engine
+  // ============================================================================
+  async function handleAdapterSelectionChange(val) {
+    const currentSeq = ++adapterSwitchSeq;
+    selectedAdapterKey = val;
+    selectedAdapterDisappeared = false;
+    if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
+    if (monitoringAdapterError) monitoringAdapterError.style.display = "none";
+
+    if (val === "auto") {
+      selectedAdapterMode = "auto";
+      currentNetworkAdapter = autoSelectedAdapter;
+    } else {
+      selectedAdapterMode = "manual";
+      const found = discoveredAdapters.find(ad => getAdapterKey(ad) === val);
+      if (found) {
+        currentNetworkAdapter = found;
+        lastSelectedManualAdapter = found;
+      }
+    }
+    updateSelectedAdapterDisplay();
+
+    // Guard against missing/disappeared adapter
+    if (selectedAdapterDisappeared) {
+      return;
+    }
+
+    // Zero silent fallback: if selected adapter is Disconnected or Disabled, abort capture & report actual error
+    const activeAd = (selectedAdapterMode === "auto") ? autoSelectedAdapter : currentNetworkAdapter;
+    if (activeAd && (activeAd.status === "Disconnected" || activeAd.status === "Disabled")) {
+      if (isScanning) {
+        await stopScan(true);
+      }
+      const offMsg = `Selected adapter '${activeAd.name}' is ${activeAd.status}. Live packet capture cannot start on a disconnected or disabled interface. Please connect the cable, enable the adapter, or choose another interface.`;
+      if (monitoringAdapterError && adapterErrorMessage) {
+        monitoringAdapterError.style.display = "flex";
+        adapterErrorMessage.textContent = offMsg;
+      }
+      setUIState("error", { message: offMsg });
+      return;
+    }
+
+    // Requirement 9: If user manually stopped monitoring earlier, do not restart unexpectedly; wait for Start click.
+    if (!isScanning && userManuallyStopped) {
+      console.log("[AdapterHub] Adapter selection updated while monitoring manually stopped. Retaining stopped state.");
+      return;
+    }
+
+    console.log(`[AdapterHub] Auto-triggering capture on '${activeAd ? activeAd.name : val}' (seq: ${currentSeq}, wasScanning: ${isScanning})...`);
+
+    // Requirement 2: Safely stop and clean up previous capture worker before starting the new one
+    if (isScanning) {
+      await stopScan(true);
+      if (currentSeq !== adapterSwitchSeq) {
+        console.log(`[AdapterHub] Discarding outdated switch sequence ${currentSeq} (current: ${adapterSwitchSeq})`);
+        return;
+      }
+    }
+
+    // Requirement 5: Reset packet counters and telemetry displays to clean zero state
+    if (telemetryPkts) telemetryPkts.textContent = "0";
+    if (telemetryDuration) telemetryDuration.textContent = "0.0 s";
+    if (telemetryThroughput) telemetryThroughput.textContent = "0.0 KB/s";
+    if (telemetryProtocol) telemetryProtocol.textContent = "Npcap";
+    lastCapturedPacketCount = 0;
+
+    if (currentSeq !== adapterSwitchSeq) return;
+
+    await startScan({ forceRestart: true, switchSeq: currentSeq });
+  }
+
   // Bind Adapter Hub Controls
   if (monitoringAdapterSelect) {
-    monitoringAdapterSelect.addEventListener("change", (e) => {
-      const val = e.target.value;
-      selectedAdapterKey = val;
-      selectedAdapterDisappeared = false;
-      if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
-      if (monitoringAdapterError) monitoringAdapterError.style.display = "none";
-
-      if (val === "auto") {
-        selectedAdapterMode = "auto";
-        currentNetworkAdapter = autoSelectedAdapter;
-      } else {
-        selectedAdapterMode = "manual";
-        const found = discoveredAdapters.find(ad => getAdapterKey(ad) === val);
-        if (found) {
-          currentNetworkAdapter = found;
-          lastSelectedManualAdapter = found;
-        }
-      }
-      updateSelectedAdapterDisplay();
+    monitoringAdapterSelect.addEventListener("change", async (e) => {
+      await handleAdapterSelectionChange(e.target.value);
     });
   }
 
   if (autoSelectAdapterBtn) {
-    autoSelectAdapterBtn.addEventListener("click", () => {
-      selectedAdapterMode = "auto";
-      selectedAdapterKey = "auto";
-      selectedAdapterDisappeared = false;
-      if (adapterDisappearedAlert) adapterDisappearedAlert.style.display = "none";
-      if (monitoringAdapterError) monitoringAdapterError.style.display = "none";
-      currentNetworkAdapter = autoSelectedAdapter;
+    autoSelectAdapterBtn.addEventListener("click", async () => {
+      const wasAuto = (selectedAdapterMode === "auto" && selectedAdapterKey === "auto");
       if (monitoringAdapterSelect) {
         monitoringAdapterSelect.value = "auto";
       }
-      updateSelectedAdapterDisplay();
+      if (!wasAuto) {
+        await handleAdapterSelectionChange("auto");
+      } else {
+        updateSelectedAdapterDisplay();
+      }
     });
   }
 
@@ -705,6 +782,13 @@ document.addEventListener("DOMContentLoaded", () => {
           checkBtn.disabled = false;
           checkBtn.innerHTML = '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
+        if (rescanBtn) {
+          rescanBtn.style.display = "none";
+          rescanBtn.disabled = false;
+        }
+        if (rescanStatusBanner) {
+          rescanStatusBanner.style.display = "none";
+        }
         if (stopBtn) {
           stopBtn.style.display = "none";
           stopBtn.disabled = true;
@@ -729,6 +813,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (checkBtn) {
           checkBtn.disabled = true;
           checkBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span class="btn-text">Starting...</span>';
+        }
+        if (rescanBtn) {
+          rescanBtn.style.display = "inline-flex";
+          rescanBtn.disabled = true;
         }
         if (stopBtn) {
           stopBtn.style.display = "inline-flex";
@@ -756,6 +844,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (checkBtn) {
           checkBtn.disabled = true;
           checkBtn.innerHTML = '<i class="fas fa-wave-square fa-spin"></i> <span class="btn-text">Monitoring Live</span>';
+        }
+        if (rescanBtn) {
+          rescanBtn.style.display = "inline-flex";
+          rescanBtn.disabled = isRescanning;
         }
         if (stopBtn) {
           stopBtn.style.display = "inline-flex";
@@ -857,6 +949,10 @@ document.addEventListener("DOMContentLoaded", () => {
             ? '<i class="fas fa-wave-square"></i> <span class="btn-text">Monitoring (Idle)...</span>'
             : '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
+        if (rescanBtn) {
+          rescanBtn.style.display = isContinuousNoTraffic ? "inline-flex" : "none";
+          rescanBtn.disabled = isContinuousNoTraffic ? isRescanning : false;
+        }
         if (stopBtn) {
           stopBtn.style.display = isContinuousNoTraffic ? "inline-flex" : "none";
           stopBtn.disabled = !isContinuousNoTraffic;
@@ -921,6 +1017,10 @@ document.addEventListener("DOMContentLoaded", () => {
             ? '<i class="fas fa-wave-square"></i> <span class="btn-text">Monitoring (Low Traffic)...</span>'
             : '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
+        if (rescanBtn) {
+          rescanBtn.style.display = isContinuousInsufficient ? "inline-flex" : "none";
+          rescanBtn.disabled = isContinuousInsufficient ? isRescanning : false;
+        }
         if (stopBtn) {
           stopBtn.style.display = isContinuousInsufficient ? "inline-flex" : "none";
           stopBtn.disabled = !isContinuousInsufficient;
@@ -983,6 +1083,13 @@ document.addEventListener("DOMContentLoaded", () => {
           checkBtn.disabled = false;
           checkBtn.innerHTML = '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
         }
+        if (rescanBtn) {
+          rescanBtn.style.display = "none";
+          rescanBtn.disabled = false;
+        }
+        if (rescanStatusBanner) {
+          rescanStatusBanner.style.display = "none";
+        }
         if (stopBtn) {
           stopBtn.style.display = "none";
           stopBtn.disabled = true;
@@ -1009,6 +1116,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (checkBtn) {
           checkBtn.disabled = false;
           checkBtn.innerHTML = '<i class="fas fa-play"></i> <span class="btn-text">Start Monitoring</span>';
+        }
+        if (rescanBtn) {
+          rescanBtn.style.display = "none";
+          rescanBtn.disabled = false;
+        }
+        if (rescanStatusBanner) {
+          rescanStatusBanner.style.display = "none";
         }
         if (stopBtn) {
           stopBtn.style.display = "none";
@@ -1050,6 +1164,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (checkBtn) {
           checkBtn.disabled = false;
           checkBtn.innerHTML = '<i class="fas fa-rotate-right"></i> <span class="btn-text">Start Monitoring</span>';
+        }
+        if (rescanBtn) {
+          rescanBtn.style.display = "none";
+          rescanBtn.disabled = false;
+        }
+        if (rescanStatusBanner) {
+          rescanStatusBanner.style.display = "none";
         }
         if (stopBtn) {
           stopBtn.style.display = "none";
@@ -1095,11 +1216,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   // 5. Scan Execution & Polling Lifecycle
   // ============================================================================
-  async function startScan() {
-    if (isScanning) return;
+  async function startScan(opts = {}) {
+    const forceRestart = Boolean(opts && opts.forceRestart);
+    const switchSeq = (opts && opts.switchSeq !== undefined) ? opts.switchSeq : adapterSwitchSeq;
+
+    if (isScanning && !forceRestart) return;
 
     activeScanId = null;
-    console.log("[DDoS-Guard] Start Monitoring clicked. Initiating fresh continuous session...");
+    console.log(`[DDoS-Guard] Initiating continuous monitoring session (seq: ${switchSeq}, forceRestart: ${forceRestart})...`);
 
     // Reset previous outputs immediately
     if (resultsConsole) {
@@ -1130,6 +1254,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (telemetryProtocol) telemetryProtocol.textContent = "Npcap";
 
     if (diagnosticAlert) diagnosticAlert.style.display = "none";
+    if (rescanStatusBanner) rescanStatusBanner.style.display = "none";
 
     setUIState("starting");
     scanStartTime = Date.now();
@@ -1163,7 +1288,16 @@ document.addEventListener("DOMContentLoaded", () => {
         monitoringAdapterError.style.display = "none";
       }
 
+      // Sequence check before network dispatch to discard stale overlapping requests
+      if (switchSeq !== adapterSwitchSeq) {
+        console.log(`[DDoS-Guard] Pre-fetch sequence mismatch (seq ${switchSeq} < ${adapterSwitchSeq}). Aborting start.`);
+        return;
+      }
+
       const scanPayload = { continuous: true, min_packets: 3 };
+      if (forceRestart) {
+        scanPayload.force_restart = true;
+      }
       if (selectedAdapterMode === "auto") {
         scanPayload.adapter = "auto";
       } else if (currentNetworkAdapter) {
@@ -1173,6 +1307,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentNetworkAdapter.guid) {
           scanPayload.guid = currentNetworkAdapter.guid;
         }
+        if (currentNetworkAdapter.network_name) {
+          scanPayload.network_name = currentNetworkAdapter.network_name;
+        }
       }
 
       const res = await fetch(`${API_BASE_URL}/scan`, {
@@ -1180,6 +1317,13 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(scanPayload)
       });
+
+      // Sequence check after network dispatch to discard stale responses from fast switching
+      if (switchSeq !== adapterSwitchSeq) {
+        console.log(`[DDoS-Guard] Post-fetch sequence mismatch (seq ${switchSeq} < ${adapterSwitchSeq}). Discarding start response.`);
+        try { fetch(`${API_BASE_URL}/scan-stop`, { method: "POST" }); } catch (e) {}
+        return;
+      }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -1292,6 +1436,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function stopScan(silent = false) {
+    if (rescanBtn) {
+      rescanBtn.style.display = "none";
+      rescanBtn.disabled = false;
+    }
+    if (rescanStatusBanner) {
+      rescanStatusBanner.style.display = "none";
+    }
     if (scanPollInterval) {
       clearInterval(scanPollInterval);
       scanPollInterval = null;
@@ -1314,6 +1465,112 @@ document.addEventListener("DOMContentLoaded", () => {
         setUIState("stopped", { message: "Monitoring stopped." });
       }
     }
+  }
+
+  // ============================================================================
+  // 5b. Non-Intrusive Session Rescan & Health Verification
+  // ============================================================================
+  async function rescanActiveSession() {
+    if (isRescanning) return;
+    isRescanning = true;
+
+    if (rescanBtn) {
+      rescanBtn.disabled = true;
+      if (rescanIcon) rescanIcon.classList.add("fa-spin");
+      if (rescanText) rescanText.textContent = "Checking...";
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${API_BASE_URL}/scan-rescan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      const data = await res.json();
+      displayRescanResult(data);
+    } catch (err) {
+      console.warn("[DDoS-Guard] Rescan check error:", err);
+      displayRescanResult({
+        status: "error",
+        health_state: "worker_failed",
+        message: "Rescan request failed or timed out. Check backend connection.",
+        recovery_action: "restart_monitoring"
+      });
+    } finally {
+      isRescanning = false;
+      if (rescanBtn) {
+        if (rescanIcon) rescanIcon.classList.remove("fa-spin");
+        if (rescanText) rescanText.textContent = "Rescan";
+        rescanBtn.disabled = !isScanning;
+      }
+    }
+  }
+
+  function displayRescanResult(data) {
+    if (!rescanStatusBanner) return;
+
+    const state = data.health_state || (data.status === "error" ? "worker_failed" : "healthy_quiet");
+    const message = data.message || "Rescan inspection completed.";
+
+    rescanStatusBanner.className = "rescan-status-banner";
+    rescanStatusBanner.classList.add(
+      `state-${state === "healthy_active" ? "healthy" : state === "healthy_quiet" ? "quiet" : state === "adapter_unavailable" ? "warning" : "error"}`
+    );
+
+    if (rescanStatusIcon) {
+      if (state === "healthy_active") {
+        rescanStatusIcon.className = "fas fa-circle-check";
+      } else if (state === "healthy_quiet") {
+        rescanStatusIcon.className = "fas fa-circle-info";
+      } else if (state === "adapter_unavailable") {
+        rescanStatusIcon.className = "fas fa-triangle-exclamation";
+      } else {
+        rescanStatusIcon.className = "fas fa-circle-xmark";
+      }
+    }
+
+    if (rescanStatusTitle) {
+      if (state === "healthy_active") {
+        rescanStatusTitle.textContent = "Capture Healthy & Active";
+      } else if (state === "healthy_quiet") {
+        rescanStatusTitle.textContent = "Capture Running (Quiet Network)";
+      } else if (state === "adapter_unavailable") {
+        rescanStatusTitle.textContent = "Selected Interface Unavailable";
+      } else if (state === "worker_failed") {
+        rescanStatusTitle.textContent = "Capture Worker Failure";
+      } else {
+        rescanStatusTitle.textContent = "Monitoring Status Inspection";
+      }
+    }
+
+    if (rescanStatusDesc) {
+      rescanStatusDesc.textContent = message;
+    }
+
+    // Recovery Actions UI Handling
+    if (rescanRecoveryActions) {
+      if (state === "adapter_unavailable") {
+        rescanRecoveryActions.style.display = "flex";
+        if (rescanRestartBtn) rescanRestartBtn.style.display = "inline-flex";
+        if (rescanSelectAdapterBtn) rescanSelectAdapterBtn.style.display = "inline-flex";
+      } else if (state === "worker_failed") {
+        rescanRecoveryActions.style.display = "flex";
+        if (rescanRestartBtn) rescanRestartBtn.style.display = "inline-flex";
+        if (rescanSelectAdapterBtn) rescanSelectAdapterBtn.style.display = "none";
+      } else {
+        rescanRecoveryActions.style.display = "none";
+      }
+    }
+
+    // Live update Card 2 IP text if provided by backend
+    if (data.adapter && data.adapter.primary_ip && adapterIp) {
+      adapterIp.textContent = data.adapter.primary_ip;
+    }
+
+    rescanStatusBanner.style.display = "flex";
   }
 
   // ============================================================================
@@ -1907,12 +2164,51 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   if (checkBtn) {
     checkBtn.addEventListener("click", () => {
+      userManuallyStopped = false;
       startScan();
+    });
+  }
+
+  if (rescanBtn) {
+    rescanBtn.addEventListener("click", () => {
+      rescanActiveSession();
+    });
+  }
+
+  if (rescanDismissBtn) {
+    rescanDismissBtn.addEventListener("click", () => {
+      if (rescanStatusBanner) rescanStatusBanner.style.display = "none";
+    });
+  }
+
+  if (rescanRestartBtn) {
+    rescanRestartBtn.addEventListener("click", async () => {
+      userManuallyStopped = false;
+      if (rescanStatusBanner) rescanStatusBanner.style.display = "none";
+      await stopScan(true);
+      setTimeout(() => {
+        startScan({ forceRestart: true });
+      }, 400);
+    });
+  }
+
+  if (rescanSelectAdapterBtn) {
+    rescanSelectAdapterBtn.addEventListener("click", async () => {
+      userManuallyStopped = false;
+      if (rescanStatusBanner) rescanStatusBanner.style.display = "none";
+      await stopScan(false);
+      const hub = document.getElementById("adapterSelectionHub");
+      if (hub) {
+        hub.scrollIntoView({ behavior: "smooth", block: "center" });
+        hub.classList.add("focus-pulse");
+        setTimeout(() => hub.classList.remove("focus-pulse"), 2500);
+      }
     });
   }
 
   if (stopBtn) {
     stopBtn.addEventListener("click", () => {
+      userManuallyStopped = true;
       stopScan();
     });
   }
@@ -1950,6 +2246,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const concurrencySelect = document.getElementById("psConcurrencySelect");
 
     const startBtn = document.getElementById("psStartBtn");
+    const rescanBtn = document.getElementById("psRescanBtn");
     const stopBtn = document.getElementById("psStopBtn");
     const exportGroup = document.getElementById("psExportGroup");
     const exportJsonBtn = document.getElementById("psExportJsonBtn");
@@ -1957,6 +2254,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const stateBadge = document.getElementById("psStateBadge");
     const localIpBadge = document.getElementById("psLocalIpBadge");
+    const resultsTimestamp = document.getElementById("psResultsTimestamp");
+    const timestampText = document.getElementById("psTimestampText");
     const progressBox = document.getElementById("psProgressBox");
     const progressBar = document.getElementById("psProgressBar");
     const progressStatusText = document.getElementById("psProgressStatusText");
@@ -2094,10 +2393,13 @@ document.addEventListener("DOMContentLoaded", () => {
       // Update UI to scanning state
       isPortScanning = true;
       setBadge("scanning", "Scanning...");
-      isPortScanning = true;
       if (startBtn) {
         startBtn.disabled = true;
         startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Scanning...</span>';
+      }
+      if (rescanBtn) {
+        rescanBtn.disabled = true;
+        rescanBtn.style.display = "none";
       }
       if (stopBtn) stopBtn.style.display = "inline-flex";
       if (progressBox) {
@@ -2199,8 +2501,15 @@ document.addEventListener("DOMContentLoaded", () => {
             setBadge("completed", "Completed");
             if (progressBar) progressBar.style.width = "100%";
             if (progressPct) progressPct.textContent = "100%";
+            if (resultsTimestamp && timestampText) {
+              const timeStr = data.completed_at_str || new Date().toLocaleTimeString();
+              timestampText.textContent = `Last scanned at ${timeStr}`;
+              resultsTimestamp.style.display = "inline-flex";
+            }
+            if (rescanBtn) rescanBtn.style.display = "inline-flex";
           } else if (status === "stopped") {
             setBadge("stopped", "Stopped");
+            if (rescanBtn) rescanBtn.style.display = "inline-flex";
           } else if (status === "error") {
             setBadge("error", "Error");
             showError(data.error || data.message || "An error occurred during port scan.");
@@ -2221,6 +2530,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (startBtn) {
         startBtn.disabled = false;
         startBtn.innerHTML = '<i class="fas fa-play"></i> <span>Start Port Scan</span>';
+      }
+      if (rescanBtn) {
+        rescanBtn.disabled = false;
       }
       if (stopBtn) stopBtn.style.display = "none";
       if (progressBox) progressBox.classList.remove("ps-scanning");
@@ -2309,8 +2621,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let rows = "";
       ports.forEach((p, idx) => {
-        const stateClass = p.state === "open" ? "state-open" : (p.state === "filtered" ? "state-filtered" : "state-closed");
-        const stateIcon = p.state === "open" ? "fa-circle-check" : (p.state === "filtered" ? "fa-circle-exclamation" : "fa-circle-xmark");
+        const stateClass = p.state === "open" ? "state-open" : (p.state === "filtered" ? "state-filtered" : (p.state === "error" ? "state-error" : "state-closed"));
+        const stateIcon = p.state === "open" ? "fa-circle-check" : (p.state === "filtered" ? "fa-circle-exclamation" : (p.state === "error" ? "fa-triangle-exclamation" : "fa-circle-xmark"));
         const latencyText = p.latency_ms !== null ? `${p.latency_ms} ms` : "--";
         const bannerHtml = p.banner ? `<code class="ps-banner-code" title="${escapeHtml(p.banner)}">${escapeHtml(p.banner)}</code>` : '<span class="text-muted">--</span>';
 
@@ -2424,8 +2736,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       });
 
-      // Start / Stop
-      if (startBtn) startBtn.addEventListener("click", startScan);
+      // Start / Rescan / Stop
+      if (startBtn) startBtn.addEventListener("click", () => startScan());
+      if (rescanBtn) rescanBtn.addEventListener("click", () => startScan());
       if (stopBtn) stopBtn.addEventListener("click", stopScan);
 
       // Export buttons
@@ -2452,6 +2765,22 @@ document.addEventListener("DOMContentLoaded", () => {
             renderResults(lastScanData.results);
           }
         });
+      }
+
+      // Check URL parameters (e.g. from Network Discovery card Scan Ports link)
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetParam = urlParams.get("target");
+        if (targetParam) {
+          switchMode("target_ip");
+          if (targetInput) targetInput.value = targetParam;
+          const scannerSec = document.getElementById("portScannerSection") || document.querySelector(".port-scanner-card");
+          if (scannerSec) {
+            setTimeout(() => scannerSec.scrollIntoView({ behavior: "smooth" }), 250);
+          }
+        }
+      } catch (e) {
+        // ignore
       }
     }
 

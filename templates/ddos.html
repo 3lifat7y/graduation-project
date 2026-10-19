@@ -484,6 +484,10 @@
                   <i class="fas fa-play"></i>
                   <span class="btn-text">Start Monitoring</span>
                 </button>
+                <button id="rescanBtn" class="rescan-btn" type="button" aria-live="polite" style="display:none;" title="Verify active capture worker and packet arrival without restarting">
+                  <i class="fas fa-arrows-rotate" id="rescanIcon"></i>
+                  <span class="btn-text" id="rescanText">Rescan</span>
+                </button>
                 <button id="stopBtn" class="stop-btn" type="button" aria-live="polite" style="display:none;">
                   <i class="fas fa-stop"></i>
                   <span class="btn-text">Stop Monitoring</span>
@@ -493,6 +497,28 @@
               <p id="connectionStatus" class="connection-status" aria-live="polite">
                 System ready. Click 'Start Monitoring' to inspect live traffic in real time.
               </p>
+
+              <!-- Dedicated Rescan Health Status Banner -->
+              <div class="rescan-status-banner" id="rescanStatusBanner" style="display:none;" role="status" aria-live="polite">
+                <div class="rescan-status-icon-wrap" id="rescanStatusIconWrap">
+                  <i class="fas fa-circle-check" id="rescanStatusIcon"></i>
+                </div>
+                <div class="rescan-status-content">
+                  <div class="rescan-status-title" id="rescanStatusTitle">Session Health Verified</div>
+                  <div class="rescan-status-desc" id="rescanStatusDesc">Capture is active and receiving packets.</div>
+                  <div class="rescan-recovery-actions" id="rescanRecoveryActions" style="display:none;">
+                    <button type="button" class="btn-recovery-action" id="rescanRestartBtn">
+                      <i class="fas fa-rotate-right"></i> Restart Session
+                    </button>
+                    <button type="button" class="btn-recovery-action secondary" id="rescanSelectAdapterBtn">
+                      <i class="fas fa-network-wired"></i> Change Adapter
+                    </button>
+                  </div>
+                </div>
+                <button type="button" class="rescan-status-dismiss" id="rescanDismissBtn" aria-label="Dismiss health check notification" title="Dismiss">
+                  <i class="fas fa-xmark"></i>
+                </button>
+              </div>
 
               <div class="scanner-hint">
                 <i class="fas fa-shield-heart"></i>
@@ -689,6 +715,10 @@
                     <i class="fas fa-play"></i>
                     <span>Start Port Scan</span>
                   </button>
+                  <button type="button" id="psRescanBtn" class="ps-btn-secondary" style="display:none;" title="Repeat port scan for the current target and port configuration">
+                    <i class="fas fa-rotate-right"></i>
+                    <span>Rescan</span>
+                  </button>
                   <button type="button" id="psStopBtn" class="ps-btn-danger" style="display:none;">
                     <i class="fas fa-stop"></i>
                     <span>Cancel Scan</span>
@@ -757,6 +787,10 @@
                 <button type="button" class="ps-filter-pill" data-filter="all">
                   All Scanned Ports <span class="ps-count-badge" id="psFilterAllCount">0</span>
                 </button>
+              </div>
+              <div class="ps-results-timestamp" id="psResultsTimestamp" style="display:none;" title="Scan timestamp">
+                <i class="fas fa-clock"></i>
+                <span id="psTimestampText">Last scanned at --:--:--</span>
               </div>
               <div class="ps-search-box">
                 <i class="fas fa-magnifying-glass"></i>
