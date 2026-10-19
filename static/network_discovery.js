@@ -1270,9 +1270,50 @@
       }
     });
 
-    document.querySelectorAll('.sidebar-nav-item, .top-nav-link, .sidebar-brand').forEach(link => {
-      link.addEventListener('click', closeMobileSidebar);
+    function autoCloseSidebarAfterNav() {
+      if (window.innerWidth < 992) {
+        closeMobileSidebar();
+      } else {
+        if (!document.body.classList.contains('sidebar-collapsed')) {
+          document.body.classList.add('sidebar-collapsed');
+          localStorage.setItem('nss_sidebar_collapsed', 'true');
+          if (navbarSidebarToggleBtn) {
+            navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
+          }
+        }
+      }
+    }
+
+    document.querySelectorAll('.sidebar-nav-item').forEach(link => {
+      link.addEventListener('click', (e) => {
+        const navTarget = link.getAttribute('data-nav');
+        if (navTarget === 'network-discovery') {
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          autoCloseSidebarAfterNav();
+        } else {
+          autoCloseSidebarAfterNav();
+        }
+      });
     });
+
+    const sidebarBrandLink = document.getElementById('sidebarBrandLink');
+    if (sidebarBrandLink) {
+      sidebarBrandLink.addEventListener('click', () => {
+        autoCloseSidebarAfterNav();
+      });
+    }
+
+    const globalTopNavbar = document.getElementById('globalTopNavbar');
+    if (globalTopNavbar) {
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 8) {
+          globalTopNavbar.classList.add('is-scrolled');
+        } else {
+          globalTopNavbar.classList.remove('is-scrolled');
+        }
+      }, { passive: true });
+    }
   }
 
   // 9. Theme Management (Light / Dark Mode with Persistence)

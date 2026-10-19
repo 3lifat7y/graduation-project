@@ -2051,33 +2051,80 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Intercept Navigation Link Clicks
+  // Helper to auto-close (mobile) or auto-collapse (desktop) sidebar after navigation
+  function autoCloseSidebarAfterNav() {
+    if (window.innerWidth < 992) {
+      closeMobileSidebar();
+    } else {
+      if (!document.body.classList.contains("sidebar-collapsed")) {
+        document.body.classList.add("sidebar-collapsed");
+        localStorage.setItem("nss_sidebar_collapsed", "true");
+        if (navbarSidebarToggleBtn) {
+          navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
+        }
+      }
+    }
+  }
+
+  // Intercept Navigation Link Clicks in Sidebar
   sidebarNavItems.forEach(item => {
     item.addEventListener("click", (e) => {
-      closeMobileSidebar();
       const navTarget = item.getAttribute("data-nav");
+      const href = item.getAttribute("href") || "";
+
       if (navTarget === "monitoring") {
         e.preventDefault();
         switchView("monitoring");
+        autoCloseSidebarAfterNav();
       } else if (navTarget === "port-scanner") {
         e.preventDefault();
         switchView("port-scanner");
+        autoCloseSidebarAfterNav();
       } else if (navTarget === "home") {
         if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner")) {
           e.preventDefault();
           switchView("landing");
           window.scrollTo({ top: 0, behavior: "smooth" });
         } else {
-          closeMobileSidebar();
+          const overviewSec = document.getElementById("overview");
+          if (overviewSec) {
+            e.preventDefault();
+            overviewSec.scrollIntoView({ behavior: "smooth" });
+          } else {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
           setSidebarActive("home");
+          setTopNavActive("home");
         }
+        autoCloseSidebarAfterNav();
+      } else if (navTarget === "network-discovery") {
+        autoCloseSidebarAfterNav();
+        // Allow standard navigation to /network-discovery
+      } else {
+        if (href.includes("#")) {
+          const hash = href.substring(href.indexOf("#"));
+          if (hash && hash !== "#") {
+            const targetEl = document.querySelector(hash);
+            if (targetEl) {
+              if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner")) {
+                switchView("landing", false);
+              }
+              e.preventDefault();
+              targetEl.scrollIntoView({ behavior: "smooth" });
+              try { history.pushState(null, "", hash); } catch (_) {}
+            }
+          }
+        }
+        autoCloseSidebarAfterNav();
       }
     });
   });
 
   const sidebarBrandLink = document.getElementById("sidebarBrandLink");
   if (sidebarBrandLink) {
-    sidebarBrandLink.addEventListener("click", closeMobileSidebar);
+    sidebarBrandLink.addEventListener("click", () => {
+      autoCloseSidebarAfterNav();
+    });
   }
 
   if (breadcrumbHomeLink) {
@@ -2156,6 +2203,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   window.addEventListener("scroll", highlightNavOnScroll, { passive: true });
+
+  const globalTopNavbar = document.getElementById("globalTopNavbar");
+  if (globalTopNavbar) {
+    window.addEventListener("scroll", () => {
+      if (window.scrollY > 8) {
+        globalTopNavbar.classList.add("is-scrolled");
+      } else {
+        globalTopNavbar.classList.remove("is-scrolled");
+      }
+    }, { passive: true });
+  }
 
   // ============================================================================
   // 8. Event Listeners for DDoS Live Scanning
