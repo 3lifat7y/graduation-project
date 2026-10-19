@@ -2283,9 +2283,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!res.ok) return;
         const data = await res.json();
         if (data.status === "success") {
-          autoDetectedSubnet = data.suggested_subnet || "192.168.1.0/24";
+          autoDetectedSubnet = data.suggested_subnet || "";
           if (localIpBadge) {
-            localIpBadge.innerHTML = `<i class="fas fa-circle-dot"></i> Local IP: ${data.local_ip || "127.0.0.1"}`;
+            const isConn = data.is_connected && data.local_ip && !data.local_ip.startsWith("127.");
+            const ipLabel = isConn ? data.local_ip : (data.local_ip || "Offline");
+            const typeStr = (data.adapter_type && data.adapter_type !== 'None' && data.adapter_type !== 'Other') ? ` (${data.adapter_type})` : '';
+            localIpBadge.innerHTML = `<i class="fas fa-circle-dot"></i> Local IP: ${ipLabel}${typeStr}`;
           }
         }
       } catch (e) {
@@ -2322,7 +2325,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (authWrap) authWrap.style.display = "none";
         targetInput.focus();
       } else if (mode === "network") {
-        targetInput.value = autoDetectedSubnet || "192.168.1.0/24";
+        targetInput.value = autoDetectedSubnet || "";
         targetInput.readOnly = false;
         targetInput.placeholder = "e.g. 192.168.1.0/24";
         if (targetHint) targetHint.textContent = "Enter private CIDR subnet (maximum size /24, up to 256 hosts).";
@@ -2365,7 +2368,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const target = (targetInput ? targetInput.value : "").trim();
       if (!target) {
-        showError("Target address is required.");
+        if (currentMode === "network") {
+          showError("No active local subnet detected. Please enter a target IPv4 subnet (e.g. 192.168.1.0/24) manually.");
+        } else {
+          showError("Target address is required.");
+        }
         if (targetInput) targetInput.focus();
         return;
       }
@@ -2724,6 +2731,8 @@ document.addEventListener("DOMContentLoaded", () => {
         autoSubnetBtn.addEventListener("click", () => {
           if (targetInput && autoDetectedSubnet) {
             targetInput.value = autoDetectedSubnet;
+          } else {
+            showError("No active local subnet detected on the system. Please enter a target subnet manually.");
           }
         });
       }

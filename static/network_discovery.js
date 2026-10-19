@@ -196,10 +196,13 @@
   }
 
   function renderNetworkInfo(net) {
-    if (elements.ndAdapterName) elements.ndAdapterName.textContent = net.adapter_name || 'Ethernet / Wi-Fi';
-    if (elements.ndLocalIp) elements.ndLocalIp.textContent = net.local_ip || '--';
+    if (elements.ndAdapterName) {
+      const typeStr = (net.adapter_type && net.adapter_type !== 'None' && net.adapter_type !== 'Other') ? ` (${net.adapter_type})` : '';
+      elements.ndAdapterName.textContent = (net.adapter_name && net.adapter_name !== 'None') ? `${net.adapter_name}${typeStr}` : 'Disconnected / None';
+    }
+    if (elements.ndLocalIp) elements.ndLocalIp.textContent = (net.is_connected && net.local_ip) ? net.local_ip : '--';
     if (elements.ndLocalMac) elements.ndLocalMac.textContent = net.local_mac || 'Unavailable';
-    if (elements.ndSubnetMask) elements.ndSubnetMask.textContent = net.subnet_mask || '255.255.255.0';
+    if (elements.ndSubnetMask) elements.ndSubnetMask.textContent = net.subnet_mask || '--';
     if (elements.ndDefaultGateway) elements.ndDefaultGateway.textContent = net.default_gateway || 'None';
     if (elements.kpiGatewayDevice) elements.kpiGatewayDevice.textContent = net.default_gateway || '--';
 
@@ -226,7 +229,12 @@
     }
 
     if (elements.ndSubnetInput && !elements.ndSubnetInput.value) {
-      elements.ndSubnetInput.value = net.subnet_cidr || '192.168.1.0/24';
+      if (net.is_connected && net.subnet_cidr) {
+        elements.ndSubnetInput.value = net.subnet_cidr;
+      } else {
+        elements.ndSubnetInput.value = '';
+        elements.ndSubnetInput.placeholder = 'e.g. 192.168.1.0/24';
+      }
     }
   }
 
@@ -241,7 +249,7 @@
     const concurrency = parseInt(elements.ndConcurrencySelect ? elements.ndConcurrencySelect.value : 50, 10);
 
     if (!subnet) {
-      showAlert('Please specify a valid IPv4 subnet (e.g. 192.168.1.0/24), host IP, or range.');
+      showAlert('No active local subnet detected. Please enter a target IPv4 subnet (e.g. 192.168.1.0/24), host IP, or range.');
       if (elements.ndSubnetInput) elements.ndSubnetInput.focus();
       return;
     }

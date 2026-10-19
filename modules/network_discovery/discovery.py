@@ -201,81 +201,229 @@ def get_active_routable_ip() -> Optional[str]:
     return None
 
 
+def classify_adapter_media_type(name: str, desc: str, p_media: str = "", media: str = "") -> str:
+    """Classifies adapter type into 'Ethernet', 'Wi-Fi', 'Virtual', 'Loopback', or 'Other'."""
+    lower_name = (name or "").lower()
+    lower_desc = (desc or "").lower()
+    p_media = (p_media or "").lower()
+    media = (media or "").lower()
+
+    if any(k in lower_desc for k in ["vmware", "virtualbox", "hyper-v", "bluetooth", "wan miniport", "teredo", "isatap", "npcap loopback"]) or \
+       any(k in lower_name for k in ["vmware", "virtualbox", "vethernet", "hyper-v", "bluetooth"]):
+        return "Virtual"
+    if "loopback" in lower_name or "loopback" in lower_desc:
+        return "Loopback"
+    if "802.11" in p_media or "native802_11" in p_media or \
+       any(k in lower_name or k in lower_desc for k in ["wi-fi", "wireless", "802.11", "wlan", "wifi"]):
+        return "Wi-Fi"
+    if "802.3" in p_media or "802.3" in media or \
+       any(k in lower_name or k in lower_desc for k in [
+           "ethernet", "lan", "gigabit", "fast ethernet", "i219", "realtek",
+           "intel(r) ethernet", "broadcom", "marvell", "qualcomm", "killer",
+           "pcie gbe", "pci-e", "gbe family", "usb ethernet", "rj45", "local area connection"
+       ]):
+        return "Ethernet"
+    return "Other"
+
+
 def get_network_discovery_info() -> Dict[str, Any]:
     """
     Auto-detects active network adapter, IPv4 address, subnet mask, prefix length,
     default gateway, and calculated CIDR network range.
+    Supports physical Ethernet adapters on isolated networks without an internet gateway.
     """
-    active_ip = get_active_routable_ip() or "127.0.0.1"
-    is_offline = active_ip.startswith("127.") or active_ip.startswith("169.254.")
-
+    # 1. Base default: clean offline state with zero hardcoded Wi-Fi or dummy subnet
     info: Dict[str, Any] = {
-        "status": "offline" if is_offline else "online",
-        "adapter_name": "Unknown Adapter",
-        "adapter_type": "Wi-Fi",
-        "local_ip": active_ip,
-        "subnet_mask": "255.255.255.0",
-        "prefix_length": 24,
+        "status": "offline",
+        "adapter_name": "None",
+        "adapter_type": "None",
+        "local_ip": "127.0.0.1",
+        "subnet_mask": None,
+        "prefix_length": None,
         "default_gateway": None,
-        "subnet_cidr": "192.168.1.0/24",
-        "network_address": "192.168.1.0",
-        "broadcast_address": "192.168.1.255",
-        "total_hosts": 254,
-        "local_mac": "Unknown",
-        "is_connected": not is_offline,
-        "message": "Local network interface active." if not is_offline else "No active routable network connection detected."
+        "subnet_cidr": None,
+        "network_address": None,
+        "broadcast_address": None,
+        "total_hosts": 0,
+        "local_mac": "Unavailable",
+        "is_connected": False,
+        "message": "No active network connection detected. Enter a target subnet manually to scan."
     }
 
-    # Query detailed interface and gateway metrics on Windows via PowerShell
-    if os.name == 'nt' and not is_offline:
+    # 2. Check for active internet-routable IP via default gateway
+    routable_ip = get_active_routable_ip()
+
+    # 3. Query all operational network adapters and assigned IPv4 addresses on Windows via PowerShell
+    if os.name == 'nt':
         try:
             ps_cmd = (
-                "$ip = Get-NetIPAddress -AddressFamily IPv4 | Where-Object IPAddress -eq '" + active_ip + "' | Select-Object -First 1 InterfaceIndex, PrefixLength; "
-                "if ($ip) { "
-                "    $adapter = Get-NetAdapter -InterfaceIndex $ip.InterfaceIndex | Select-Object -First 1 Name, InterfaceDescription, MacAddress; "
-                "    $gw = (Get-NetRoute -InterfaceIndex $ip.InterfaceIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1 NextHop).NextHop; "
-                "    @{Name=$adapter.Name; Mac=$adapter.MacAddress; PrefixLength=$ip.PrefixLength; Gateway=$gw} | ConvertTo-Json -Compress "
-                "}"
+                "$a = Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object Name, InterfaceDescription, Status, InterfaceIndex, MacAddress, PhysicalMediaType, MediaType; "
+                "$b = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\\.|169\\.254\\.)' } | Select-Object InterfaceIndex, IPAddress, PrefixLength; "
+                "$c = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object InterfaceIndex, NextHop; "
+                "@{adapters=$a; ips=$b; routes=$c} | ConvertTo-Json -Compress -Depth 3"
             )
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=6
             )
             if res.returncode == 0 and res.stdout.strip():
                 import json
-                data = json.loads(res.stdout.strip())
-                if data.get("Name"):
-                    info["adapter_name"] = str(data["Name"]).strip()
-                if data.get("Mac"):
-                    info["local_mac"] = str(data["Mac"]).strip()
-                if data.get("PrefixLength"):
-                    info["prefix_length"] = int(data["PrefixLength"])
-                if data.get("Gateway"):
-                    info["default_gateway"] = str(data["Gateway"]).strip()
+                payload = json.loads(res.stdout.strip())
+
+                raw_adapters = payload.get("adapters", [])
+                if isinstance(raw_adapters, dict):
+                    raw_adapters = [raw_adapters]
+                raw_ips = payload.get("ips", [])
+                if isinstance(raw_ips, dict):
+                    raw_ips = [raw_ips]
+                raw_routes = payload.get("routes", [])
+                if isinstance(raw_routes, dict):
+                    raw_routes = [raw_routes]
+
+                ips_by_idx: Dict[int, List[Dict[str, Any]]] = {}
+                for entry in raw_ips:
+                    idx = entry.get("InterfaceIndex")
+                    ip = entry.get("IPAddress")
+                    prefix = entry.get("PrefixLength", 24)
+                    if idx and ip:
+                        ips_by_idx.setdefault(int(idx), []).append({"ip": str(ip).strip(), "prefix": int(prefix)})
+
+                routes_by_idx: Dict[int, str] = {}
+                for entry in raw_routes:
+                    r_idx = entry.get("InterfaceIndex")
+                    hop = entry.get("NextHop")
+                    if r_idx and hop and hop != "0.0.0.0":
+                        routes_by_idx[int(r_idx)] = str(hop).strip()
+
+                candidates = []
+                for ad in raw_adapters:
+                    idx = int(ad.get("InterfaceIndex", 0))
+                    name = str(ad.get("Name", "")).strip()
+                    desc = str(ad.get("InterfaceDescription", "")).strip()
+                    mac = str(ad.get("MacAddress", "")).strip()
+                    p_media = str(ad.get("PhysicalMediaType", "")).strip()
+                    media = str(ad.get("MediaType", "")).strip()
+                    ad_type = classify_adapter_media_type(name, desc, p_media, media)
+                    ad_ips = ips_by_idx.get(idx, [])
+                    gateway = routes_by_idx.get(idx)
+
+                    if ad_ips:
+                        candidates.append({
+                            "name": name,
+                            "desc": desc,
+                            "mac": mac,
+                            "index": idx,
+                            "type": ad_type,
+                            "ips": ad_ips,
+                            "gateway": gateway,
+                            "is_virtual": ad_type in ("Virtual", "Loopback")
+                        })
+
+                # Selection hierarchy prioritizing physical Ethernet (with or without gateway):
+                selected = None
+                # Priority 1: Physical Ethernet with default gateway
+                for c in candidates:
+                    if not c["is_virtual"] and c["type"] == "Ethernet" and c.get("gateway"):
+                        selected = c
+                        break
+                # Priority 2: Physical Ethernet without gateway (isolated LAN / direct link)
+                if not selected:
+                    for c in candidates:
+                        if not c["is_virtual"] and c["type"] == "Ethernet":
+                            selected = c
+                            break
+                # Priority 3: Matching routable_ip if found on a physical adapter
+                if not selected and routable_ip:
+                    for c in candidates:
+                        if not c["is_virtual"] and any(ip_info["ip"] == routable_ip for ip_info in c["ips"]):
+                            selected = c
+                            break
+                # Priority 4: Physical Wi-Fi with default gateway
+                if not selected:
+                    for c in candidates:
+                        if not c["is_virtual"] and c["type"] == "Wi-Fi" and c.get("gateway"):
+                            selected = c
+                            break
+                # Priority 5: Physical Wi-Fi without gateway
+                if not selected:
+                    for c in candidates:
+                        if not c["is_virtual"] and c["type"] == "Wi-Fi":
+                            selected = c
+                            break
+                # Priority 6: Any operational physical adapter
+                if not selected:
+                    for c in candidates:
+                        if not c["is_virtual"]:
+                            selected = c
+                            break
+                # Priority 7: Any candidate (including virtual)
+                if not selected and candidates:
+                    selected = candidates[0]
+
+                if selected:
+                    primary_ip_info = selected["ips"][0]
+                    # If routable_ip matches one of selected adapter's IPs, use it
+                    if routable_ip:
+                        for ip_info in selected["ips"]:
+                            if ip_info["ip"] == routable_ip:
+                                primary_ip_info = ip_info
+                                break
+
+                    chosen_ip = primary_ip_info["ip"]
+                    chosen_prefix = int(primary_ip_info.get("prefix", 24))
+                    if chosen_prefix < 22:
+                        chosen_prefix = 24
+
+                    iface_net = ipaddress.IPv4Interface(f"{chosen_ip}/{chosen_prefix}").network
+                    gw = selected.get("gateway")
+                    if not gw:
+                        gw = str(list(iface_net.hosts())[0]) if iface_net.num_addresses > 2 else None
+
+                    info.update({
+                        "status": "online",
+                        "adapter_name": selected["name"],
+                        "adapter_type": selected["type"],
+                        "local_ip": chosen_ip,
+                        "subnet_mask": str(iface_net.netmask),
+                        "prefix_length": chosen_prefix,
+                        "default_gateway": gw,
+                        "subnet_cidr": str(iface_net),
+                        "network_address": str(iface_net.network_address),
+                        "broadcast_address": str(iface_net.broadcast_address),
+                        "total_hosts": max(0, iface_net.num_addresses - 2),
+                        "local_mac": selected.get("mac") or "Unavailable",
+                        "is_connected": True,
+                        "message": f"Active {selected['type']} interface detected: {selected['name']} ({chosen_ip})"
+                    })
+                    return info
+
         except Exception:
             pass
 
-    # Compute IPv4 network parameters using ipaddress
-    try:
-        if not is_offline and active_ip:
-            prefix = info.get("prefix_length", 24)
-            # Safe boundary check: limit discovery to networks <= /22 (max 1024 hosts)
-            if prefix < 22:
-                prefix = 24
-            iface_net = ipaddress.IPv4Interface(f"{active_ip}/{prefix}").network
-            info["subnet_cidr"] = str(iface_net)
-            info["network_address"] = str(iface_net.network_address)
-            info["broadcast_address"] = str(iface_net.broadcast_address)
-            info["subnet_mask"] = str(iface_net.netmask)
-            info["total_hosts"] = max(0, iface_net.num_addresses - 2)
-            if not info["default_gateway"]:
-                # Most consumer routers sit at .1 or .254
-                first_ip = str(list(iface_net.hosts())[0]) if info["total_hosts"] > 0 else None
-                info["default_gateway"] = first_ip
-    except Exception as e:
-        info["subnet_cidr"] = f"{active_ip}/24"
+    # 4. Fallback if PowerShell not on Windows or query failed but routable IP exists
+    if routable_ip and not routable_ip.startswith("127.") and not routable_ip.startswith("169.254."):
+        try:
+            iface_net = ipaddress.IPv4Interface(f"{routable_ip}/24").network
+            info.update({
+                "status": "online",
+                "adapter_name": "Active Connection",
+                "adapter_type": "Ethernet",
+                "local_ip": routable_ip,
+                "subnet_mask": str(iface_net.netmask),
+                "prefix_length": 24,
+                "default_gateway": str(list(iface_net.hosts())[0]),
+                "subnet_cidr": str(iface_net),
+                "network_address": str(iface_net.network_address),
+                "broadcast_address": str(iface_net.broadcast_address),
+                "total_hosts": max(0, iface_net.num_addresses - 2),
+                "local_mac": "Unavailable",
+                "is_connected": True,
+                "message": f"Active network connection detected ({routable_ip})."
+            })
+        except Exception:
+            pass
 
     return info
 
@@ -376,7 +524,7 @@ def probe_host_tcp(ip_str: str, ports: Optional[List[int]] = None, timeout_s: fl
 
 def validate_and_normalize_subnet(
     raw_input: Optional[str],
-    default_cidr: Optional[str] = "192.168.1.0/24"
+    default_cidr: Optional[str] = None
 ) -> Tuple[ipaddress.IPv4Network, List[str]]:
     """
     Validates and normalizes user subnet/IP inputs into an IPv4Network and target host list.
@@ -388,7 +536,10 @@ def validate_and_normalize_subnet(
     """
     raw = (raw_input or "").strip()
     if not raw:
-        raw = (default_cidr or "192.168.1.0/24").strip()
+        raw = (default_cidr or "").strip()
+
+    if not raw:
+        raise ValueError("No active local subnet detected. Please specify a target subnet (e.g. 192.168.1.0/24) manually.")
 
     # 1. Check for dash range (e.g. 192.168.1.1-192.168.1.50 or 192.168.1.1-50)
     if "-" in raw:

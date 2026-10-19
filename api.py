@@ -2020,20 +2020,22 @@ def predict_direct():
 # ==============================================================================
 from modules.port_scanner.scanner import port_scanner_manager
 from modules.common.network_detector import get_active_routable_ip
+from modules.network_discovery.discovery import get_network_discovery_info
 
 
 @app.route('/api/port-scan/network-info', methods=['GET'])
 def get_port_scan_network_info():
-    """Returns local host IP and suggested /24 subnet for network scanning."""
+    """Returns local host IP and suggested subnet for network scanning without hardcoded fallbacks."""
     try:
-        local_ip = get_active_routable_ip() or "127.0.0.1"
-        suggested_subnet = "192.168.1.0/24"
-        if local_ip and not local_ip.startswith("127."):
-            parts = local_ip.split(".")
-            if len(parts) == 4:
-                suggested_subnet = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+        net_info = get_network_discovery_info()
+        is_conn = bool(net_info.get("is_connected"))
+        local_ip = net_info.get("local_ip") if is_conn else "127.0.0.1"
+        suggested_subnet = net_info.get("subnet_cidr") if is_conn else None
         return jsonify({
             "status": "success",
+            "is_connected": is_conn,
+            "adapter_name": net_info.get("adapter_name"),
+            "adapter_type": net_info.get("adapter_type"),
             "local_ip": local_ip,
             "suggested_subnet": suggested_subnet
         }), 200
