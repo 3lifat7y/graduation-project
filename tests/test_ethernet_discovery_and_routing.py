@@ -302,13 +302,20 @@ class TestActualNetworkAndRoutingEnvironment(unittest.TestCase):
         self.assertEqual(target, "127.0.0.1")
         self.assertIsNone(net_obj)
 
-        # Probe port 5000 where api.py is running
-        res = asyncio.run(probe_single_port("127.0.0.1", 5000, timeout=1.0))
-        self.assertIsInstance(res, dict)
-        self.assertEqual(res["port"], 5000)
-        self.assertEqual(res["protocol"], "TCP")
-        self.assertEqual(res["state"], "open")
-        self.assertGreater(res["latency_ms"], 0.0)
+        # Probe a real listening socket on loopback 127.0.0.1
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.bind(("127.0.0.1", 0))
+        server_sock.listen(1)
+        test_port = server_sock.getsockname()[1]
+        try:
+            res = asyncio.run(probe_single_port("127.0.0.1", test_port, timeout=1.0))
+            self.assertIsInstance(res, dict)
+            self.assertEqual(res["port"], test_port)
+            self.assertEqual(res["protocol"], "TCP")
+            self.assertEqual(res["state"], "open")
+            self.assertGreater(res["latency_ms"], 0.0)
+        finally:
+            server_sock.close()
 
 
 if __name__ == "__main__":

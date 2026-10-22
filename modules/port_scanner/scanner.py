@@ -200,17 +200,25 @@ def validate_and_resolve_target(scan_type: str, raw_target: str) -> Tuple[str, O
     elif scan_type == "target_ip":
         if not raw_target:
             raise ValueError("Target IP address or hostname is required.")
+        # Sanitize URLs, protocols, ports, and trailing slashes
+        clean_target = raw_target
+        if "://" in clean_target:
+            clean_target = clean_target.split("://", 1)[1]
+        clean_target = clean_target.split("/", 1)[0].strip()
+        if ":" in clean_target and clean_target.count(":") == 1:
+            clean_target = clean_target.split(":", 1)[0].strip()
+
         # Attempt IPv4 resolution
         try:
             # Check if it's already a valid IP string
-            ip_obj = ipaddress.ip_address(raw_target)
+            ip_obj = ipaddress.ip_address(clean_target)
             if ip_obj.version != 4:
                 raise ValueError("Only IPv4 addresses are currently supported.")
             return str(ip_obj), None
         except ValueError:
             # Attempt DNS resolution for hostname
             try:
-                resolved_ip = socket.gethostbyname(raw_target)
+                resolved_ip = socket.gethostbyname(clean_target)
                 return resolved_ip, None
             except socket.gaierror:
                 raise ValueError(f"Could not resolve hostname or IP address: '{raw_target}'")
@@ -233,11 +241,13 @@ def validate_and_resolve_target(scan_type: str, raw_target: str) -> Tuple[str, O
                 f"maximum allowed subnet size is /24 (up to 256 addresses)."
             )
 
-        # Restrict Network Scan to Private / Local networks (RFC 1918 + Loopback)
-        if not (net.is_private or net.is_loopback):
+        # Restrict Network Scan to Private / Local networks (RFC 1918 + RFC 6598 CGNAT mobile hotspots + Link-Local + Loopback)
+        cgnat_net = ipaddress.IPv4Network("100.64.0.0/10")
+        is_allowed = (net.is_private or net.is_loopback or net.is_link_local or net.subnet_of(cgnat_net))
+        if not is_allowed:
             raise ValueError(
-                f"Network scanning is restricted to private RFC 1918 subnets (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) "
-                f"or loopback. Scanning public subnet '{net}' is not permitted."
+                f"Network scanning is restricted to private RFC 1918 subnets (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), "
+                f"Carrier-Grade NAT mobile hotspots (100.64.0.0/10), or loopback. Scanning public subnet '{net}' is not permitted."
             )
 
         return str(net), net
@@ -261,6 +271,7 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
     """
     start_t = time.perf_counter()
     service = get_service_name(port)
+    writer = None
 
     conn_coro = asyncio.open_connection(ip, port)
     try:
@@ -284,12 +295,6 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
                 banner = first_line[:90]
         except Exception:
             pass
-        finally:
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:
-                pass
 
         return {
             "port": port,
@@ -299,7 +304,6 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
             "banner": banner,
             "latency_ms": rtt_ms
         }
-
     except asyncio.TimeoutError:
         return {
             "port": port,
@@ -359,6 +363,13 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
             "banner": f"Scan error: {str(e)[:40]}",
             "latency_ms": None
         }
+    finally:
+        if writer is not None:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
 
 
 async def probe_host_liveness(ip: str, timeout: float = 0.3) -> bool:
@@ -448,6 +459,26 @@ class PortScannerManager:
         concurrency: int = 150
     ) -> Dict[str, Any]:
         """Validates input, resets state, and initiates scan on a dedicated daemon thread."""
+        with self._lock:
+            if self._is_running:
+                return {
+                    "status": "already_scanning",
+                    "message": "A port scan is already actively running.",
+                    "scan_id": self.session.get("scan_id")
+                }
+            if self._worker_thread and self._worker_thread.is_alive():
+                if self._loop and self._loop.is_running() and self._stop_event:
+                    try:
+                        self._loop.call_soon_threadsafe(self._stop_event.set)
+                    except Exception:
+                        pass
+
+        if self._worker_thread and self._worker_thread.is_alive():
+            try:
+                self._worker_thread.join(timeout=0.6)
+            except Exception:
+                pass
+
         with self._lock:
             if self._is_running:
                 return {
@@ -546,8 +577,11 @@ class PortScannerManager:
                 self.session["duration_s"] = round(time.time() - self.session["started_at"], 2)
             self._is_running = False
 
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._stop_event.set)
+            if self._loop and self._loop.is_running() and self._stop_event:
+                try:
+                    self._loop.call_soon_threadsafe(self._stop_event.set)
+                except Exception:
+                    pass
 
         return {"status": "stopped", "message": "Port scan cancelled successfully."}
 
@@ -562,14 +596,20 @@ class PortScannerManager:
         concurrency: int
     ):
         """Worker thread entrypoint establishing a clean, isolated asyncio event loop."""
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        self._stop_event = asyncio.Event()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        stop_event = asyncio.Event()
+
+        with self._lock:
+            self._loop = loop
+            self._stop_event = stop_event
 
         try:
-            self._loop.run_until_complete(
-                self._execute_scan(scan_id, scan_type, target_str, net_obj, ports, timeout, concurrency)
+            loop.run_until_complete(
+                self._execute_scan(scan_id, stop_event, scan_type, target_str, net_obj, ports, timeout, concurrency)
             )
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             with self._lock:
                 if self.session.get("scan_id") == scan_id:
@@ -579,13 +619,29 @@ class PortScannerManager:
                         "message": f"Port scanner error: {e}"
                     })
         finally:
+            try:
+                pending = asyncio.all_tasks(loop)
+                for t in pending:
+                    t.cancel()
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+
             with self._lock:
-                self._is_running = False
-            self._loop.close()
+                if self.session.get("scan_id") == scan_id:
+                    self._is_running = False
 
     async def _execute_scan(
         self,
         scan_id: str,
+        stop_event: asyncio.Event,
         scan_type: str,
         target_str: str,
         net_obj: Optional[ipaddress.IPv4Network],
@@ -607,10 +663,10 @@ class PortScannerManager:
 
             async def scan_task(p: int):
                 nonlocal scanned_so_far
-                if self._stop_event.is_set():
+                if stop_event.is_set():
                     return None
                 async with semaphore:
-                    if self._stop_event.is_set():
+                    if stop_event.is_set():
                         return None
                     res = await probe_single_port(target_str, p, timeout)
                     scanned_so_far += 1
@@ -702,10 +758,10 @@ class PortScannerManager:
 
             async def liveness_task(host_ip: str):
                 nonlocal hosts_checked
-                if self._stop_event.is_set():
+                if stop_event.is_set():
                     return None
                 async with semaphore:
-                    if self._stop_event.is_set():
+                    if stop_event.is_set():
                         return None
                     is_alive = await probe_host_liveness(host_ip, timeout=0.35)
                     hosts_checked += 1
@@ -778,7 +834,7 @@ class PortScannerManager:
                     self.session["total_ports"] = total_port_checks
 
             for host_ip in discovered_live_hosts:
-                if self._stop_event.is_set():
+                if stop_event.is_set():
                     break
 
                 host_open = []
@@ -786,10 +842,10 @@ class PortScannerManager:
 
                 async def host_port_task(p: int):
                     nonlocal port_checks_done
-                    if self._stop_event.is_set():
+                    if stop_event.is_set():
                         return None
                     async with semaphore:
-                        if self._stop_event.is_set():
+                        if stop_event.is_set():
                             return None
                         pres = await probe_single_port(host_ip, p, timeout)
                         port_checks_done += 1

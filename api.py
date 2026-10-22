@@ -689,7 +689,9 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
             filter_str=filter_str,
             interface_name=adapter_name,
             interface_index=adapter_index,
-            continuous=continuous
+            continuous=continuous,
+            guid=adapter_guid,
+            network_name=adapter_netname
         )
         if start_res.get("status") == "error":
             err_msg = start_res.get("message") or "Failed to start direct capture worker."
@@ -1152,13 +1154,23 @@ def get_adapter_info():
             driver_status["active_engine"] = "Npcap + Scapy (Windows Service)"
             driver_status["remediation_guide"] = "DDoS-Guard Windows Service is active and ready."
         elif svc_state.get("installed") and svc_state.get("status") == "STOPPED":
-            driver_status["can_capture_live"] = False
-            driver_status["active_engine"] = "None"
-            driver_status["remediation_guide"] = "DDoS-Guard Service is installed but stopped. Starting a scan will request permission to start it."
+            if driver_status.get("scapy_ready") or driver_status.get("npcap_installed"):
+                driver_status["can_capture_live"] = True
+                driver_status["active_engine"] = "Npcap + Scapy (Standalone / Direct)"
+                driver_status["remediation_guide"] = "DDoS-Guard Service is stopped. Direct standalone packet capture is ready, or start service for elevated capture."
+            else:
+                driver_status["can_capture_live"] = False
+                driver_status["active_engine"] = "None"
+                driver_status["remediation_guide"] = "DDoS-Guard Service is installed but stopped. Starting a scan will request permission to start it."
         elif not svc_state.get("installed"):
-            driver_status["can_capture_live"] = False
-            driver_status["active_engine"] = "None"
-            driver_status["remediation_guide"] = "DDoS-Guard Service is not installed. Run 'service_manager.ps1 Install' as Administrator."
+            if driver_status.get("scapy_ready") or driver_status.get("npcap_installed"):
+                driver_status["can_capture_live"] = True
+                driver_status["active_engine"] = "Npcap + Scapy (Standalone / Direct)"
+                driver_status["remediation_guide"] = "Windows Service not installed. Ready for direct standalone packet capture via Npcap."
+            else:
+                driver_status["can_capture_live"] = False
+                driver_status["active_engine"] = "None"
+                driver_status["remediation_guide"] = "DDoS-Guard Service is not installed. Run 'service_manager.ps1 Install' as Administrator."
 
         return jsonify({
             "status": "success",
@@ -1471,181 +1483,195 @@ def start_scan():
             })
             return jsonify(current_scan_session), 200
 
-        # 1. Query actual Windows SCM state before starting
-        svc_state = get_service_status(include_ipc=True)
-        log_diag("SCM_STATE", f"Status: {svc_state.get('status')} | Installed: {svc_state.get('installed')} | PID: {svc_state.get('pid')} | IPC: {svc_state.get('ipc_online')}")
+        try:
+            # 1. Query actual Windows SCM state before starting
+            svc_state = get_service_status(include_ipc=True)
+            log_diag("SCM_STATE", f"Status: {svc_state.get('status')} | Installed: {svc_state.get('installed')} | PID: {svc_state.get('pid')} | IPC: {svc_state.get('ipc_online')}")
 
-        if not svc_state.get("installed"):
-            if not driver_info.get("can_capture_live"):
-                not_inst_msg = (
-                    "DDoS-Guard Windows Sniffer Service is not installed. "
-                    "Run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Install' as Administrator."
-                )
-                log_diag("SERVICE_NOT_INSTALLED", not_inst_msg)
-                current_scan_session.update({
-                    "status": "error",
-                    "error_type": "SERVICE_NOT_INSTALLED",
-                    "error": not_inst_msg,
-                    "message": not_inst_msg,
-                    "service_state": svc_state
-                })
-                return jsonify(current_scan_session), 200
-            else:
-                log_diag("STANDALONE_CAPTURE", f"Windows Service not installed. Running direct Scapy capture on [{adapter_name}] (idx={adapter_idx}).")
-        else:
-            # Check if service is currently in START_PENDING (wait briefly for transition)
-            if svc_state.get("status") == "START_PENDING":
-                log_diag("SCM_STATE", "Service is currently START_PENDING. Waiting up to 4s for startup to complete...")
-                pending_wait_start = time.time()
-                while time.time() - pending_wait_start < 4.0:
-                    time.sleep(0.4)
-                    svc_state = get_service_status(include_ipc=True)
-                    if svc_state.get("running") and svc_state.get("ipc_online"):
-                        break
-
-            # If service is stopped, request scoped administrator elevation through standard Windows UAC prompt
-            if not svc_state.get("ipc_online") and (svc_state.get("status") in ["STOPPED", "STOP_PENDING"] or not svc_state.get("running")):
-                log_diag("UAC_ELEVATION", "Service is STOPPED. Requesting scoped Administrator elevation via Windows UAC dialog...")
-                uac_res = request_service_start(timeout=10.0)
-                status_code = uac_res.get("status")
-
-                if status_code == "uac_cancelled":
-                    cancel_msg = uac_res.get("message", "Administrator approval was cancelled by the user.")
-                    log_diag("UAC_CANCELLED", f"User declined UAC prompt (Win32 Error 1223): {cancel_msg}")
-                    current_scan_session.update({
-                        "status": "uac_cancelled",
-                        "error_type": "UAC_CANCELLED",
-                        "error": cancel_msg,
-                        "message": cancel_msg,
-                        "prediction": None,
-                        "label": None,
-                        "service_state": get_service_status(include_ipc=True)
-                    })
-                    return jsonify(current_scan_session), 200
-
-                elif status_code == "start_failed":
-                    fail_msg = uac_res.get("message", "Elevated service startup failed.")
-                    log_diag("UAC_FAILED", f"Service start failure: {fail_msg}")
+            if not svc_state.get("installed"):
+                if not driver_info.get("can_capture_live"):
+                    not_inst_msg = (
+                        "DDoS-Guard Windows Sniffer Service is not installed. "
+                        "Run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Install' as Administrator."
+                    )
+                    log_diag("SERVICE_NOT_INSTALLED", not_inst_msg)
                     current_scan_session.update({
                         "status": "error",
-                        "error_type": "SERVICE_START_FAILED",
-                        "error": fail_msg,
-                        "message": fail_msg,
-                        "prediction": None,
-                        "label": None,
-                        "log_tail": uac_res.get("log_tail", []),
-                        "service_state": get_service_status(include_ipc=True)
-                    })
-                    return jsonify(current_scan_session), 200
-
-                log_diag("UAC_APPROVED", "User approved UAC prompt; Windows Service confirmed RUNNING and authenticated IPC online.")
-                svc_state = get_service_status(include_ipc=True)
-            else:
-                log_diag("SCM_STATE", f"Service is already RUNNING (PID: {svc_state.get('pid')}, IPC: {svc_state.get('ipc_online')}). Bypassing UAC elevation prompt.")
-
-            # Check if the running service is outdated (e.g. started before isolation patches)
-            v_info = ipc_client.get_service_version_info()
-            if v_info.get("online") and not v_info.get("is_updated"):
-                log_diag(
-                    "SERVICE_OUTDATED",
-                    f"Sniffer service (PID: {v_info.get('pid')}) is running outdated build '{v_info.get('version')}'. "
-                    f"Requesting elevated service restart to load network isolation..."
-                )
-                restart_res = request_service_restart(timeout=10.0)
-                if restart_res.get("status") == "started":
-                    log_diag("SERVICE_RESTARTED", "Windows Service successfully restarted and updated build verified.")
-                    svc_state = get_service_status(include_ipc=True)
-                elif restart_res.get("status") == "uac_cancelled":
-                    cancel_msg = "Administrator approval was cancelled. An elevated restart of the Windows Service is required to load network isolation fixes."
-                    log_diag("UAC_CANCELLED", cancel_msg)
-                    current_scan_session.update({
-                        "status": "uac_cancelled",
-                        "label": "Capture Error",
-                        "confidence": 0.0,
-                        "error_type": "UAC_CANCELLED",
-                        "error": cancel_msg,
-                        "message": cancel_msg,
-                        "prediction": None,
-                        "label": None,
-                        "service_state": get_service_status(include_ipc=True)
+                        "error_type": "SERVICE_NOT_INSTALLED",
+                        "error": not_inst_msg,
+                        "message": not_inst_msg,
+                        "service_state": svc_state
                     })
                     return jsonify(current_scan_session), 200
                 else:
-                    outdated_msg = (
-                        f"DDoS-Guard Windows Service is running an outdated in-memory build (PID: {v_info.get('pid')}, version: {v_info.get('version')}). "
-                        f"An elevated service restart is required to load loopback and network isolation fixes. "
-                        f"Please run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Restart' as Administrator."
+                    log_diag("STANDALONE_CAPTURE", f"Windows Service not installed. Running direct Scapy capture on [{adapter_name}] (idx={adapter_idx}).")
+            else:
+                # Check if service is currently in START_PENDING (wait briefly for transition)
+                if svc_state.get("status") == "START_PENDING":
+                    log_diag("SCM_STATE", "Service is currently START_PENDING. Waiting up to 4s for startup to complete...")
+                    pending_wait_start = time.time()
+                    while time.time() - pending_wait_start < 4.0:
+                        time.sleep(0.4)
+                        svc_state = get_service_status(include_ipc=True)
+                        if svc_state.get("running") and svc_state.get("ipc_online"):
+                            break
+
+                # If service is stopped, request scoped administrator elevation through standard Windows UAC prompt
+                if not svc_state.get("ipc_online") and (svc_state.get("status") in ["STOPPED", "STOP_PENDING"] or not svc_state.get("running")):
+                    log_diag("UAC_ELEVATION", "Service is STOPPED. Requesting scoped Administrator elevation via Windows UAC dialog...")
+                    uac_res = request_service_start(timeout=10.0)
+                    status_code = uac_res.get("status")
+
+                    if status_code == "uac_cancelled":
+                        cancel_msg = uac_res.get("message", "Administrator approval was cancelled by the user.")
+                        log_diag("UAC_CANCELLED", f"User declined UAC prompt (Win32 Error 1223): {cancel_msg}")
+                        current_scan_session.update({
+                            "status": "uac_cancelled",
+                            "error_type": "UAC_CANCELLED",
+                            "error": cancel_msg,
+                            "message": cancel_msg,
+                            "prediction": None,
+                            "label": None,
+                            "service_state": get_service_status(include_ipc=True)
+                        })
+                        return jsonify(current_scan_session), 200
+
+                    elif status_code == "start_failed":
+                        fail_msg = uac_res.get("message", "Elevated service startup failed.")
+                        log_diag("UAC_FAILED", f"Service start failure: {fail_msg}")
+                        current_scan_session.update({
+                            "status": "error",
+                            "error_type": "SERVICE_START_FAILED",
+                            "error": fail_msg,
+                            "message": fail_msg,
+                            "prediction": None,
+                            "label": None,
+                            "log_tail": uac_res.get("log_tail", []),
+                            "service_state": get_service_status(include_ipc=True)
+                        })
+                        return jsonify(current_scan_session), 200
+
+                    log_diag("UAC_APPROVED", "User approved UAC prompt; Windows Service confirmed RUNNING and authenticated IPC online.")
+                    svc_state = get_service_status(include_ipc=True)
+                else:
+                    log_diag("SCM_STATE", f"Service is already RUNNING (PID: {svc_state.get('pid')}, IPC: {svc_state.get('ipc_online')}). Bypassing UAC elevation prompt.")
+
+                # Check if the running service is outdated (e.g. started before isolation patches)
+                v_info = ipc_client.get_service_version_info()
+                if v_info.get("online") and not v_info.get("is_updated"):
+                    log_diag(
+                        "SERVICE_OUTDATED",
+                        f"Sniffer service (PID: {v_info.get('pid')}) is running outdated build '{v_info.get('version')}'. "
+                        f"Requesting elevated service restart to load network isolation..."
                     )
-                    log_diag("SERVICE_OUTDATED_ERROR", outdated_msg)
+                    restart_res = request_service_restart(timeout=10.0)
+                    if restart_res.get("status") == "started":
+                        log_diag("SERVICE_RESTARTED", "Windows Service successfully restarted and updated build verified.")
+                        svc_state = get_service_status(include_ipc=True)
+                    elif restart_res.get("status") == "uac_cancelled":
+                        cancel_msg = "Administrator approval was cancelled. An elevated restart of the Windows Service is required to load network isolation fixes."
+                        log_diag("UAC_CANCELLED", cancel_msg)
+                        current_scan_session.update({
+                            "status": "uac_cancelled",
+                            "label": "Capture Error",
+                            "confidence": 0.0,
+                            "error_type": "UAC_CANCELLED",
+                            "error": cancel_msg,
+                            "message": cancel_msg,
+                            "prediction": None,
+                            "label": None,
+                            "service_state": get_service_status(include_ipc=True)
+                        })
+                        return jsonify(current_scan_session), 200
+                    else:
+                        outdated_msg = (
+                            f"DDoS-Guard Windows Service is running an outdated in-memory build (PID: {v_info.get('pid')}, version: {v_info.get('version')}). "
+                            f"An elevated service restart is required to load loopback and network isolation fixes. "
+                            f"Please run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Restart' as Administrator."
+                        )
+                        log_diag("SERVICE_OUTDATED_ERROR", outdated_msg)
+                        current_scan_session.update({
+                            "status": "error",
+                            "label": "Capture Error",
+                            "confidence": 0.0,
+                            "error_type": "OUTDATED_SERVICE",
+                            "error": outdated_msg,
+                            "message": outdated_msg,
+                            "prediction": None,
+                            "label": None,
+                            "service_state": svc_state
+                        })
+                        return jsonify(current_scan_session), 200
+
+                # 2. Strict Authenticated IPC Health Verification before dispatching scan
+                auth_ok, auth_detail = ipc_client.verify_authenticated_health(require_updated_version=True)
+                if not auth_ok:
+                    log_diag("IPC_AUTH_ERROR", f"Authenticated IPC health check failed: {auth_detail}")
                     current_scan_session.update({
                         "status": "error",
                         "label": "Capture Error",
                         "confidence": 0.0,
-                        "error_type": "OUTDATED_SERVICE",
-                        "error": outdated_msg,
-                        "message": outdated_msg,
+                        "error_type": "IPC_AUTH_FAILED",
+                        "error": auth_detail,
+                        "message": f"Service is running but authenticated IPC health check failed: {auth_detail}",
                         "prediction": None,
                         "label": None,
                         "service_state": svc_state
                     })
                     return jsonify(current_scan_session), 200
 
-            # 2. Strict Authenticated IPC Health Verification before dispatching scan
-            auth_ok, auth_detail = ipc_client.verify_authenticated_health(require_updated_version=True)
-            if not auth_ok:
-                log_diag("IPC_AUTH_ERROR", f"Authenticated IPC health check failed: {auth_detail}")
-                current_scan_session.update({
-                    "status": "error",
-                    "label": "Capture Error",
-                    "confidence": 0.0,
-                    "error_type": "IPC_AUTH_FAILED",
-                    "error": auth_detail,
-                    "message": f"Service is running but authenticated IPC health check failed: {auth_detail}",
-                    "prediction": None,
-                    "label": None,
-                    "service_state": svc_state
-                })
-                return jsonify(current_scan_session), 200
+            # Generate unique scan ID with random entropy to prevent any collision or stale state
+            scan_id = f"scan_{int(time.time() * 1000)}_{secrets.token_hex(3)}"
+            live_collector.reset()
+            last_injected_flow = None
 
-        # Generate unique scan ID with random entropy to prevent any collision or stale state
-        scan_id = f"scan_{int(time.time() * 1000)}_{secrets.token_hex(3)}"
-        live_collector.reset()
-        last_injected_flow = None
+            current_scan_session.update({
+                "status": "scanning",
+                "scan_id": scan_id,
+                "continuous": continuous,
+                "started_at": time.time(),
+                "duration": duration,
+                "min_packets": min_packets,
+                "packets_captured": 0,
+                "window_packets": 0,
+                "throughput_kbps": 0.0,
+                "protocol": "--",
+                "interface": adapter_info,
+                "driver_status": driver_info,
+                "service_state": svc_state,
+                "is_live_capture": bool(svc_state.get("running") and svc_state.get("ipc_online")) or bool(driver_info.get("can_capture_live")),
+                "prediction": None,
+                "label": None,
+                "is_attack": False,
+                "confidence": 0.0,
+                "flow_summary": {},
+                "error": None,
+                "message": f"Starting live monitoring on [{adapter_info['name']}] ({adapter_info['type']})..." if continuous else f"Scanning live traffic on [{adapter_info['name']}] ({adapter_info['type']})..."
+            })
+            is_monitoring = True
 
-        current_scan_session.update({
-            "status": "scanning",
-            "scan_id": scan_id,
-            "continuous": continuous,
-            "started_at": time.time(),
-            "duration": duration,
-            "min_packets": min_packets,
-            "packets_captured": 0,
-            "window_packets": 0,
-            "throughput_kbps": 0.0,
-            "protocol": "--",
-            "interface": adapter_info,
-            "driver_status": driver_info,
-            "service_state": svc_state,
-            "is_live_capture": bool(svc_state.get("running") and svc_state.get("ipc_online")) or bool(driver_info.get("can_capture_live")),
-            "prediction": None,
-            "label": None,
-            "is_attack": False,
-            "confidence": 0.0,
-            "flow_summary": {},
-            "error": None,
-            "message": f"Starting live monitoring on [{adapter_info['name']}] ({adapter_info['type']})..." if continuous else f"Scanning live traffic on [{adapter_info['name']}] ({adapter_info['type']})..."
-        })
-        is_monitoring = True
+            log_diag("SCAN_INITIALIZED", f"Scan {scan_id} successfully initiated on [{adapter_info['name']}] (continuous={continuous})", scan_id=scan_id)
 
-        log_diag("SCAN_INITIALIZED", f"Scan {scan_id} successfully initiated on [{adapter_info['name']}] (continuous={continuous})", scan_id=scan_id)
+            threading.Thread(
+                target=run_scan_worker,
+                args=(scan_id, adapter_info, driver_info, duration, min_packets, continuous),
+                daemon=True
+            ).start()
 
-        threading.Thread(
-            target=run_scan_worker,
-            args=(scan_id, adapter_info, driver_info, duration, min_packets, continuous),
-            daemon=True
-        ).start()
-
-        return jsonify(current_scan_session), 200
+            return jsonify(current_scan_session), 200
+        except Exception as e:
+            err_msg = str(e)
+            log_diag("SCAN_START_EXCEPTION", f"Scan startup exception: {err_msg}")
+            is_monitoring = False
+            current_scan_session.update({
+                "status": "error",
+                "label": "Capture Error",
+                "confidence": 0.0,
+                "error_type": "INITIALIZATION_FAILED",
+                "error": err_msg,
+                "message": f"Scan initialization failed: {err_msg}"
+            })
+            return jsonify(current_scan_session), 200
 
 
 @app.route('/api/scan-status', methods=['GET'])

@@ -1216,11 +1216,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   async function startScan(opts = {}) {
     const forceRestart = Boolean(opts && opts.forceRestart);
-    const switchSeq = (opts && opts.switchSeq !== undefined) ? opts.switchSeq : adapterSwitchSeq;
+    const isUserExplicitStart = (!opts || opts.switchSeq === undefined);
+    const switchSeq = isUserExplicitStart ? ++adapterSwitchSeq : opts.switchSeq;
 
     if (isScanning && !forceRestart) return;
 
     activeScanId = null;
+    userManuallyStopped = false;
     console.log(`[DDoS-Guard] Initiating continuous monitoring session (seq: ${switchSeq}, forceRestart: ${forceRestart})...`);
 
     // Reset previous outputs immediately
@@ -1287,7 +1289,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // Sequence check before network dispatch to discard stale overlapping requests
-      if (switchSeq !== adapterSwitchSeq) {
+      if (!isUserExplicitStart && switchSeq !== adapterSwitchSeq) {
         console.log(`[DDoS-Guard] Pre-fetch sequence mismatch (seq ${switchSeq} < ${adapterSwitchSeq}). Aborting start.`);
         return;
       }
@@ -1317,7 +1319,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       // Sequence check after network dispatch to discard stale responses from fast switching
-      if (switchSeq !== adapterSwitchSeq) {
+      if (!isUserExplicitStart && switchSeq !== adapterSwitchSeq) {
         console.log(`[DDoS-Guard] Post-fetch sequence mismatch (seq ${switchSeq} < ${adapterSwitchSeq}). Discarding start response.`);
         try { fetch(`${API_BASE_URL}/scan-stop`, { method: "POST" }); } catch (e) {}
         return;
@@ -2333,23 +2335,32 @@ document.addEventListener("DOMContentLoaded", () => {
     const filterAllCount = document.getElementById("psFilterAllCount");
     const searchInput = document.getElementById("psSearchInput");
 
-    async function loadNetworkInfo() {
-      try {
-        const res = await fetch("/api/port-scan/network-info");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.status === "success") {
-          autoDetectedSubnet = data.suggested_subnet || "";
-          if (localIpBadge) {
-            const isConn = data.is_connected && data.local_ip && !data.local_ip.startsWith("127.");
-            const ipLabel = isConn ? data.local_ip : (data.local_ip || "Offline");
-            const typeStr = (data.adapter_type && data.adapter_type !== 'None' && data.adapter_type !== 'Other') ? ` (${data.adapter_type})` : '';
-            localIpBadge.innerHTML = `<i class="fas fa-circle-dot"></i> Local IP: ${ipLabel}${typeStr}`;
+    let networkInfoPromise = null;
+    function loadNetworkInfo() {
+      networkInfoPromise = (async () => {
+        try {
+          const res = await fetch("/api/port-scan/network-info");
+          if (!res.ok) return null;
+          const data = await res.json();
+          if (data.status === "success") {
+            autoDetectedSubnet = data.suggested_subnet || "";
+            if (currentMode === "network" && targetInput && !targetInput.value && autoDetectedSubnet) {
+              targetInput.value = autoDetectedSubnet;
+            }
+            if (localIpBadge) {
+              const isConn = data.is_connected && data.local_ip && !data.local_ip.startsWith("127.");
+              const ipLabel = isConn ? data.local_ip : (data.local_ip || "Offline");
+              const typeStr = (data.adapter_type && data.adapter_type !== 'None' && data.adapter_type !== 'Other') ? ` (${data.adapter_type})` : '';
+              localIpBadge.innerHTML = `<i class="fas fa-circle-dot"></i> Local IP: ${ipLabel}${typeStr}`;
+            }
+            return data;
           }
+        } catch (e) {
+          console.warn("Could not load network info for port scanner:", e);
         }
-      } catch (e) {
-        console.warn("Could not load network info for port scanner:", e);
-      }
+        return null;
+      })();
+      return networkInfoPromise;
     }
 
     function switchMode(mode) {
@@ -2422,7 +2433,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (isPortScanning) return;
       hideError();
 
-      const target = (targetInput ? targetInput.value : "").trim();
+      let target = (targetInput ? targetInput.value : "").trim();
+      if (!target && currentMode === "network" && networkInfoPromise) {
+        await networkInfoPromise;
+        target = (targetInput ? targetInput.value : "").trim();
+        if (!target && autoDetectedSubnet) {
+          target = autoDetectedSubnet;
+          if (targetInput) targetInput.value = target;
+        }
+      }
       if (!target) {
         if (currentMode === "network") {
           showError("No active local subnet detected. Please enter a target IPv4 subnet (e.g. 192.168.1.0/24) manually.");
@@ -2883,9 +2902,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Auto Subnet Button
       if (autoSubnetBtn) {
-        autoSubnetBtn.addEventListener("click", () => {
+        autoSubnetBtn.addEventListener("click", async () => {
+          if (!autoDetectedSubnet && networkInfoPromise) {
+            await networkInfoPromise;
+          }
           if (targetInput && autoDetectedSubnet) {
             targetInput.value = autoDetectedSubnet;
+            hideError();
           } else {
             showError("No active local subnet detected on the system. Please enter a target subnet manually.");
           }

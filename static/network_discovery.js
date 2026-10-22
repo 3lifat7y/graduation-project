@@ -10,6 +10,7 @@
   // State Management
   const state = {
     networkInfo: null,
+    networkInfoPromise: null,
     scanStatus: 'idle', // 'idle' | 'scanning' | 'completed' | 'stopped' | 'error'
     scanId: null,
     pollInterval: null,
@@ -180,19 +181,25 @@
   }
 
   // 1. Fetch Network Configuration on Load
-  async function loadNetworkInfo() {
-    try {
-      const res = await fetch('/api/network-discovery/network-info');
-      const data = await res.json();
-      if (data.status === 'success' && data.network) {
-        state.networkInfo = data.network;
-        renderNetworkInfo(data.network);
-      } else {
-        showAlert(data.message || 'Unable to detect active local network interface.');
+  function loadNetworkInfo() {
+    state.networkInfoPromise = (async () => {
+      try {
+        const res = await fetch('/api/network-discovery/network-info');
+        const data = await res.json();
+        if (data.status === 'success' && data.network) {
+          state.networkInfo = data.network;
+          renderNetworkInfo(data.network);
+          return data.network;
+        } else {
+          showAlert(data.message || 'Unable to detect active local network interface.');
+          return null;
+        }
+      } catch (err) {
+        showAlert('Failed to connect to Network Discovery API. Ensure Flask server is online.');
+        return null;
       }
-    } catch (err) {
-      showAlert('Failed to connect to Network Discovery API. Ensure Flask server is online.');
-    }
+    })();
+    return state.networkInfoPromise;
   }
 
   function renderNetworkInfo(net) {
@@ -244,7 +251,18 @@
       return;
     }
     hideAlert();
-    const subnet = (elements.ndSubnetInput ? elements.ndSubnetInput.value : '').trim();
+    let subnet = (elements.ndSubnetInput ? elements.ndSubnetInput.value : '').trim();
+    if (!subnet && state.networkInfoPromise) {
+      const net = await state.networkInfoPromise;
+      if (net && net.subnet_cidr) {
+        subnet = net.subnet_cidr;
+        if (elements.ndSubnetInput) elements.ndSubnetInput.value = subnet;
+      }
+    }
+    if (!subnet && state.networkInfo && state.networkInfo.subnet_cidr) {
+      subnet = state.networkInfo.subnet_cidr;
+      if (elements.ndSubnetInput) elements.ndSubnetInput.value = subnet;
+    }
     const timeout = parseFloat(elements.ndTimeoutSelect ? elements.ndTimeoutSelect.value : 0.6);
     const concurrency = parseInt(elements.ndConcurrencySelect ? elements.ndConcurrencySelect.value : 50, 10);
 
@@ -1050,9 +1068,13 @@
       });
     }
     if (elements.ndUseLocalSubnetBtn) {
-      elements.ndUseLocalSubnetBtn.addEventListener('click', () => {
+      elements.ndUseLocalSubnetBtn.addEventListener('click', async () => {
+        if (!state.networkInfo && state.networkInfoPromise) {
+          await state.networkInfoPromise;
+        }
         if (state.networkInfo && state.networkInfo.subnet_cidr) {
           elements.ndSubnetInput.value = state.networkInfo.subnet_cidr;
+          hideAlert();
         }
       });
     }

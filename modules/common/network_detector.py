@@ -8,9 +8,12 @@ and checks packet capture drivers (Npcap, Scapy, Raw Sockets) without hardcoded 
 
 import os
 import sys
+import time
 import json
 import socket
 import shutil
+import threading
+import ipaddress
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
@@ -19,6 +22,12 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+# Thread-safe in-memory cache for Windows network adapter discovery
+_adapter_cache_lock = threading.Lock()
+_adapter_cache_time: float = 0.0
+_adapter_cache_data: List[Dict[str, Any]] = []
+ADAPTER_CACHE_TTL_SECONDS: float = 3.0
 
 
 def is_admin_user() -> bool:
@@ -111,11 +120,26 @@ def get_scapy_interfaces_info() -> Tuple[Dict[int, Dict[str, Any]], Dict[str, Di
     return info_by_idx, info_by_name
 
 
-def get_windows_network_adapters() -> List[Dict[str, Any]]:
+def invalidate_adapter_cache():
+    """Invalidates the in-memory network adapter discovery cache."""
+    global _adapter_cache_time, _adapter_cache_data
+    with _adapter_cache_lock:
+        _adapter_cache_time = 0.0
+        _adapter_cache_data = []
+
+
+def get_windows_network_adapters(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """
     Queries all network adapters and IPv4 addresses via Windows PowerShell
     and enriches each adapter with Scapy/Npcap device identifiers without hardcoded names or IPs.
+    Employs a thread-safe 3-second cache to prevent concurrent PowerShell process storms.
     """
+    global _adapter_cache_time, _adapter_cache_data
+    with _adapter_cache_lock:
+        now = time.time()
+        if not force_refresh and (now - _adapter_cache_time < ADAPTER_CACHE_TTL_SECONDS) and _adapter_cache_data:
+            return [dict(ad) for ad in _adapter_cache_data]
+
     adapters = []
     scapy_by_idx, scapy_by_name = get_scapy_interfaces_info()
 
@@ -132,7 +156,7 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=10
             )
             if res.returncode == 0 and res.stdout.strip():
                 payload = json.loads(res.stdout.strip())
@@ -146,25 +170,31 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                 if isinstance(raw_routes, dict):
                     raw_routes = [raw_routes]
 
-                ips_by_idx = {}
+                ips_by_idx: Dict[int, List[str]] = {}
+                prefixes_by_idx: Dict[int, List[int]] = {}
                 for entry in raw_ips:
                     idx = entry.get("InterfaceIndex")
                     ip = entry.get("IPAddress")
+                    prefix = entry.get("PrefixLength", 24)
                     if idx and ip:
-                        ips_by_idx.setdefault(idx, []).append(ip)
+                        ips_by_idx.setdefault(int(idx), []).append(str(ip).strip())
+                        try:
+                            prefixes_by_idx.setdefault(int(idx), []).append(int(prefix))
+                        except (ValueError, TypeError):
+                            prefixes_by_idx.setdefault(int(idx), []).append(24)
 
-                routes_by_idx = {}
+                routes_by_idx: Dict[int, str] = {}
                 for entry in raw_routes:
                     r_idx = entry.get("InterfaceIndex")
                     hop = entry.get("NextHop")
                     if r_idx and hop and hop != "0.0.0.0":
-                        routes_by_idx[r_idx] = hop
+                        routes_by_idx[int(r_idx)] = str(hop).strip()
 
                 for ad in raw_adapters:
                     name = str(ad.get("Name", "")).strip()
                     desc = str(ad.get("InterfaceDescription", "")).strip()
                     status = str(ad.get("Status", "Unknown")).strip()
-                    idx = ad.get("InterfaceIndex", 0)
+                    idx = int(ad.get("InterfaceIndex", 0))
                     mac = str(ad.get("MacAddress", "")).strip()
                     speed = str(ad.get("LinkSpeed", "0 bps")).strip()
                     p_media = str(ad.get("PhysicalMediaType", "")).strip().lower()
@@ -219,6 +249,21 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                     is_connected = status.lower() == "up" and has_ipv4
                     can_capture = bool(network_name)
 
+                    # Calculate subnet mask, prefix, and CIDR
+                    prefix_list = prefixes_by_idx.get(idx, [24])
+                    prefix_len = prefix_list[0] if prefix_list else 24
+                    subnet_cidr = None
+                    subnet_mask = None
+                    if primary_ip:
+                        try:
+                            # Clamp prefix between /8 and /32
+                            safe_prefix = min(max(prefix_len, 8), 32)
+                            iface_net = ipaddress.IPv4Interface(f"{primary_ip}/{safe_prefix}").network
+                            subnet_cidr = str(iface_net)
+                            subnet_mask = str(iface_net.netmask)
+                        except Exception:
+                            pass
+
                     adapters.append({
                         "name": name,
                         "description": desc,
@@ -234,6 +279,9 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                         "is_connected": is_connected,
                         "can_capture": can_capture,
                         "gateway": gateway,
+                        "prefix_length": prefix_len,
+                        "subnet_mask": subnet_mask,
+                        "subnet_cidr": subnet_cidr,
                         "is_virtual": is_virtual,
                         "network_name": network_name,
                         "guid": guid,
@@ -269,6 +317,17 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                 adapter_type = "Other"
 
             ips = [s_ip] if s_ip and not s_ip.startswith("169.254.") else []
+            primary_ip = ips[0] if ips else None
+            subnet_cidr = None
+            subnet_mask = None
+            if primary_ip:
+                try:
+                    iface_net = ipaddress.IPv4Interface(f"{primary_ip}/24").network
+                    subnet_cidr = str(iface_net)
+                    subnet_mask = str(iface_net.netmask)
+                except Exception:
+                    pass
+
             adapters.append({
                 "name": s_name,
                 "description": s_desc,
@@ -278,6 +337,15 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                 "link_speed": "N/A",
                 "type": adapter_type,
                 "ips": ips,
+                "primary_ip": primary_ip,
+                "has_ipv4": bool(ips),
+                "is_enabled": True,
+                "is_connected": bool(ips),
+                "can_capture": bool(s_entry.get("network_name")),
+                "gateway": None,
+                "prefix_length": 24,
+                "subnet_mask": subnet_mask,
+                "subnet_cidr": subnet_cidr,
                 "is_virtual": is_virtual,
                 "network_name": s_entry.get("network_name"),
                 "guid": s_entry.get("guid"),
@@ -288,6 +356,15 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
     if not adapters:
         active_ip = get_active_routable_ip()
         if active_ip:
+            subnet_cidr = None
+            subnet_mask = None
+            try:
+                iface_net = ipaddress.IPv4Interface(f"{active_ip}/24").network
+                subnet_cidr = str(iface_net)
+                subnet_mask = str(iface_net.netmask)
+            except Exception:
+                pass
+
             adapters.append({
                 "name": "Primary Active Adapter",
                 "description": "Auto-detected routable IPv4 network interface",
@@ -297,11 +374,25 @@ def get_windows_network_adapters() -> List[Dict[str, Any]]:
                 "link_speed": "N/A",
                 "type": "Ethernet",  # Conservative neutral physical default, never assume Wi-Fi
                 "ips": [active_ip],
+                "primary_ip": active_ip,
+                "has_ipv4": True,
+                "is_enabled": True,
+                "is_connected": True,
+                "can_capture": False,
+                "gateway": None,
+                "prefix_length": 24,
+                "subnet_mask": subnet_mask,
+                "subnet_cidr": subnet_cidr,
                 "is_virtual": False,
                 "network_name": None,
                 "guid": None,
                 "scapy_name": "Primary Active Adapter"
             })
+
+    # Store discovered adapters in memory cache
+    with _adapter_cache_lock:
+        _adapter_cache_time = time.time()
+        _adapter_cache_data = [dict(ad) for ad in adapters]
 
     return adapters
 
@@ -474,18 +565,7 @@ def auto_detect_interface_with_rationale(adapters: Optional[List[Dict[str, Any]]
             )
             break
 
-    # Priority 2: Connected physical Ethernet with routable IP (or matching active_ip)
-    if not selected:
-        for ad in candidates:
-            if not ad.get("is_virtual") and ad.get("type") == "Ethernet":
-                selected = ad
-                rationale = (
-                    f"Auto-selected '{ad.get('name')}' ({ad.get('primary_ip')}): Operational physical Ethernet "
-                    f"adapter on local subnet."
-                )
-                break
-
-    # Priority 3: Connected physical Wi-Fi adapter with status 'Up', valid IPv4, and default gateway
+    # Priority 2: Connected physical Wi-Fi adapter with status 'Up', valid IPv4, and default gateway
     if not selected:
         for ad in candidates:
             if not ad.get("is_virtual") and ad.get("type") == "Wi-Fi" and ad.get("gateway"):
@@ -498,7 +578,29 @@ def auto_detect_interface_with_rationale(adapters: Optional[List[Dict[str, Any]]
                 )
                 break
 
-    # Priority 4: Connected physical Wi-Fi with valid IPv4
+    # Priority 3: Connected physical adapter matching active_ip (the active outbound route)
+    if not selected and active_ip:
+        for ad in candidates:
+            if not ad.get("is_virtual") and any(ip == active_ip for ip in ad.get("ips", [])):
+                selected = ad
+                rationale = (
+                    f"Auto-selected '{ad.get('name')}' ({ad.get('primary_ip')}): Operational physical {ad.get('type')} "
+                    f"adapter matching active internet-routed IP ({active_ip})."
+                )
+                break
+
+    # Priority 4: Connected physical Ethernet on local subnet (without gateway)
+    if not selected:
+        for ad in candidates:
+            if not ad.get("is_virtual") and ad.get("type") == "Ethernet":
+                selected = ad
+                rationale = (
+                    f"Auto-selected '{ad.get('name')}' ({ad.get('primary_ip')}): Operational physical Ethernet "
+                    f"adapter on local subnet."
+                )
+                break
+
+    # Priority 5: Connected physical Wi-Fi with valid IPv4
     if not selected:
         for ad in candidates:
             if not ad.get("is_virtual") and ad.get("type") == "Wi-Fi":

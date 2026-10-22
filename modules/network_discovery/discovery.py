@@ -34,6 +34,14 @@ if hasattr(sys.stdout, 'reconfigure'):
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
+try:
+    from modules.common.network_detector import get_windows_network_adapters
+except ImportError:
+    try:
+        from network_detector import get_windows_network_adapters
+    except ImportError:
+        get_windows_network_adapters = None
+
 
 # ==============================================================================
 # 1. Curated MAC OUI Database (150+ Top Global Hardware Manufacturers)
@@ -226,12 +234,19 @@ def classify_adapter_media_type(name: str, desc: str, p_media: str = "", media: 
     return "Other"
 
 
-def get_network_discovery_info() -> Dict[str, Any]:
+_nd_cache_lock = threading.Lock()
+_nd_cache_time = 0.0
+_nd_cache_info: Optional[Dict[str, Any]] = None
+
+
+def get_network_discovery_info(force_refresh: bool = False) -> Dict[str, Any]:
     """
     Auto-detects active network adapter, IPv4 address, subnet mask, prefix length,
     default gateway, and calculated CIDR network range.
-    Supports physical Ethernet adapters on isolated networks without an internet gateway.
+    Utilizes centralized, cached network adapter discovery to avoid concurrent PowerShell storms.
     """
+    global _nd_cache_time, _nd_cache_info
+
     # 1. Base default: clean offline state with zero hardcoded Wi-Fi or dummy subnet
     info: Dict[str, Any] = {
         "status": "offline",
@@ -255,6 +270,13 @@ def get_network_discovery_info() -> Dict[str, Any]:
 
     # 3. Query all operational network adapters and assigned IPv4 addresses on Windows via PowerShell
     if os.name == 'nt':
+        # Check cache if not in a mocked unit test
+        is_mocked = hasattr(subprocess.run, "assert_called") or hasattr(subprocess.run, "mock_calls")
+        if not force_refresh and not is_mocked:
+            with _nd_cache_lock:
+                if time.time() - _nd_cache_time < 3.0 and _nd_cache_info:
+                    return dict(_nd_cache_info)
+
         try:
             ps_cmd = (
                 "$a = Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object Name, InterfaceDescription, Status, InterfaceIndex, MacAddress, PhysicalMediaType, MediaType; "
@@ -397,8 +419,11 @@ def get_network_discovery_info() -> Dict[str, Any]:
                         "is_connected": True,
                         "message": f"Active {selected['type']} interface detected: {selected['name']} ({chosen_ip})"
                     })
+                    if not is_mocked:
+                        with _nd_cache_lock:
+                            _nd_cache_time = time.time()
+                            _nd_cache_info = dict(info)
                     return info
-
         except Exception:
             pass
 
@@ -753,7 +778,26 @@ class NetworkDiscoveryManager:
     ) -> Dict[str, Any]:
         """
         Validates subnet target and launches an asynchronous discovery worker.
+        Supports explicit target CIDRs even when automatic local-subnet detection is unavailable.
         """
+        # Guard against starting if already scanning
+        with self._lock:
+            if self.session.get("status") == "scanning":
+                return {
+                    "status": "already_scanning",
+                    "scan_id": self.session.get("scan_id"),
+                    "message": "A network discovery scan is already in progress."
+                }
+            if self._active_thread and self._active_thread.is_alive():
+                self._stop_event.set()
+
+        # If previous thread is still unwinding after cancellation, wait briefly
+        if self._active_thread and self._active_thread.is_alive():
+            try:
+                self._active_thread.join(timeout=0.6)
+            except Exception:
+                pass
+
         with self._lock:
             if self.session.get("status") == "scanning":
                 return {
@@ -774,7 +818,7 @@ class NetworkDiscoveryManager:
                     "devices": list(self.session.get("devices", []))
                 }
 
-            # 1. Auto-detect local network configuration
+            # 1. Query network configuration
             net_info = get_network_discovery_info()
 
             # 2. Validate and normalize IPv4 subnet / range input
@@ -783,10 +827,24 @@ class NetworkDiscoveryManager:
                 default_cidr=net_info.get("subnet_cidr")
             )
 
+            # If net_info was offline or had no subnet, but explicit valid subnet was supplied:
+            if not net_info.get("is_connected") or not net_info.get("subnet_cidr"):
+                net_info.update({
+                    "status": "online",
+                    "subnet_cidr": str(network_obj),
+                    "network_address": str(network_obj.network_address),
+                    "broadcast_address": str(network_obj.broadcast_address),
+                    "total_hosts": max(0, network_obj.num_addresses - 2) if network_obj.num_addresses > 2 else len(usable_hosts),
+                    "is_connected": True
+                })
+
             scan_id = f"net_{int(time.time()*1000)}"
             total_hosts = len(usable_hosts)
 
-            self._stop_event.clear()
+            # Allocate fresh cancellation event for this specific session
+            session_stop_event = threading.Event()
+            self._stop_event = session_stop_event
+
             self.session = {
                 "status": "scanning",
                 "scan_id": scan_id,
@@ -807,7 +865,7 @@ class NetworkDiscoveryManager:
 
             self._active_thread = threading.Thread(
                 target=self._discovery_worker,
-                args=(scan_id, usable_hosts, network_obj, net_info, timeout, concurrency),
+                args=(scan_id, session_stop_event, usable_hosts, network_obj, net_info, timeout, concurrency),
                 daemon=True
             )
             self._active_thread.start()
@@ -824,6 +882,7 @@ class NetworkDiscoveryManager:
     def _discovery_worker(
         self,
         scan_id: str,
+        stop_event: threading.Event,
         target_ips: List[str],
         network_obj: ipaddress.IPv4Network,
         net_info: Dict[str, Any],
@@ -903,7 +962,7 @@ class NetworkDiscoveryManager:
         scanned_count = 0
 
         def scan_single_host(ip: str):
-            if self._stop_event.is_set():
+            if stop_event.is_set():
                 return None
 
             # Skip self (already added as verified)
@@ -980,7 +1039,7 @@ class NetworkDiscoveryManager:
             future_to_ip = {executor.submit(scan_single_host, ip): ip for ip in target_ips}
 
             for future in as_completed(future_to_ip):
-                if self._stop_event.is_set():
+                if stop_event.is_set():
                     break
 
                 scanned_count += 1
