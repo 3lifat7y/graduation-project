@@ -2421,6 +2421,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
     if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
 
+    // Close any open modals and reset body scroll lock
+    if (typeof closeAttackModal === "function") {
+      try { closeAttackModal(); } catch (_) {}
+    }
+    if (typeof window.PortScannerUI !== "undefined" && window.PortScannerUI && typeof window.PortScannerUI.closePortDetailsModal === "function") {
+      try { window.PortScannerUI.closePortDetailsModal(); } catch (_) {}
+    }
+    document.body.style.overflow = "";
+
     if (targetView === "monitoring") {
       document.body.classList.add("dedicated-mode-monitoring");
       document.body.classList.remove("dedicated-mode-port-scanner", "home-view");
@@ -2466,8 +2475,12 @@ document.addEventListener("DOMContentLoaded", () => {
       setTopNavActive("port-scanner");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      if (typeof PortScannerUI !== "undefined" && PortScannerUI.checkAndAttachActivePortScan) {
-        PortScannerUI.checkAndAttachActivePortScan();
+      if (typeof window.PortScannerUI !== "undefined" && window.PortScannerUI) {
+        if (window.PortScannerUI.handleIncomingTarget) {
+          window.PortScannerUI.handleIncomingTarget();
+        } else if (window.PortScannerUI.checkAndAttachActivePortScan) {
+          window.PortScannerUI.checkAndAttachActivePortScan();
+        }
       }
 
       if (updateHistory) {
@@ -2523,18 +2536,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Helper to auto-close (mobile) or auto-collapse (desktop) sidebar after navigation
+  // Helper to auto-close mobile drawer after navigation
   function autoCloseSidebarAfterNav() {
     if (window.innerWidth < 992) {
       closeMobileSidebar();
-    } else {
-      if (!document.body.classList.contains("sidebar-collapsed")) {
-        document.body.classList.add("sidebar-collapsed");
-        localStorage.setItem("nss_sidebar_collapsed", "true");
-        if (navbarSidebarToggleBtn) {
-          navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
-        }
-      }
     }
   }
 
@@ -2645,9 +2650,6 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("popstate", () => {
     switchView(getQueryView(), false);
   });
-
-  // Initialize view from URL
-  switchView(getQueryView(), false);
 
   // Back To Top Button
   if (backToTopBtn) {
@@ -2853,7 +2855,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return networkInfoPromise;
     }
 
-    function switchMode(mode) {
+    function switchMode(mode, preserveValue = false) {
       currentMode = mode;
       hideError();
 
@@ -2878,7 +2880,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (autoSubnetBtn) autoSubnetBtn.style.display = "none";
         if (authWrap) authWrap.style.display = "none";
       } else if (mode === "target_ip") {
-        targetInput.value = "";
+        if (!preserveValue) {
+          targetInput.value = "";
+        }
         targetInput.readOnly = false;
         targetInput.placeholder = "e.g. 192.168.1.15 or router.local";
         if (targetHint) targetHint.textContent = "Enter target IPv4 address or resolvable hostname.";
@@ -3281,8 +3285,15 @@ document.addEventListener("DOMContentLoaded", () => {
           throw new Error(data.message || "Failed to start port scan.");
         }
 
+        if (data.status === "already_scanning") {
+          showError(`A port scan is already running on ${data.target || "another target"}. Stop it or wait for completion before scanning ${target}.`);
+          checkAndAttachActivePortScan();
+          return;
+        }
+
         if (portScanPollTimer) clearInterval(portScanPollTimer);
         portScanPollTimer = setInterval(pollScanStatus, 350);
+        pollScanStatus();
 
       } catch (err) {
         resetUI();
@@ -3332,8 +3343,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (kpiDuration) kpiDuration.textContent = `${(data.duration_s || 0).toFixed(1)}s`;
         if (kpiHosts) updateTelemetryCounter(kpiHosts, data.active_hosts_count || 0);
 
-        // Render live interim results if any hosts found
-        if (data.results && data.results.length > 0) {
+        // Render live interim results only when Port Scanner section is currently visible
+        const isScannerVisible = document.body.classList.contains("dedicated-mode-port-scanner");
+        if (isScannerVisible && data.results && data.results.length > 0) {
           renderResults(data.results);
         }
 
@@ -3362,7 +3374,7 @@ document.addEventListener("DOMContentLoaded", () => {
             showError(data.error || data.message || "An error occurred during port scan.");
           }
 
-          if (data.results && data.results.length > 0) {
+          if (isScannerVisible && data.results && data.results.length > 0) {
             renderResults(data.results);
             if (exportGroup) exportGroup.style.display = "inline-flex";
           }
@@ -3408,6 +3420,9 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           if (kpiGrid) kpiGrid.style.display = "grid";
           if (kpiCardHosts) kpiCardHosts.style.display = (data.scan_type === "network") ? "flex" : "none";
+          if (data.results && data.results.length > 0) {
+            renderResults(data.results);
+          }
           if (portScanPollTimer) clearInterval(portScanPollTimer);
           portScanPollTimer = setInterval(pollScanStatus, 350);
         } else if (data.status === "completed" && data.results && data.results.length > 0) {
@@ -3897,20 +3912,132 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // Check URL parameters (e.g. from Network Discovery card Scan Ports link)
+      // Check URL parameters and session triggers (e.g. from Network Discovery Scan Ports action)
+      handleIncomingTarget();
+    }
+
+    // Helper: Validate target IP or hostname strictly
+    function isValidTargetAddress(addr) {
+      if (!addr || typeof addr !== "string") return false;
+      const clean = addr.trim();
+      if (!clean || clean === "Unavailable" || clean === "Unknown" || clean === "N/A" || clean === "Not detected") {
+        return false;
+      }
+      // IPv4 check: 4 octets 0-255
+      const octets = clean.split(".");
+      if (octets.length === 4) {
+        const allValid = octets.every(o => {
+          if (!/^\d{1,3}$/.test(o)) return false;
+          const n = Number(o);
+          return n >= 0 && n <= 255;
+        });
+        if (allValid) return true;
+      }
+      // Hostname check: alphanumeric, dots, hyphens
+      if (/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(clean)) {
+        return true;
+      }
+      return false;
+    }
+
+    // Handles incoming target from Network Discovery, URL parameters, or navigation state
+    async function handleIncomingTarget() {
+      let targetParam = "";
+      let triggerParam = "";
+
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        const targetParam = urlParams.get("target");
-        if (targetParam) {
-          switchMode("target_ip");
-          if (targetInput) targetInput.value = targetParam;
-          const scannerSec = document.getElementById("port-scanner") || document.getElementById("portScannerSection");
-          if (scannerSec) {
-            setTimeout(() => scannerSec.scrollIntoView({ behavior: "smooth" }), 250);
-          }
+        targetParam = (urlParams.get("target") || "").trim();
+        triggerParam = (urlParams.get("trigger") || "").trim();
+      } catch (e) {
+        targetParam = "";
+      }
+
+      // Check one-time auto-trigger session token
+      let autoTrigger = null;
+      try {
+        const raw = sessionStorage.getItem("port_scan_auto_trigger");
+        if (raw) {
+          autoTrigger = JSON.parse(raw);
+          // Consume immediately so it never re-fires on page refresh (F5)!
+          sessionStorage.removeItem("port_scan_auto_trigger");
         }
       } catch (e) {
-        // ignore
+        autoTrigger = null;
+      }
+
+      if (!targetParam && autoTrigger && autoTrigger.ip) {
+        targetParam = autoTrigger.ip.trim();
+      }
+
+      if (!targetParam) {
+        // Normal direct navigation: check and reconnect to any already active or completed scan
+        checkAndAttachActivePortScan();
+        return;
+      }
+
+      // Determine if auto-scan should be triggered (user explicitly clicked Scan Ports)
+      const isAutoScanRequested = (
+        triggerParam === "discovery" ||
+        (autoTrigger && (autoTrigger.ip === targetParam || Date.now() - (autoTrigger.timestamp || 0) < 30000))
+      );
+
+      // Clean the trigger from URL history state so refresh (F5) does not re-run auto-scan!
+      try {
+        if (triggerParam && window.history && window.history.replaceState) {
+          const cleanParams = new URLSearchParams(window.location.search);
+          cleanParams.delete("trigger");
+          const cleanQuery = cleanParams.toString() ? `?${cleanParams.toString()}` : "";
+          window.history.replaceState({ view: "port-scanner" }, "", `${window.location.pathname}${cleanQuery}`);
+        }
+      } catch (e) {
+        // ignore history state errors
+      }
+
+      // Validate target address
+      if (!isValidTargetAddress(targetParam)) {
+        switchMode("target_ip", false);
+        if (targetInput) targetInput.value = targetParam;
+        showError(`Invalid target IP address: '${targetParam || "Unknown"}'. Please enter a valid IPv4 address.`);
+        return;
+      }
+
+      // Set mode to target_ip, preserve value, and populate field
+      switchMode("target_ip", true);
+      if (targetInput) {
+        targetInput.value = targetParam;
+      }
+
+      // Scroll into view
+      const scannerSec = document.getElementById("port-scanner") || document.getElementById("portScannerSection");
+      if (scannerSec) {
+        setTimeout(() => scannerSec.scrollIntoView({ behavior: "smooth" }), 150);
+      }
+
+      if (isAutoScanRequested) {
+        // Verify not already scanning
+        if (isPortScanning) {
+          return;
+        }
+        // Small delay to ensure DOM and view styles are settled
+        setTimeout(() => {
+          startScan();
+        }, 120);
+      } else {
+        // If not an auto-scan (e.g. user refreshed while keeping target in URL), attach or show status
+        checkAndAttachActivePortScan();
+      }
+    }
+
+    function scanTarget(ip, autoStart = true) {
+      if (!isValidTargetAddress(ip)) {
+        showError(`Cannot scan target: '${ip || "Unknown"}' is not a valid IPv4 address.`);
+        return;
+      }
+      switchMode("target_ip", true);
+      if (targetInput) targetInput.value = ip;
+      if (autoStart && !isPortScanning) {
+        startScan();
       }
     }
 
@@ -3918,11 +4045,14 @@ document.addEventListener("DOMContentLoaded", () => {
       init,
       startScan,
       stopScan,
+      scanTarget,
+      handleIncomingTarget,
       checkAndAttachActivePortScan,
       showPortDetailsModal,
       closePortDetailsModal
     };
   })();
+  window.PortScannerUI = PortScannerUI;
 
   // ============================================================================
   // 10. Home Page Cybersecurity Constellation Background & KPI Animation
@@ -4114,6 +4244,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize Port Scanner UI
   PortScannerUI.init();
+
+  // Initialize view from URL once all controllers and UI modules are ready
+  switchView(getQueryView(), false);
 
   // Lifecycle Decoupled: Navigating between sections or leaving the page does NOT
   // terminate backend packet capture. Capture continues until user explicitly clicks Stop.

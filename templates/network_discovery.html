@@ -149,7 +149,7 @@
 
       <!-- Summary KPI Cards -->
       <section class="nd-kpi-grid">
-        <div class="nd-kpi-card">
+        <div class="nd-kpi-card" id="cardKpiTotal" title="Total unique IPv4 endpoints discovered on target subnet">
           <div class="nd-kpi-icon"><i class="fas fa-server"></i></div>
           <div class="nd-kpi-info">
             <span class="nd-kpi-value" id="kpiTotalDevices">0</span>
@@ -157,15 +157,23 @@
           </div>
         </div>
 
-        <div class="nd-kpi-card highlight-green">
+        <div class="nd-kpi-card highlight-green" id="cardKpiOnline" title="Hosts confirmed reachable via direct ARP, ICMP, or TCP probes">
           <div class="nd-kpi-icon"><i class="fas fa-signal"></i></div>
           <div class="nd-kpi-info">
             <span class="nd-kpi-value" id="kpiOnlineDevices">0</span>
-            <span class="nd-kpi-label">Online / Active</span>
+            <span class="nd-kpi-label">Confirmed Active</span>
           </div>
         </div>
 
-        <div class="nd-kpi-card highlight-cyan">
+        <div class="nd-kpi-card highlight-amber" id="cardKpiUnverified" title="Neighbor table entries currently unverified by active liveness probes">
+          <div class="nd-kpi-icon"><i class="fas fa-clock-rotate-left"></i></div>
+          <div class="nd-kpi-info">
+            <span class="nd-kpi-value" id="kpiUnverifiedDevices">0</span>
+            <span class="nd-kpi-label">Unverified / Cached</span>
+          </div>
+        </div>
+
+        <div class="nd-kpi-card highlight-cyan" id="cardKpiGateway" title="Configured Default Gateway Router for this subnet">
           <div class="nd-kpi-icon"><i class="fas fa-route"></i></div>
           <div class="nd-kpi-info">
             <span class="nd-kpi-value" id="kpiGatewayDevice">--</span>
@@ -173,7 +181,7 @@
           </div>
         </div>
 
-        <div class="nd-kpi-card highlight-violet">
+        <div class="nd-kpi-card highlight-violet" id="cardKpiDuration" title="Elapsed duration of the active or completed discovery sweep">
           <div class="nd-kpi-icon"><i class="fas fa-stopwatch"></i></div>
           <div class="nd-kpi-info">
             <span class="nd-kpi-value" id="kpiScanDuration">0.0s</span>
@@ -300,29 +308,45 @@
       <!-- Discovered Devices Inventory Section -->
       <section class="nd-table-section">
         <div class="nd-table-toolbar">
-          <div class="nd-filter-tabs">
-            <button type="button" class="nd-filter-tab active" data-filter="all">All (<span id="countAll">0</span>)</button>
-            <button type="button" class="nd-filter-tab" data-filter="online">Online (<span id="countOnline">0</span>)</button>
-            <button type="button" class="nd-filter-tab" data-filter="router">Routers (<span id="countRouters">0</span>)</button>
-            <button type="button" class="nd-filter-tab" data-filter="computer">Computers (<span id="countComputers">0</span>)</button>
-            <button type="button" class="nd-filter-tab" data-filter="mobile">Mobile (<span id="countMobile">0</span>)</button>
-            <button type="button" class="nd-filter-tab" data-filter="iot">IoT / Printers (<span id="countIot">0</span>)</button>
+          <div class="nd-filter-tabs" role="tablist" aria-label="Device inventory filter categories">
+            <button type="button" class="nd-filter-tab active" data-filter="all" role="tab" aria-selected="true">All (<span id="countAll">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="online" role="tab" aria-selected="false">Confirmed Active (<span id="countOnline">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="unverified" role="tab" aria-selected="false">Unverified (<span id="countUnverified">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="router" role="tab" aria-selected="false">Routers (<span id="countRouters">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="computer" role="tab" aria-selected="false">Computers (<span id="countComputers">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="mobile" role="tab" aria-selected="false">Mobile (<span id="countMobile">0</span>)</button>
+            <button type="button" class="nd-filter-tab" data-filter="iot" role="tab" aria-selected="false">IoT / Printers (<span id="countIot">0</span>)</button>
           </div>
 
           <div class="nd-toolbar-right">
             <div class="nd-search-wrap">
-              <i class="fas fa-search nd-search-icon"></i>
-              <input type="text" id="ndSearchInput" class="nd-search-input" placeholder="Search IP, Hostname, MAC, Vendor, or Category..." />
+              <i class="fas fa-search nd-search-icon" aria-hidden="true"></i>
+              <input type="text" id="ndSearchInput" class="nd-search-input" placeholder="Search IP, Hostname, MAC, Vendor, or Role..." aria-label="Search discovered devices" />
+              <button type="button" class="nd-search-clear-btn" id="ndSearchClearBtn" aria-label="Clear search query" title="Clear Search" style="display: none;">
+                <i class="fas fa-xmark"></i>
+              </button>
             </div>
 
-            <!-- Responsive View Switcher: Cards (Default) vs Compact Table -->
-            <div class="nd-view-switcher" role="group" aria-label="Device layout mode">
-              <button type="button" class="nd-view-btn active" id="ndViewCardsBtn" data-view="cards" title="Clean & Responsive Cards View">
-                <i class="fas fa-grip"></i>
+            <!-- Export Actions Group -->
+            <div class="nd-export-group" role="group" aria-label="Export discovered devices">
+              <button type="button" class="nd-tool-btn" id="ndExportJsonBtn" title="Export discovered devices to JSON">
+                <i class="fas fa-file-code"></i>
+                <span class="tool-btn-text">JSON</span>
+              </button>
+              <button type="button" class="nd-tool-btn" id="ndExportCsvBtn" title="Export discovered devices to CSV">
+                <i class="fas fa-file-csv"></i>
+                <span class="tool-btn-text">CSV</span>
+              </button>
+            </div>
+
+            <!-- Responsive View Switcher: Interactive Cards (Default) vs Compact Table -->
+            <div class="nd-view-switcher" role="group" aria-label="Device inventory layout">
+              <button type="button" class="nd-view-btn active" id="ndViewCardsBtn" data-view="cards" title="Display as Interactive Cards Grid" aria-pressed="true" aria-label="Cards view mode">
+                <i class="fas fa-grip" aria-hidden="true"></i>
                 <span class="view-btn-text">Cards</span>
               </button>
-              <button type="button" class="nd-view-btn" id="ndViewTableBtn" data-view="table" title="Compact Table View">
-                <i class="fas fa-table-list"></i>
+              <button type="button" class="nd-view-btn" id="ndViewTableBtn" data-view="table" title="Display as Structured Table" aria-pressed="false" aria-label="Table view mode">
+                <i class="fas fa-table-list" aria-hidden="true"></i>
                 <span class="view-btn-text">Table</span>
               </button>
             </div>
@@ -544,7 +568,7 @@
         <button type="button" class="nd-btn nd-btn-secondary" id="modalFooterCloseBtn">
           <i class="fas fa-xmark"></i> Close
         </button>
-        <a href="#" id="modalPortScanLink" class="nd-btn nd-btn-primary" target="_blank">
+        <a href="/?view=port-scanner" id="modalPortScanLink" class="nd-btn nd-btn-primary nd-btn-scan-ports" title="Scan ports for this host">
           <i class="fas fa-bullseye"></i>
           <span>Inspect Ports in Port Scanner</span>
         </a>

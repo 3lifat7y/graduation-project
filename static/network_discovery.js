@@ -36,6 +36,7 @@
     // KPI Summary
     kpiTotalDevices: document.getElementById('kpiTotalDevices'),
     kpiOnlineDevices: document.getElementById('kpiOnlineDevices'),
+    kpiUnverifiedDevices: document.getElementById('kpiUnverifiedDevices'),
     kpiGatewayDevice: document.getElementById('kpiGatewayDevice'),
     kpiScanDuration: document.getElementById('kpiScanDuration'),
 
@@ -74,11 +75,15 @@
     filterTabs: document.querySelectorAll('.nd-filter-tab'),
     countAll: document.getElementById('countAll'),
     countOnline: document.getElementById('countOnline'),
+    countUnverified: document.getElementById('countUnverified'),
     countRouters: document.getElementById('countRouters'),
     countComputers: document.getElementById('countComputers'),
     countMobile: document.getElementById('countMobile'),
     countIot: document.getElementById('countIot'),
     ndSearchInput: document.getElementById('ndSearchInput'),
+    ndSearchClearBtn: document.getElementById('ndSearchClearBtn'),
+    ndExportJsonBtn: document.getElementById('ndExportJsonBtn'),
+    ndExportCsvBtn: document.getElementById('ndExportCsvBtn'),
 
     // View Mode Switcher
     ndViewCardsBtn: document.getElementById('ndViewCardsBtn'),
@@ -164,6 +169,45 @@
       if (a !== b) return a - b;
     }
     return 0;
+  }
+
+  // Helper: Validate IPv4 address or hostname
+  function isValidTargetIp(ip) {
+    if (!ip || typeof ip !== 'string') return false;
+    const clean = ip.trim();
+    if (!clean || clean === 'Unavailable' || clean === 'Unknown' || clean === 'N/A' || clean === 'Not detected') return false;
+    const octets = clean.split('.');
+    if (octets.length === 4) {
+      const allValid = octets.every(o => {
+        if (!/^\d{1,3}$/.test(o)) return false;
+        const n = Number(o);
+        return n >= 0 && n <= 255;
+      });
+      if (allValid) return true;
+    }
+    if (/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(clean)) {
+      return true;
+    }
+    return false;
+  }
+
+  // Helper: Prepare one-time port scan auto-trigger and validate target
+  function triggerPortScanForDevice(ip, e) {
+    if (e) e.stopPropagation();
+    if (!isValidTargetIp(ip)) {
+      if (e) e.preventDefault();
+      showAlert(`Cannot scan ports: '${ip || "Unknown"}' is not a valid IPv4 address.`);
+      return false;
+    }
+    try {
+      sessionStorage.setItem('port_scan_auto_trigger', JSON.stringify({
+        ip: ip.trim(),
+        timestamp: Date.now()
+      }));
+    } catch (err) {
+      // ignore storage quota issues
+    }
+    return true;
   }
 
   // Show/Hide Alert Banner
@@ -252,13 +296,25 @@
     }
     hideAlert();
     let subnet = (elements.ndSubnetInput ? elements.ndSubnetInput.value : '').trim();
-    if (!subnet && state.networkInfoPromise) {
-      const net = await state.networkInfoPromise;
-      if (net && net.subnet_cidr) {
-        subnet = net.subnet_cidr;
-        if (elements.ndSubnetInput) elements.ndSubnetInput.value = subnet;
+
+    // If input is empty on initial click, resolve network info gracefully without failing
+    if (!subnet) {
+      if (elements.ndStartBtn) {
+        elements.ndStartBtn.disabled = true;
+        const origBtnHtml = elements.ndStartBtn.innerHTML;
+        elements.ndStartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span class="btn-text">Detecting Subnet...</span>';
+        try {
+          const net = await (state.networkInfoPromise || loadNetworkInfo());
+          if (net && net.subnet_cidr) {
+            subnet = net.subnet_cidr;
+            if (elements.ndSubnetInput) elements.ndSubnetInput.value = subnet;
+          }
+        } catch (e) {}
+        elements.ndStartBtn.innerHTML = origBtnHtml;
+        elements.ndStartBtn.disabled = false;
       }
     }
+
     if (!subnet && state.networkInfo && state.networkInfo.subnet_cidr) {
       subnet = state.networkInfo.subnet_cidr;
       if (elements.ndSubnetInput) elements.ndSubnetInput.value = subnet;
@@ -389,9 +445,23 @@
       state.devices = data.devices || [];
 
       // Update KPIs
+      const onlineCount = data.online_count !== undefined
+        ? data.online_count
+        : state.devices.filter(d => d.verified || d.status === 'Online').length;
+      const unverifiedCount = data.unverified_count !== undefined
+        ? data.unverified_count
+        : state.devices.filter(d => !d.verified && d.status !== 'Online').length;
+
       if (elements.kpiTotalDevices) elements.kpiTotalDevices.textContent = data.devices_count || state.devices.length;
-      if (elements.kpiOnlineDevices) elements.kpiOnlineDevices.textContent = data.online_count || state.devices.length;
+      if (elements.kpiOnlineDevices) elements.kpiOnlineDevices.textContent = onlineCount;
+      if (elements.kpiUnverifiedDevices) elements.kpiUnverifiedDevices.textContent = unverifiedCount;
       if (elements.kpiScanDuration) elements.kpiScanDuration.textContent = (data.duration_s || 0).toFixed(1) + 's';
+
+      // Connect to background scan if page loaded during active scan
+      if (data.status === 'scanning' && !state.pollInterval) {
+        setScanUiState('scanning');
+        startStatusPolling();
+      }
 
       // Update Progress
       const pct = Math.round(data.progress_pct || 0);
@@ -444,9 +514,14 @@
 
   // 4. Category Counting & Filtering
   function updateCategoryCounts(devices) {
-    let online = 0, routers = 0, computers = 0, mobile = 0, iot = 0;
+    let online = 0, unverified = 0, routers = 0, computers = 0, mobile = 0, iot = 0;
     devices.forEach(dev => {
-      if (dev.status === 'Online') online++;
+      const isOnline = Boolean(dev.verified || dev.status === 'Online');
+      if (isOnline) {
+        online++;
+      } else {
+        unverified++;
+      }
       const cat = (dev.device_type || '').toLowerCase();
       const ven = (dev.vendor || '').toLowerCase();
       if (dev.is_gateway || cat.includes('router') || cat.includes('gateway') || cat.includes('access point')) {
@@ -462,6 +537,7 @@
 
     if (elements.countAll) elements.countAll.textContent = devices.length;
     if (elements.countOnline) elements.countOnline.textContent = online;
+    if (elements.countUnverified) elements.countUnverified.textContent = unverified;
     if (elements.countRouters) elements.countRouters.textContent = routers;
     if (elements.countComputers) elements.countComputers.textContent = computers;
     if (elements.countMobile) elements.countMobile.textContent = mobile;
@@ -476,7 +552,8 @@
       list = list.filter(dev => {
         const cat = (dev.device_type || '').toLowerCase();
         const ven = (dev.vendor || '').toLowerCase();
-        if (state.filterCategory === 'online') return dev.status === 'Online';
+        if (state.filterCategory === 'online') return Boolean(dev.verified || dev.status === 'Online');
+        if (state.filterCategory === 'unverified') return !dev.verified || dev.status === 'Unverified';
         if (state.filterCategory === 'router') {
           return dev.is_gateway || cat.includes('router') || cat.includes('gateway') || cat.includes('access point');
         }
@@ -651,6 +728,9 @@
         card.className = `nd-device-card ${isNew ? 'new-discovery-glow' : ''}`;
         card.setAttribute('data-ip', dev.ip);
         card.setAttribute('data-sig', cardSig);
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', `Device ${dev.hostname || dev.ip}, ${categoryClean}. Press Enter to view full details.`);
         card.style.animationDelay = `${Math.min(idx * 35, 500)}ms`;
 
         card.innerHTML = `
@@ -668,6 +748,9 @@
               </span>
             </div>
             ${statusPillHtml}
+            <div class="nd-card-inspect-hint" title="Inspect device profile" aria-hidden="true">
+              <i class="fas fa-chevron-right"></i>
+            </div>
           </div>
 
           <div class="nd-card-body">
@@ -675,7 +758,7 @@
               <span class="nd-prop-label"><i class="fas fa-location-dot"></i> IP Address</span>
               <div class="nd-prop-val-wrap">
                 <span class="nd-prop-val mono ${dev.is_gateway ? 'text-gw' : ''}">${escapeHtml(dev.ip)}</span>
-                <button type="button" class="nd-mini-copy-btn" data-copy-text="${escapeHtml(dev.ip)}" title="Copy IP Address">
+                <button type="button" class="nd-mini-copy-btn" data-copy-text="${escapeHtml(dev.ip)}" title="Copy IP Address" aria-label="Copy IP Address">
                   <i class="fas fa-copy"></i>
                 </button>
               </div>
@@ -693,12 +776,9 @@
           </div>
 
           <div class="nd-card-footer">
-            <a href="/?view=port-scanner&target=${encodeURIComponent(dev.ip)}" class="nd-btn-scan-ports" title="Scan ports for target ${escapeHtml(dev.ip)}">
+            <a href="/?view=port-scanner&target=${encodeURIComponent(dev.ip)}&trigger=discovery" class="nd-card-action-btn nd-btn-scan-ports" data-target-ip="${escapeHtml(dev.ip)}" title="Scan ports for target ${escapeHtml(dev.ip)}">
               <i class="fas fa-bullseye"></i> Scan Ports
             </a>
-            <button type="button" class="nd-btn-details nd-view-details-btn" data-ip="${escapeHtml(dev.ip)}" title="View complete hardware profile and scan details">
-              <i class="fas fa-circle-info"></i> View Details
-            </button>
           </div>
         `;
         elements.ndCardsGrid.appendChild(card);
@@ -734,7 +814,10 @@
           const portsEl = card.querySelector('.nd-card-prop:nth-child(3) .nd-prop-val');
           if (portsEl) portsEl.innerHTML = portsDisplay;
           const scanLink = card.querySelector('.nd-btn-scan-ports');
-          if (scanLink) scanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}`;
+          if (scanLink) {
+            scanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}&trigger=discovery`;
+            scanLink.setAttribute('data-target-ip', dev.ip);
+          }
         }
         // Preserve DOM sort order without re-triggering animations
         elements.ndCardsGrid.appendChild(card);
@@ -836,6 +919,9 @@
         row.className = 'nd-device-row';
         row.setAttribute('data-ip', dev.ip);
         row.setAttribute('data-sig', rowSig);
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', `Device ${dev.hostname || dev.ip}, ${dev.device_type}. Press Enter to view full details.`);
         row.style.animationDelay = `${Math.min(idx * 28, 450)}ms`;
 
         row.innerHTML = `
@@ -859,12 +945,9 @@
           </td>
           <td class="col-ports">${portsDisplay}</td>
           <td class="col-actions">
-            <a href="/?view=port-scanner&target=${encodeURIComponent(dev.ip)}" class="nd-table-btn nd-btn-scan-ports" title="Scan ports on ${escapeHtml(dev.ip)}">
+            <a href="/?view=port-scanner&target=${encodeURIComponent(dev.ip)}&trigger=discovery" class="nd-table-btn nd-btn-scan-ports" data-target-ip="${escapeHtml(dev.ip)}" title="Scan ports on ${escapeHtml(dev.ip)}">
               <i class="fas fa-bullseye"></i> Ports
             </a>
-            <button type="button" class="nd-table-btn nd-view-details-btn" data-ip="${escapeHtml(dev.ip)}" title="View complete hardware profile">
-              <i class="fas fa-circle-info"></i> Details
-            </button>
           </td>
         `;
         elements.ndTableBody.appendChild(row);
@@ -880,7 +963,10 @@
           const portsCol = row.querySelector('.col-ports');
           if (portsCol) portsCol.innerHTML = portsDisplay;
           const scanLink = row.querySelector('.nd-btn-scan-ports');
-          if (scanLink) scanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}`;
+          if (scanLink) {
+            scanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}&trigger=discovery`;
+            scanLink.setAttribute('data-target-ip', dev.ip);
+          }
         }
         elements.ndTableBody.appendChild(row);
       }
@@ -996,7 +1082,8 @@
 
     // Quick Action: Port Scanner Link
     if (elements.modalPortScanLink) {
-      elements.modalPortScanLink.href = `/#port-scanner?target=${encodeURIComponent(dev.ip)}`;
+      elements.modalPortScanLink.href = `/?view=port-scanner&target=${encodeURIComponent(dev.ip)}&trigger=discovery`;
+      elements.modalPortScanLink.setAttribute('data-target-ip', dev.ip);
     }
 
     // Open Modal
@@ -1133,13 +1220,25 @@
       if (mode === 'table') {
         if (elements.ndCardsContainer) elements.ndCardsContainer.style.display = 'none';
         if (elements.ndTableWrapper) elements.ndTableWrapper.style.display = 'block';
-        if (elements.ndViewCardsBtn) elements.ndViewCardsBtn.classList.remove('active');
-        if (elements.ndViewTableBtn) elements.ndViewTableBtn.classList.add('active');
+        if (elements.ndViewCardsBtn) {
+          elements.ndViewCardsBtn.classList.remove('active');
+          elements.ndViewCardsBtn.setAttribute('aria-pressed', 'false');
+        }
+        if (elements.ndViewTableBtn) {
+          elements.ndViewTableBtn.classList.add('active');
+          elements.ndViewTableBtn.setAttribute('aria-pressed', 'true');
+        }
       } else {
         if (elements.ndCardsContainer) elements.ndCardsContainer.style.display = 'block';
         if (elements.ndTableWrapper) elements.ndTableWrapper.style.display = 'none';
-        if (elements.ndViewCardsBtn) elements.ndViewCardsBtn.classList.add('active');
-        if (elements.ndViewTableBtn) elements.ndViewTableBtn.classList.remove('active');
+        if (elements.ndViewCardsBtn) {
+          elements.ndViewCardsBtn.classList.add('active');
+          elements.ndViewCardsBtn.setAttribute('aria-pressed', 'true');
+        }
+        if (elements.ndViewTableBtn) {
+          elements.ndViewTableBtn.classList.remove('active');
+          elements.ndViewTableBtn.setAttribute('aria-pressed', 'false');
+        }
       }
     }
 
@@ -1152,7 +1251,99 @@
     // Set initial view state
     setViewMode(state.viewMode);
 
-    // Delegated click handlers for Cards Grid (stable, registered once)
+    // Export Handlers
+    function exportResultsJson() {
+      if (!state.devices || state.devices.length === 0) {
+        showAlert('No discovery results available to export. Run a subnet scan first.');
+        return;
+      }
+      const exportData = {
+        scan_id: state.scanId || `export_${Date.now()}`,
+        exported_at: new Date().toISOString(),
+        subnet: state.networkInfo ? state.networkInfo.subnet_cidr : null,
+        total_devices: state.devices.length,
+        confirmed_active: state.devices.filter(d => d.verified || d.status === 'Online').length,
+        unverified: state.devices.filter(d => !d.verified && d.status !== 'Online').length,
+        devices: state.devices.map(d => ({
+          ip: d.ip,
+          hostname: d.hostname && d.hostname !== 'Unknown' ? d.hostname : null,
+          mac: d.mac && d.mac !== 'Unavailable' && d.mac !== 'Unknown' ? d.mac : null,
+          vendor: d.vendor && d.vendor !== 'Unknown Vendor' ? d.vendor : null,
+          device_type: d.device_type,
+          device_type_basis: d.device_type_basis,
+          status: d.status,
+          verified: Boolean(d.verified),
+          is_gateway: Boolean(d.is_gateway),
+          is_local_host: Boolean(d.is_local_host),
+          methods: d.methods || [],
+          last_seen: d.last_seen
+        }))
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `network_discovery_${state.scanId || Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportResultsCsv() {
+      if (!state.devices || state.devices.length === 0) {
+        showAlert('No discovery results available to export. Run a subnet scan first.');
+        return;
+      }
+      const headers = ['IP Address', 'Hostname', 'MAC Address', 'Vendor', 'Device Type', 'Status', 'Verified Active', 'Is Gateway', 'Is Local Host', 'Discovery Methods', 'Last Seen'];
+      const rows = state.devices.map(d => [
+        d.ip || '',
+        d.hostname && d.hostname !== 'Unknown' ? d.hostname : '',
+        d.mac && d.mac !== 'Unavailable' && d.mac !== 'Unknown' ? d.mac : '',
+        d.vendor && d.vendor !== 'Unknown Vendor' ? d.vendor : '',
+        d.device_type || '',
+        d.status || '',
+        d.verified ? 'Yes' : 'No',
+        d.is_gateway ? 'Yes' : 'No',
+        d.is_local_host ? 'Yes' : 'No',
+        (d.methods || []).join('; '),
+        d.last_seen || ''
+      ]);
+
+      const csvContent = [headers, ...rows].map(row =>
+        row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+      ).join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `network_discovery_${state.scanId || Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    if (elements.ndExportJsonBtn) elements.ndExportJsonBtn.addEventListener('click', exportResultsJson);
+    if (elements.ndExportCsvBtn) elements.ndExportCsvBtn.addEventListener('click', exportResultsCsv);
+
+    // Search Clear Handler
+    if (elements.ndSearchInput && elements.ndSearchClearBtn) {
+      elements.ndSearchInput.addEventListener('input', (e) => {
+        elements.ndSearchClearBtn.style.display = e.target.value.trim() ? 'flex' : 'none';
+      });
+      elements.ndSearchClearBtn.addEventListener('click', () => {
+        elements.ndSearchInput.value = '';
+        state.searchQuery = '';
+        elements.ndSearchClearBtn.style.display = 'none';
+        renderDeviceTable();
+        elements.ndSearchInput.focus();
+      });
+    }
+
+    // Delegated click and keydown handlers for Cards Grid
     if (elements.ndCardsGrid) {
       elements.ndCardsGrid.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.nd-mini-copy-btn');
@@ -1162,11 +1353,13 @@
           if (text) copyDirectText(text, copyBtn);
           return;
         }
-        const detailsBtn = e.target.closest('.nd-view-details-btn');
-        if (detailsBtn) {
-          e.stopPropagation();
-          const ip = detailsBtn.getAttribute('data-ip');
-          if (ip) openDeviceModal(ip);
+        const scanPortsLink = e.target.closest('.nd-btn-scan-ports');
+        if (scanPortsLink) {
+          const card = e.target.closest('.nd-device-card');
+          const targetIp = scanPortsLink.getAttribute('data-target-ip') || (card ? card.getAttribute('data-ip') : '');
+          if (!triggerPortScanForDevice(targetIp, e)) {
+            return;
+          }
           return;
         }
         if (e.target.closest('a') || e.target.closest('button')) return;
@@ -1176,16 +1369,30 @@
           if (ip) openDeviceModal(ip);
         }
       });
+
+      // Keyboard navigation for Cards Grid (Enter / Space opens details)
+      elements.ndCardsGrid.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          const card = e.target.closest('.nd-device-card');
+          if (card && !e.target.closest('a') && !e.target.closest('button')) {
+            e.preventDefault();
+            const ip = card.getAttribute('data-ip');
+            if (ip) openDeviceModal(ip);
+          }
+        }
+      });
     }
 
-    // Delegated click handlers for Table Body (stable, registered once)
+    // Delegated click and keydown handlers for Table Body
     if (elements.ndTableBody) {
       elements.ndTableBody.addEventListener('click', (e) => {
-        const detailsBtn = e.target.closest('.nd-view-details-btn');
-        if (detailsBtn) {
-          e.stopPropagation();
-          const ip = detailsBtn.getAttribute('data-ip');
-          if (ip) openDeviceModal(ip);
+        const scanPortsLink = e.target.closest('.nd-btn-scan-ports');
+        if (scanPortsLink) {
+          const row = e.target.closest('.nd-device-row');
+          const targetIp = scanPortsLink.getAttribute('data-target-ip') || (row ? row.getAttribute('data-ip') : '');
+          if (!triggerPortScanForDevice(targetIp, e)) {
+            return;
+          }
           return;
         }
         if (e.target.closest('a') || e.target.closest('button')) return;
@@ -1193,6 +1400,29 @@
         if (row) {
           const ip = row.getAttribute('data-ip');
           if (ip) openDeviceModal(ip);
+        }
+      });
+
+      // Keyboard navigation for Table Body (Enter / Space opens details)
+      elements.ndTableBody.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          const row = e.target.closest('.nd-device-row');
+          if (row && !e.target.closest('a') && !e.target.closest('button')) {
+            e.preventDefault();
+            const ip = row.getAttribute('data-ip');
+            if (ip) openDeviceModal(ip);
+          }
+        }
+      });
+    }
+
+    // Modal Port Scan Button Listener
+    if (elements.modalPortScanLink) {
+      elements.modalPortScanLink.addEventListener('click', (e) => {
+        const targetIp = elements.modalPortScanLink.getAttribute('data-target-ip') ||
+          (state.selectedDevice ? state.selectedDevice.ip : '');
+        if (!triggerPortScanForDevice(targetIp, e)) {
+          return;
         }
       });
     }
@@ -1402,5 +1632,6 @@
     initTheme();
     initEventListeners();
     loadNetworkInfo();
+    fetchScanStatus();
   });
 })();

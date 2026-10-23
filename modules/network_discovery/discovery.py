@@ -343,23 +343,24 @@ def get_network_discovery_info(force_refresh: bool = False) -> Dict[str, Any]:
                             "is_virtual": ad_type in ("Virtual", "Loopback")
                         })
 
-                # Selection hierarchy prioritizing physical Ethernet (with or without gateway):
+                # Selection hierarchy prioritizing the active routable connection:
                 selected = None
-                # Priority 1: Physical Ethernet with default gateway
-                for c in candidates:
-                    if not c["is_virtual"] and c["type"] == "Ethernet" and c.get("gateway"):
-                        selected = c
-                        break
-                # Priority 2: Physical Ethernet without gateway (isolated LAN / direct link)
-                if not selected:
+                # Priority 1: Physical adapter matching active routable IP with default gateway
+                if routable_ip:
                     for c in candidates:
-                        if not c["is_virtual"] and c["type"] == "Ethernet":
+                        if not c["is_virtual"] and c.get("gateway") and any(ip_info["ip"] == routable_ip for ip_info in c["ips"]):
                             selected = c
                             break
-                # Priority 3: Matching routable_ip if found on a physical adapter
+                # Priority 2: Physical adapter matching active routable IP (even without explicit default gateway)
                 if not selected and routable_ip:
                     for c in candidates:
                         if not c["is_virtual"] and any(ip_info["ip"] == routable_ip for ip_info in c["ips"]):
+                            selected = c
+                            break
+                # Priority 3: Physical Ethernet with default gateway
+                if not selected:
+                    for c in candidates:
+                        if not c["is_virtual"] and c["type"] == "Ethernet" and c.get("gateway"):
                             selected = c
                             break
                 # Priority 4: Physical Wi-Fi with default gateway
@@ -368,19 +369,25 @@ def get_network_discovery_info(force_refresh: bool = False) -> Dict[str, Any]:
                         if not c["is_virtual"] and c["type"] == "Wi-Fi" and c.get("gateway"):
                             selected = c
                             break
-                # Priority 5: Physical Wi-Fi without gateway
+                # Priority 5: Physical Ethernet without gateway (isolated link)
+                if not selected:
+                    for c in candidates:
+                        if not c["is_virtual"] and c["type"] == "Ethernet":
+                            selected = c
+                            break
+                # Priority 6: Physical Wi-Fi without gateway
                 if not selected:
                     for c in candidates:
                         if not c["is_virtual"] and c["type"] == "Wi-Fi":
                             selected = c
                             break
-                # Priority 6: Any operational physical adapter
+                # Priority 7: Any operational physical adapter
                 if not selected:
                     for c in candidates:
                         if not c["is_virtual"]:
                             selected = c
                             break
-                # Priority 7: Any candidate (including virtual)
+                # Priority 8: Any candidate (including virtual)
                 if not selected and candidates:
                     selected = candidates[0]
 
@@ -740,6 +747,7 @@ class NetworkDiscoveryManager:
             "total_hosts": 0,
             "devices_count": 0,
             "online_count": 0,
+            "unverified_count": 0,
             "devices": [],
             "network_info": {},
             "last_completed_scan": None,
@@ -856,6 +864,7 @@ class NetworkDiscoveryManager:
                 "total_hosts": total_hosts,
                 "devices_count": 0,
                 "online_count": 0,
+                "unverified_count": 0,
                 "devices": [],
                 "network_info": net_info,
                 "last_completed_scan": self.last_completed_scan,
@@ -954,6 +963,7 @@ class NetworkDiscoveryManager:
                 self.session["devices"] = list(discovered_map.values())
                 self.session["devices_count"] = len(discovered_map)
                 self.session["online_count"] = sum(1 for d in discovered_map.values() if d.get("verified"))
+                self.session["unverified_count"] = sum(1 for d in discovered_map.values() if not d.get("verified"))
 
         # ----------------------------------------------------------------------
         # Phase 2: Active Concurrent Multi-Method Subnet Sweep (ARP, ICMP, TCP)
@@ -1063,6 +1073,7 @@ class NetworkDiscoveryManager:
                             )
                             self.session["devices_count"] = len(discovered_map)
                             self.session["online_count"] = sum(1 for d in discovered_map.values() if d.get("verified"))
+                            self.session["unverified_count"] = sum(1 for d in discovered_map.values() if not d.get("verified"))
                             self.session["duration_s"] = round(time.time() - start_t, 1)
 
         # ----------------------------------------------------------------------
@@ -1077,6 +1088,7 @@ class NetworkDiscoveryManager:
                     key=lambda d: ipaddress.IPv4Address(d["ip"])
                 )
                 online_num = sum(1 for d in sorted_devices if d.get("verified"))
+                unverified_num = sum(1 for d in sorted_devices if not d.get("verified"))
 
                 # Calculate diff vs previous scan if available
                 history_comp = None
@@ -1102,6 +1114,7 @@ class NetworkDiscoveryManager:
                     "scanned_hosts": total_targets,
                     "devices_count": len(sorted_devices),
                     "online_count": online_num,
+                    "unverified_count": unverified_num,
                     "devices": sorted_devices,
                     "duration_s": total_duration,
                     "completed_at": completed_time,
