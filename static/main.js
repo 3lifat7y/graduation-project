@@ -2451,7 +2451,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.body.classList.remove("dedicated-mode-monitoring", "home-view");
 
       if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
-      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Port & Network Reconnaissance Scanner";
+      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Port Scanning & Service Analysis";
 
       if (heroSection) heroSection.style.display = "none";
       if (monitorSection) monitorSection.style.display = "none";
@@ -2465,6 +2465,10 @@ document.addEventListener("DOMContentLoaded", () => {
       setSidebarActive("port-scanner");
       setTopNavActive("port-scanner");
       window.scrollTo({ top: 0, behavior: "smooth" });
+
+      if (typeof PortScannerUI !== "undefined" && PortScannerUI.checkAndAttachActivePortScan) {
+        PortScannerUI.checkAndAttachActivePortScan();
+      }
 
       if (updateHistory) {
         history.pushState({ view: "port-scanner" }, "", "?view=port-scanner");
@@ -2740,6 +2744,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   // 9. Independent Port & Network Scanner Module (Decoupled from DDoS Core)
   // ============================================================================
+  // ============================================================================
+  // 9. Independent Port & Network Scanner Module (Decoupled from DDoS Core)
+  // ============================================================================
   const PortScannerUI = (() => {
     let portScanPollTimer = null;
     let isPortScanning = false;
@@ -2747,8 +2754,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentPreset = "top20";
     let autoDetectedSubnet = "";
     let lastScanData = null;
-    let activeFilter = "open"; // 'open' | 'all'
+    let activeFilter = "all"; // 'all' | 'open' | 'closed' | 'filtered'
     let searchQuery = "";
+    let sortField = "port"; // 'port' | 'state' | 'service' | 'latency'
+    let sortDirection = "asc"; // 'asc' | 'desc'
+    let selectedPortDetail = null;
 
     // DOM Elements
     const tabLocalhost = document.getElementById("psTabLocalhost");
@@ -2785,11 +2795,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const progressStatusText = document.getElementById("psProgressStatusText");
     const progressPct = document.getElementById("psProgressPct");
 
+    // KPI Counters (5 Core Metrics + Hosts)
     const kpiGrid = document.getElementById("psKpiGrid");
-    const kpiHosts = document.getElementById("psKpiHosts");
     const kpiScanned = document.getElementById("psKpiScanned");
     const kpiOpen = document.getElementById("psKpiOpen");
+    const kpiClosed = document.getElementById("psKpiClosed");
+    const kpiFiltered = document.getElementById("psKpiFiltered");
     const kpiDuration = document.getElementById("psKpiDuration");
+    const kpiHosts = document.getElementById("psKpiHosts");
+    const kpiCardHosts = document.getElementById("psKpiCardHosts");
 
     const errorBanner = document.getElementById("psErrorBanner");
     const errorText = document.getElementById("psErrorText");
@@ -2797,9 +2811,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const resultsWrapper = document.getElementById("psResultsWrapper");
     const resultsContent = document.getElementById("psResultsContent");
     const filterPills = Array.from(document.querySelectorAll(".ps-filter-pill"));
-    const filterOpenCount = document.getElementById("psFilterOpenCount");
     const filterAllCount = document.getElementById("psFilterAllCount");
+    const filterOpenCount = document.getElementById("psFilterOpenCount");
+    const filterClosedCount = document.getElementById("psFilterClosedCount");
+    const filterFilteredCount = document.getElementById("psFilterFilteredCount");
     const searchInput = document.getElementById("psSearchInput");
+
+    // Modal Details Elements
+    const detailsModal = document.getElementById("psDetailsModal");
+    const modalCloseBtn = document.getElementById("psModalCloseBtn");
+    const modalFooterCloseBtn = document.getElementById("psModalFooterCloseBtn");
+    const modalPortBadge = document.getElementById("psModalPortBadge");
+    const modalTitle = document.getElementById("psModalTitle");
+    const modalBody = document.getElementById("psModalBody");
 
     let networkInfoPromise = null;
     function loadNetworkInfo() {
@@ -2839,6 +2863,10 @@ document.addEventListener("DOMContentLoaded", () => {
         tab.classList.toggle("active", isActive);
         tab.setAttribute("aria-selected", isActive ? "true" : "false");
       });
+
+      if (kpiCardHosts) {
+        kpiCardHosts.style.display = (mode === "network") ? "flex" : "none";
+      }
 
       if (!targetInput) return;
 
@@ -2895,6 +2923,268 @@ document.addEventListener("DOMContentLoaded", () => {
       stateBadge.textContent = label;
     }
 
+    // Conservative, explainable exposure analysis rules (Zero vulnerability fabrication)
+    function getExposureAnalysis(port, protocol, service, banner) {
+      const p = parseInt(port, 10);
+      if (p === 21) {
+        return {
+          level: "medium",
+          badgeClass: "exposure-medium",
+          label: "Plaintext FTP",
+          category: "File Transfer",
+          icon: "fa-triangle-exclamation",
+          recommendation: "FTP transmits credentials and file data in cleartext. Consider migrating to SFTP (SSH) or FTPS (TLS).",
+          riskText: "Cleartext credentials risk on shared/untrusted network segments."
+        };
+      }
+      if (p === 23) {
+        return {
+          level: "high",
+          badgeClass: "exposure-high",
+          label: "Legacy Telnet",
+          category: "Remote Access",
+          icon: "fa-triangle-exclamation",
+          recommendation: "Telnet is an obsolete unencrypted protocol. Replace with SSH (port 22) immediately.",
+          riskText: "High exposure: all session keystrokes and credentials pass in cleartext."
+        };
+      }
+      if (p === 80 || p === 8080 || p === 8000) {
+        return {
+          level: "low",
+          badgeClass: "exposure-low",
+          label: "Plaintext HTTP",
+          category: "Web Server",
+          icon: "fa-circle-info",
+          recommendation: "Standard web port without TLS. For confidential forms or user data, configure HTTPS on port 443.",
+          riskText: "Traffic unencrypted; suitable for public landing pages, insecure for sensitive authentication."
+        };
+      }
+      if (p === 22) {
+        return {
+          level: "info",
+          badgeClass: "exposure-info",
+          label: "Encrypted SSH",
+          category: "Remote Terminal",
+          icon: "fa-lock",
+          recommendation: "SSH encrypted terminal. Ensure public-key authentication is enforced and root login is disabled.",
+          riskText: "Administrative terminal. Restrict source IPs or rate limit to prevent credential brute-forcing."
+        };
+      }
+      if (p === 3389) {
+        return {
+          level: "medium",
+          badgeClass: "exposure-medium",
+          label: "Microsoft RDP",
+          category: "Remote Desktop",
+          icon: "fa-display",
+          recommendation: "Limit RDP reachability to corporate VPN or bastion host with Multi-Factor Authentication (MFA).",
+          riskText: "Frequent target of automated network brute force and credential-stuffing attacks."
+        };
+      }
+      if (p === 445 || p === 139 || p === 135) {
+        return {
+          level: "medium",
+          badgeClass: "exposure-medium",
+          label: "SMB / RPC Endpoint",
+          category: "Windows Infrastructure",
+          icon: "fa-network-wired",
+          recommendation: "Do not expose SMB or RPC directly to untrusted or external networks. Restrict via firewall.",
+          riskText: "Internal network protocol prone to lateral movement and relay attacks if exposed."
+        };
+      }
+      if ([1433, 1521, 3306, 5432, 6379, 27017, 9200].includes(p)) {
+        return {
+          level: "medium",
+          badgeClass: "exposure-medium",
+          label: "Database Service",
+          category: "Data Store",
+          icon: "fa-database",
+          recommendation: "Ensure database listening port is restricted to backend application subnets and uses TLS + strong auth.",
+          riskText: "Internal data tier component; external internet access should be strictly blocked."
+        };
+      }
+      if ([443, 8443, 990, 993, 995, 636].includes(p)) {
+        return {
+          level: "safe",
+          badgeClass: "exposure-safe",
+          label: "Encrypted TLS",
+          category: "Secure Channel",
+          icon: "fa-shield-halved",
+          recommendation: "Transport layer security active. Verify TLS version and certificate renewal periodically.",
+          riskText: "Standard secure transport channel."
+        };
+      }
+      return {
+        level: "neutral",
+        badgeClass: "exposure-neutral",
+        label: "Standard Service",
+        category: "Network Service",
+        icon: "fa-server",
+        recommendation: "Standard network service endpoint. Maintain current patches and standard access control.",
+        riskText: "Standard service exposure."
+      };
+    }
+
+    // Sort helper
+    function sortPorts(portsList) {
+      if (!portsList) return [];
+      const list = [...portsList];
+      const dir = (sortDirection === "desc") ? -1 : 1;
+
+      list.sort((a, b) => {
+        if (sortField === "port") {
+          return (Number(a.port) - Number(b.port)) * dir;
+        }
+        if (sortField === "state") {
+          const rank = { "open": 1, "filtered": 2, "closed": 3, "error": 4 };
+          const ra = rank[a.state] || 5;
+          const rb = rank[b.state] || 5;
+          if (ra !== rb) return (ra - rb) * dir;
+          return (Number(a.port) - Number(b.port));
+        }
+        if (sortField === "service") {
+          const sa = (a.service || "").toLowerCase();
+          const sb = (b.service || "").toLowerCase();
+          return sa.localeCompare(sb) * dir;
+        }
+        if (sortField === "latency") {
+          const la = (a.latency_ms !== null && a.latency_ms !== undefined) ? Number(a.latency_ms) : 999999;
+          const lb = (b.latency_ms !== null && b.latency_ms !== undefined) ? Number(b.latency_ms) : 999999;
+          return (la - lb) * dir;
+        }
+        return 0;
+      });
+      return list;
+    }
+
+    function showPortDetailsModal(p, hostContext = {}) {
+      if (!detailsModal || !modalBody) return;
+      selectedPortDetail = { port: p, host: hostContext };
+
+      const proto = p.protocol || "TCP";
+      const analysis = getExposureAnalysis(p.port, proto, p.service, p.banner);
+      const hostIp = hostContext.host || (targetInput ? targetInput.value : "127.0.0.1");
+      const hostName = hostContext.hostname && hostContext.hostname !== hostIp ? ` (${hostContext.hostname})` : "";
+      const latencyStr = (p.latency_ms !== null && p.latency_ms !== undefined) ? `${p.latency_ms} ms` : "N/A";
+
+      let stateText = "Open — TCP Handshake Established";
+      let stateBadgeClass = "state-open";
+      let stateIcon = "fa-circle-check";
+      if (p.state === "closed") {
+        stateText = "Closed — TCP RST (Connection Refused)";
+        stateBadgeClass = "state-closed";
+        stateIcon = "fa-circle-xmark";
+      } else if (p.state === "filtered") {
+        stateText = "Filtered — Timeout (No Response)";
+        stateBadgeClass = "state-filtered";
+        stateIcon = "fa-circle-exclamation";
+      } else if (p.state === "error") {
+        stateText = "Error — Network Stack / Socket Exception";
+        stateBadgeClass = "state-error";
+        stateIcon = "fa-triangle-exclamation";
+      }
+
+      if (modalPortBadge) modalPortBadge.textContent = `Port ${p.port} / ${proto}`;
+      if (modalTitle) modalTitle.textContent = `${escapeHtml(p.service || "Unknown")} Service`;
+
+      modalBody.innerHTML = `
+        <div class="ps-modal-grid">
+          <div class="ps-modal-field">
+            <span class="ps-field-label">Port State &amp; Method</span>
+            <span class="ps-field-value">
+              <span class="ps-state-tag ${stateBadgeClass}">
+                <i class="fas ${stateIcon}"></i> ${escapeHtml(p.state || "closed").toUpperCase()}
+              </span>
+            </span>
+          </div>
+          <div class="ps-modal-field">
+            <span class="ps-field-label">Observed Latency (RTT)</span>
+            <span class="ps-field-value font-mono">${latencyStr}</span>
+          </div>
+          <div class="ps-modal-field">
+            <span class="ps-field-label">Target Host</span>
+            <span class="ps-field-value font-mono">${escapeHtml(hostIp)}${escapeHtml(hostName)}</span>
+          </div>
+          <div class="ps-modal-field">
+            <span class="ps-field-label">Transport Protocol</span>
+            <span class="ps-field-value font-mono">${escapeHtml(proto)} Stream Socket</span>
+          </div>
+        </div>
+
+        <div class="ps-modal-card">
+          <div class="ps-modal-card-title">
+            <i class="fas fa-tag text-accent"></i> Service Identification
+          </div>
+          <p class="ps-modal-card-desc">
+            <strong>Service Name:</strong> ${escapeHtml(p.service || "Unknown")}<br />
+            <strong>Identification Source:</strong> ${escapeHtml(p.service_source || "Standard Port Mapping (Well-Known Registry)")}
+          </p>
+          <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+            Note: Service name is mapped from official IANA and well-known service registries. Successful TCP connection indicates the host network stack accepts traffic on this port.
+          </div>
+        </div>
+
+        <div class="ps-modal-card">
+          <div class="ps-modal-card-title">
+            <i class="fas fa-terminal text-accent"></i> Service Banner / Interrogation Response
+          </div>
+          ${p.banner ? `
+            <div class="ps-banner-terminal">
+              <code>${escapeHtml(p.banner)}</code>
+              <button type="button" class="ps-banner-copy-btn" id="psBannerCopyBtn" title="Copy Banner">
+                <i class="fas fa-copy"></i> Copy
+              </button>
+            </div>
+          ` : `
+            <p class="ps-modal-card-desc text-muted">
+              <em>No application greeting banner or HTTP response header was returned by the remote service within the timeout window.</em>
+            </p>
+          `}
+        </div>
+
+        <div class="ps-modal-card">
+          <div class="ps-modal-card-title">
+            <i class="fas ${analysis.icon} text-accent"></i> Exposure Classification &amp; Operational Considerations
+          </div>
+          <div style="margin-bottom:6px;">
+            <span class="ps-exposure-tag ${analysis.badgeClass}">
+              <i class="fas ${analysis.icon}"></i> ${escapeHtml(analysis.label)} (${escapeHtml(analysis.category)})
+            </span>
+          </div>
+          <p class="ps-modal-card-desc">
+            ${escapeHtml(analysis.recommendation)}
+          </p>
+          <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">
+            <strong>Exposure Context:</strong> ${escapeHtml(analysis.riskText)}
+          </div>
+        </div>
+      `;
+
+      // Wire copy button
+      const copyBtn = modalBody.querySelector("#psBannerCopyBtn");
+      if (copyBtn) {
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(p.banner || "").then(() => {
+            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            setTimeout(() => {
+              copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+            }, 1800);
+          }).catch(() => {});
+        });
+      }
+
+      detailsModal.style.display = "flex";
+      document.body.style.overflow = "hidden";
+    }
+
+    function closePortDetailsModal() {
+      if (detailsModal) {
+        detailsModal.style.display = "none";
+        document.body.style.overflow = "";
+      }
+      selectedPortDetail = null;
+    }
+
     async function startScan() {
       if (isPortScanning) return;
       hideError();
@@ -2929,7 +3219,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (currentPreset === "custom") {
         customPorts = (customPortInput ? customPortInput.value : "").trim();
         if (!customPorts) {
-          showError("Please enter one or more custom ports (e.g. 80, 443, 8080).");
+          showError("Please enter one or more custom ports (e.g. 80, 443, 8080, 3000-3005).");
           if (customPortInput) customPortInput.focus();
           return;
         }
@@ -2962,10 +3252,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (progressStatusText) progressStatusText.textContent = `Connecting to ${target}...`;
 
       if (kpiGrid) kpiGrid.style.display = "grid";
-      if (kpiHosts) kpiHosts.textContent = "0";
+      if (kpiCardHosts) kpiCardHosts.style.display = (currentMode === "network") ? "flex" : "none";
       if (kpiScanned) kpiScanned.textContent = "0";
       if (kpiOpen) kpiOpen.textContent = "0";
+      if (kpiClosed) kpiClosed.textContent = "0";
+      if (kpiFiltered) kpiFiltered.textContent = "0";
       if (kpiDuration) kpiDuration.textContent = "0.0s";
+      if (kpiHosts) kpiHosts.textContent = "0";
 
       if (exportGroup) exportGroup.style.display = "none";
 
@@ -2988,7 +3281,6 @@ document.addEventListener("DOMContentLoaded", () => {
           throw new Error(data.message || "Failed to start port scan.");
         }
 
-        // Start polling status
         if (portScanPollTimer) clearInterval(portScanPollTimer);
         portScanPollTimer = setInterval(pollScanStatus, 350);
 
@@ -3028,12 +3320,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (progressPct) progressPct.textContent = `${pct.toFixed(0)}%`;
         if (progressStatusText && data.message) progressStatusText.textContent = data.message;
 
-        if (kpiHosts) updateTelemetryCounter(kpiHosts, data.active_hosts_count || 0);
-        if (kpiScanned) updateTelemetryCounter(kpiScanned, data.scanned_ports || 0);
-        if (kpiOpen) updateTelemetryCounter(kpiOpen, data.open_ports_count || 0);
-        if (kpiDuration) kpiDuration.textContent = `${(data.duration_s || 0).toFixed(1)}s`;
+        // Accurate live KPI counters
+        const scannedCount = data.scanned_ports || 0;
+        const totalCount = data.total_ports || 0;
+        const displayScanned = (status === "scanning" && totalCount > 0) ? `${scannedCount} / ${totalCount}` : `${scannedCount}`;
 
-        // Render live interim results if any open ports found
+        if (kpiScanned) kpiScanned.textContent = displayScanned;
+        if (kpiOpen) updateTelemetryCounter(kpiOpen, data.open_ports_count || 0);
+        if (kpiClosed) updateTelemetryCounter(kpiClosed, data.closed_ports_count || 0);
+        if (kpiFiltered) updateTelemetryCounter(kpiFiltered, data.filtered_ports_count || 0);
+        if (kpiDuration) kpiDuration.textContent = `${(data.duration_s || 0).toFixed(1)}s`;
+        if (kpiHosts) updateTelemetryCounter(kpiHosts, data.active_hosts_count || 0);
+
+        // Render live interim results if any hosts found
         if (data.results && data.results.length > 0) {
           renderResults(data.results);
         }
@@ -3087,7 +3386,54 @@ document.addEventListener("DOMContentLoaded", () => {
       if (progressBar) progressBar.classList.remove("scanning");
     }
 
-    function reconcilePortsTable(container, ports) {
+    // Lifecycle reconnection: attaches to active scan or renders last completed scan
+    async function checkAndAttachActivePortScan() {
+      try {
+        const res = await fetch("/api/port-scan/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        lastScanData = data;
+
+        if (data.status === "scanning") {
+          isPortScanning = true;
+          setBadge("scanning", "Scanning...");
+          if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Scanning...</span>';
+          }
+          if (stopBtn) stopBtn.style.display = "inline-flex";
+          if (progressBox) {
+            progressBox.style.display = "block";
+            progressBox.classList.add("ps-scanning");
+          }
+          if (kpiGrid) kpiGrid.style.display = "grid";
+          if (kpiCardHosts) kpiCardHosts.style.display = (data.scan_type === "network") ? "flex" : "none";
+          if (portScanPollTimer) clearInterval(portScanPollTimer);
+          portScanPollTimer = setInterval(pollScanStatus, 350);
+        } else if (data.status === "completed" && data.results && data.results.length > 0) {
+          setBadge("completed", "Completed");
+          if (kpiGrid) kpiGrid.style.display = "grid";
+          if (kpiCardHosts) kpiCardHosts.style.display = (data.scan_type === "network") ? "flex" : "none";
+          if (kpiScanned) kpiScanned.textContent = `${data.scanned_ports || 0}`;
+          if (kpiOpen) kpiOpen.textContent = `${data.open_ports_count || 0}`;
+          if (kpiClosed) kpiClosed.textContent = `${data.closed_ports_count || 0}`;
+          if (kpiFiltered) kpiFiltered.textContent = `${data.filtered_ports_count || 0}`;
+          if (kpiDuration) kpiDuration.textContent = `${(data.duration_s || 0).toFixed(1)}s`;
+          if (kpiHosts) kpiHosts.textContent = `${data.active_hosts_count || 0}`;
+          if (rescanBtn) rescanBtn.style.display = "inline-flex";
+          if (exportGroup) exportGroup.style.display = "inline-flex";
+          if (resultsTimestamp && timestampText && data.completed_at_str) {
+            timestampText.textContent = `Last scanned at ${data.completed_at_str}`;
+            resultsTimestamp.style.display = "inline-flex";
+          }
+          renderResults(data.results);
+        }
+      } catch (e) {
+        console.warn("Could not check port scan status on attach:", e);
+      }
+    }
+
+    function reconcilePortsTable(container, ports, hostContext = {}) {
       if (!container) return;
       if (!ports || ports.length === 0) {
         let emptyState = container.querySelector(".ps-empty-state");
@@ -3096,7 +3442,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!emptyState) {
           emptyState = document.createElement("div");
           emptyState.className = "ps-empty-state";
-          emptyState.innerHTML = '<i class="fas fa-shield-halved"></i>No open ports detected in this category.';
+          emptyState.innerHTML = '<i class="fas fa-shield-halved"></i>No ports matching the current criteria in this category.';
           container.appendChild(emptyState);
         }
         return;
@@ -3113,24 +3459,67 @@ document.addEventListener("DOMContentLoaded", () => {
           <table class="ps-table">
             <thead>
               <tr>
-                <th>Port</th>
+                <th class="sortable-th" data-sort="port" title="Click to sort by Port">
+                  Port <i class="fas fa-sort sort-icon"></i>
+                </th>
                 <th>Protocol</th>
-                <th>State</th>
-                <th>Service</th>
-                <th>Banner / Info</th>
-                <th>Latency</th>
+                <th class="sortable-th" data-sort="state" title="Click to sort by State">
+                  State <i class="fas fa-sort sort-icon"></i>
+                </th>
+                <th class="sortable-th" data-sort="service" title="Click to sort by Service">
+                  Service &amp; Source <i class="fas fa-sort sort-icon"></i>
+                </th>
+                <th>Version / Interrogation</th>
+                <th class="sortable-th" data-sort="latency" title="Click to sort by Latency">
+                  Latency <i class="fas fa-sort sort-icon"></i>
+                </th>
+                <th>Exposure</th>
+                <th style="text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         `;
         container.appendChild(tableWrap);
+
+        // Wire sortable table headers
+        tableWrap.querySelectorAll("th.sortable-th").forEach(th => {
+          th.addEventListener("click", () => {
+            const field = th.getAttribute("data-sort");
+            if (sortField === field) {
+              sortDirection = (sortDirection === "asc") ? "desc" : "asc";
+            } else {
+              sortField = field;
+              sortDirection = "asc";
+            }
+            if (lastScanData && lastScanData.results) {
+              renderResults(lastScanData.results);
+            }
+          });
+        });
       }
+
+      // Update header sort indicator icons
+      tableWrap.querySelectorAll("th.sortable-th").forEach(th => {
+        const field = th.getAttribute("data-sort");
+        const icon = th.querySelector(".sort-icon");
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (icon) {
+          icon.className = "fas fa-sort sort-icon";
+        }
+        if (field === sortField) {
+          th.classList.add(sortDirection === "asc" ? "sorted-asc" : "sorted-desc");
+          if (icon) {
+            icon.className = `fas fa-sort-${sortDirection === "asc" ? "up" : "down"} sort-icon`;
+          }
+        }
+      });
 
       const tbody = tableWrap.querySelector("tbody");
       if (!tbody) return;
 
-      const currentKeys = new Set(ports.map(p => `${p.port}_${p.protocol || "TCP"}`));
+      const sorted = sortPorts(ports);
+      const currentKeys = new Set(sorted.map(p => `${p.port}_${p.protocol || "TCP"}`));
 
       // Remove rows no longer present
       tbody.querySelectorAll("tr[data-port]").forEach(tr => {
@@ -3140,13 +3529,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
 
-      ports.forEach((p, idx) => {
+      sorted.forEach((p, idx) => {
         const proto = p.protocol || "TCP";
         const stateClass = p.state === "open" ? "state-open" : (p.state === "filtered" ? "state-filtered" : (p.state === "error" ? "state-error" : "state-closed"));
         const stateIcon = p.state === "open" ? "fa-circle-check" : (p.state === "filtered" ? "fa-circle-exclamation" : (p.state === "error" ? "fa-triangle-exclamation" : "fa-circle-xmark"));
-        const latencyText = p.latency_ms !== null && p.latency_ms !== undefined ? `${p.latency_ms} ms` : "--";
+        const latencyText = (p.latency_ms !== null && p.latency_ms !== undefined) ? `${p.latency_ms} ms` : "--";
         const bannerHtml = p.banner ? `<code class="ps-banner-code" title="${escapeHtml(p.banner)}">${escapeHtml(p.banner)}</code>` : '<span class="text-muted">--</span>';
-        const portSig = `${p.state}|${p.service}|${p.banner}|${p.latency_ms}`;
+        const sourceHtml = `<span class="ps-source-tag"><i class="fas fa-tag"></i> ${escapeHtml(p.service_source || "Standard Port Mapping")}</span>`;
+        const analysis = getExposureAnalysis(p.port, proto, p.service, p.banner);
+        const exposureHtml = `<span class="ps-exposure-tag ${analysis.badgeClass}" title="${escapeHtml(analysis.recommendation)}"><i class="fas ${analysis.icon}"></i> ${escapeHtml(analysis.label)}</span>`;
+        const portSig = `${p.state}|${p.service}|${p.service_source}|${p.banner}|${p.latency_ms}|${sortField}|${sortDirection}`;
 
         let tr = tbody.querySelector(`tr[data-port="${p.port}"][data-proto="${proto}"]`);
         if (!tr) {
@@ -3154,7 +3546,7 @@ document.addEventListener("DOMContentLoaded", () => {
           tr.setAttribute("data-port", String(p.port));
           tr.setAttribute("data-proto", proto);
           tr.setAttribute("data-sig", portSig);
-          tr.style.animationDelay = `${Math.min(idx * 28, 400)}ms`;
+          tr.style.animationDelay = `${Math.min(idx * 22, 350)}ms`;
           tr.innerHTML = `
             <td class="ps-port-num">${p.port}</td>
             <td><span class="ps-proto-tag">${proto}</span></td>
@@ -3163,9 +3555,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 <i class="fas ${stateIcon}"></i> ${(p.state || "closed").toUpperCase()}
               </span>
             </td>
-            <td><strong>${escapeHtml(p.service || "Unknown")}</strong></td>
+            <td>
+              <div class="ps-service-col">
+                <span class="ps-service-name">${escapeHtml(p.service || "Unknown")}</span>
+                ${sourceHtml}
+              </div>
+            </td>
             <td>${bannerHtml}</td>
             <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-muted);">${latencyText}</td>
+            <td>${exposureHtml}</td>
+            <td style="text-align:right;">
+              <button type="button" class="ps-action-btn" title="Inspect Service Details">
+                <i class="fas fa-circle-info"></i> Details
+              </button>
+            </td>
           `;
           tbody.appendChild(tr);
         } else {
@@ -3179,12 +3582,33 @@ document.addEventListener("DOMContentLoaded", () => {
                   <i class="fas ${stateIcon}"></i> ${(p.state || "closed").toUpperCase()}
                 </span>
               </td>
-              <td><strong>${escapeHtml(p.service || "Unknown")}</strong></td>
+              <td>
+                <div class="ps-service-col">
+                  <span class="ps-service-name">${escapeHtml(p.service || "Unknown")}</span>
+                  ${sourceHtml}
+                </div>
+              </td>
               <td>${bannerHtml}</td>
               <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-muted);">${latencyText}</td>
+              <td>${exposureHtml}</td>
+              <td style="text-align:right;">
+                <button type="button" class="ps-action-btn" title="Inspect Service Details">
+                  <i class="fas fa-circle-info"></i> Details
+                </button>
+              </td>
             `;
           }
           tbody.appendChild(tr);
+        }
+
+        // Action button click
+        const btn = tr.querySelector(".ps-action-btn");
+        if (btn && !btn._hasClickListener) {
+          btn._hasClickListener = true;
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            showPortDetailsModal(p, hostContext);
+          });
         }
       });
     }
@@ -3193,28 +3617,53 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!resultsWrapper || !resultsContent) return;
       resultsWrapper.style.display = "block";
 
-      // Compute total counts
+      // Compute total counts accurately
       let totalOpen = 0;
+      let totalClosed = 0;
+      let totalFiltered = 0;
       let totalAll = 0;
+
       hosts.forEach(h => {
-        totalOpen += (h.open_ports || []).length;
-        totalAll += (h.all_ports || []).length;
+        const allList = (h.all_ports && h.all_ports.length > 0) ? h.all_ports : (h.open_ports || []);
+        totalAll += allList.length;
+        allList.forEach(p => {
+          if (p.state === "open") totalOpen++;
+          else if (p.state === "closed") totalClosed++;
+          else if (p.state === "filtered" || p.state === "error") totalFiltered++;
+        });
       });
 
-      if (filterOpenCount) filterOpenCount.textContent = totalOpen;
       if (filterAllCount) filterAllCount.textContent = totalAll;
+      if (filterOpenCount) filterOpenCount.textContent = totalOpen;
+      if (filterClosedCount) filterClosedCount.textContent = totalClosed;
+      if (filterFilteredCount) filterFilteredCount.textContent = totalFiltered;
 
       const q = searchQuery.toLowerCase().trim();
 
+      // Filter ports based on active tab ('all', 'open', 'closed', 'filtered')
+      function passesStateFilter(p) {
+        if (activeFilter === "all") return true;
+        if (activeFilter === "open") return p.state === "open";
+        if (activeFilter === "closed") return p.state === "closed";
+        if (activeFilter === "filtered") return p.state === "filtered" || p.state === "error";
+        return true;
+      }
+
+      function passesSearchQuery(p) {
+        if (!q) return true;
+        return String(p.port).includes(q) ||
+               (p.service || "").toLowerCase().includes(q) ||
+               (p.service_source || "").toLowerCase().includes(q) ||
+               (p.banner || "").toLowerCase().includes(q);
+      }
+
       // Render based on scan mode
       if (currentMode === "network") {
-        // Multi-host accordion cards (reconciled in place to preserve open/close state and avoid flicker)
         const singleCard = resultsContent.querySelector(".ps-table-card");
         if (singleCard) singleCard.remove();
 
         const currentHostIps = new Set(hosts.map(h => h.host));
 
-        // Remove cards no longer in hosts list
         resultsContent.querySelectorAll(".ps-host-card").forEach(card => {
           const hostIp = card.getAttribute("data-host");
           if (!currentHostIps.has(hostIp)) {
@@ -3234,11 +3683,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (globalEmpty) globalEmpty.remove();
 
         hosts.forEach((h, idx) => {
-          const portsList = (activeFilter === "open") ? (h.open_ports || []) : (h.all_ports || []);
-          const filteredPorts = portsList.filter(p => {
-            if (!q) return true;
-            return String(p.port).includes(q) || (p.service || "").toLowerCase().includes(q) || (p.banner || "").toLowerCase().includes(q);
-          });
+          const allList = (h.all_ports && h.all_ports.length > 0) ? h.all_ports : (h.open_ports || []);
+          const filteredPorts = allList.filter(p => passesStateFilter(p) && passesSearchQuery(p));
 
           const isOpenByDefault = (idx === 0) || (h.open_ports && h.open_ports.length > 0);
           const openBadgeClass = (h.open_ports_count > 0) ? "ps-state-tag state-open" : "ps-state-tag state-closed";
@@ -3268,7 +3714,6 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             resultsContent.appendChild(hostCard);
           } else {
-            // Host card exists - update meta while preserving open/close class
             const metaTag = hostCard.querySelector(".ps-host-meta .ps-state-tag");
             if (metaTag) {
               metaTag.className = openBadgeClass;
@@ -3283,7 +3728,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
           const hostBody = hostCard.querySelector(".ps-host-body");
-          reconcilePortsTable(hostBody, filteredPorts);
+          reconcilePortsTable(hostBody, filteredPorts, h);
         });
 
       } else {
@@ -3293,11 +3738,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (globalEmpty) globalEmpty.remove();
 
         const host = hosts[0] || {};
-        const portsList = (activeFilter === "open") ? (host.open_ports || []) : (host.all_ports || []);
-        const filteredPorts = portsList.filter(p => {
-          if (!q) return true;
-          return String(p.port).includes(q) || (p.service || "").toLowerCase().includes(q) || (p.banner || "").toLowerCase().includes(q);
-        });
+        const allList = (host.all_ports && host.all_ports.length > 0) ? host.all_ports : (host.open_ports || []);
+        const filteredPorts = allList.filter(p => passesStateFilter(p) && passesSearchQuery(p));
 
         let tableCard = resultsContent.querySelector(".ps-table-card");
         if (!tableCard) {
@@ -3306,7 +3748,7 @@ document.addEventListener("DOMContentLoaded", () => {
           resultsContent.appendChild(tableCard);
         }
 
-        reconcilePortsTable(tableCard, filteredPorts);
+        reconcilePortsTable(tableCard, filteredPorts, host);
       }
     }
 
@@ -3330,12 +3772,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const blob = new Blob([JSON.stringify(lastScanData, null, 2)], { type: "application/json" });
         downloadBlob(blob, filename);
       } else if (format === "csv") {
-        let csv = "Host,Hostname,Port,Protocol,State,Service,Banner,LatencyMs\n";
+        let csv = "Host,Hostname,Port,Protocol,State,Service,ServiceSource,Banner,LatencyMs,ExposureClassification,Recommendation\n";
         lastScanData.results.forEach(h => {
-          const ports = h.all_ports && h.all_ports.length > 0 ? h.all_ports : (h.open_ports || []);
+          const ports = (h.all_ports && h.all_ports.length > 0) ? h.all_ports : (h.open_ports || []);
           ports.forEach(p => {
             const cleanBanner = (p.banner || "").replace(/"/g, '""');
-            csv += `"${h.host}","${h.hostname || ""}","${p.port}","${p.protocol || "TCP"}","${p.state}","${p.service || ""}","${cleanBanner}","${p.latency_ms || ""}"\n`;
+            const cleanService = (p.service || "").replace(/"/g, '""');
+            const cleanSource = (p.service_source || "").replace(/"/g, '""');
+            const proto = p.protocol || "TCP";
+            const analysis = getExposureAnalysis(p.port, proto, p.service, p.banner);
+            const cleanLabel = (analysis.label || "").replace(/"/g, '""');
+            const cleanRec = (analysis.recommendation || "").replace(/"/g, '""');
+
+            csv += `"${h.host}","${h.hostname || ""}","${p.port}","${proto}","${p.state}","${cleanService}","${cleanSource}","${cleanBanner}","${p.latency_ms || ""}","${cleanLabel}","${cleanRec}"\n`;
           });
         });
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -3356,6 +3805,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function init() {
       loadNetworkInfo();
+      checkAndAttachActivePortScan();
 
       // Mode tabs
       modeTabs.forEach(tab => {
@@ -3403,7 +3853,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pill.addEventListener("click", () => {
           filterPills.forEach(p => p.classList.remove("active"));
           pill.classList.add("active");
-          activeFilter = pill.getAttribute("data-filter") || "open";
+          activeFilter = pill.getAttribute("data-filter") || "all";
           if (lastScanData && lastScanData.results) {
             renderResults(lastScanData.results);
           }
@@ -3420,11 +3870,25 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // Delegated Accordion Toggle for Host Cards (stable, registered once)
+      // Modal close handlers
+      if (modalCloseBtn) modalCloseBtn.addEventListener("click", closePortDetailsModal);
+      if (modalFooterCloseBtn) modalFooterCloseBtn.addEventListener("click", closePortDetailsModal);
+      if (detailsModal) {
+        detailsModal.addEventListener("click", (e) => {
+          if (e.target === detailsModal) closePortDetailsModal();
+        });
+      }
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && detailsModal && detailsModal.style.display === "flex") {
+          closePortDetailsModal();
+        }
+      });
+
+      // Delegated Accordion Toggle for Host Cards
       if (resultsContent) {
         resultsContent.addEventListener("click", (e) => {
           const header = e.target.closest(".ps-host-header");
-          if (header) {
+          if (header && !e.target.closest(".ps-action-btn")) {
             const card = header.closest(".ps-host-card");
             if (card) {
               card.classList.toggle("open");
@@ -3440,7 +3904,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (targetParam) {
           switchMode("target_ip");
           if (targetInput) targetInput.value = targetParam;
-          const scannerSec = document.getElementById("portScannerSection") || document.querySelector(".port-scanner-card");
+          const scannerSec = document.getElementById("port-scanner") || document.getElementById("portScannerSection");
           if (scannerSec) {
             setTimeout(() => scannerSec.scrollIntoView({ behavior: "smooth" }), 250);
           }
@@ -3453,7 +3917,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return {
       init,
       startScan,
-      stopScan
+      stopScan,
+      checkAndAttachActivePortScan,
+      showPortDetailsModal,
+      closePortDetailsModal
     };
   })();
 

@@ -119,14 +119,22 @@ TOP_100_PORTS = [
 LIVENESS_PROBE_PORTS = [80, 443, 445, 135, 22, 8080, 3389, 53]
 
 
+def get_service_info(port: int) -> Tuple[str, str]:
+    """
+    Returns (friendly_service_name, service_source_description).
+    Clearly distinguishes standard port-to-service mapping from identified banners.
+    """
+    if port in COMMON_SERVICES:
+        return COMMON_SERVICES[port], "Standard Port Mapping (Well-Known Registry)"
+    try:
+        return socket.getservbyport(port, "tcp").upper(), "System Services Database"
+    except Exception:
+        return "Unknown", "Unregistered Service"
+
+
 def get_service_name(port: int) -> str:
     """Returns friendly service name with socket fallback."""
-    if port in COMMON_SERVICES:
-        return COMMON_SERVICES[port]
-    try:
-        return socket.getservbyport(port, "tcp").upper()
-    except Exception:
-        return "Unknown"
+    return get_service_info(port)[0]
 
 
 # ==============================================================================
@@ -270,7 +278,7 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
       - 'error': Socket or network error (e.g. host unreachable, network down)
     """
     start_t = time.perf_counter()
-    service = get_service_name(port)
+    service, service_source = get_service_info(port)
     writer = None
 
     conn_coro = asyncio.open_connection(ip, port)
@@ -301,7 +309,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
             "protocol": "TCP",
             "state": "open",
             "service": service,
+            "service_source": service_source,
             "banner": banner,
+            "service_version": banner if banner else None,
             "latency_ms": rtt_ms
         }
     except asyncio.TimeoutError:
@@ -310,7 +320,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
             "protocol": "TCP",
             "state": "filtered",
             "service": service,
+            "service_source": service_source,
             "banner": "",
+            "service_version": None,
             "latency_ms": None
         }
     except ConnectionRefusedError:
@@ -320,7 +332,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
             "protocol": "TCP",
             "state": "closed",
             "service": service,
+            "service_source": service_source,
             "banner": "",
+            "service_version": None,
             "latency_ms": None
         }
     except OSError as e:
@@ -332,7 +346,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
                 "protocol": "TCP",
                 "state": "closed",
                 "service": service,
+                "service_source": service_source,
                 "banner": "",
+                "service_version": None,
                 "latency_ms": None
             }
         # Windows: WSAETIMEDOUT (10060); POSIX: ETIMEDOUT (110)
@@ -342,7 +358,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
                 "protocol": "TCP",
                 "state": "filtered",
                 "service": service,
+                "service_source": service_source,
                 "banner": "",
+                "service_version": None,
                 "latency_ms": None
             }
         else:
@@ -351,7 +369,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
                 "protocol": "TCP",
                 "state": "error",
                 "service": service,
+                "service_source": service_source,
                 "banner": f"Network error ({err_code})",
+                "service_version": None,
                 "latency_ms": None
             }
     except Exception as e:
@@ -360,7 +380,9 @@ async def probe_single_port(ip: str, port: int, timeout: float = 0.5) -> Dict[st
             "protocol": "TCP",
             "state": "error",
             "service": service,
+            "service_source": service_source,
             "banner": f"Scan error: {str(e)[:40]}",
+            "service_version": None,
             "latency_ms": None
         }
     finally:
@@ -432,6 +454,8 @@ class PortScannerManager:
             "scanned_ports": 0,
             "total_ports": 0,
             "open_ports_count": 0,
+            "closed_ports_count": 0,
+            "filtered_ports_count": 0,
             "active_hosts_count": 0,
             "results": [],               # List of host result dictionaries
             "last_completed_scan": None,
@@ -499,6 +523,8 @@ class PortScannerManager:
                     "completed_at_str": self.session.get("completed_at_str"),
                     "duration_s": self.session.get("duration_s", 0.0),
                     "open_ports_count": self.session.get("open_ports_count", 0),
+                    "closed_ports_count": self.session.get("closed_ports_count", 0),
+                    "filtered_ports_count": self.session.get("filtered_ports_count", 0),
                     "total_ports": self.session.get("total_ports", 0),
                     "active_hosts_count": self.session.get("active_hosts_count", 0),
                     "results": list(self.session.get("results", []))
@@ -538,6 +564,8 @@ class PortScannerManager:
                 "scanned_ports": 0,
                 "total_ports": len(ports) if scan_type != "network" else 0,
                 "open_ports_count": 0,
+                "closed_ports_count": 0,
+                "filtered_ports_count": 0,
                 "active_hosts_count": 0,
                 "results": [],
                 "last_completed_scan": self.last_completed_scan,
@@ -676,6 +704,14 @@ class PortScannerManager:
                         if self.session.get("scan_id") == scan_id and self.session.get("status") == "scanning":
                             self.session["scanned_ports"] = scanned_so_far
                             self.session["progress_pct"] = pct
+                            if isinstance(res, dict):
+                                st = res.get("state")
+                                if st == "open":
+                                    self.session["open_ports_count"] = self.session.get("open_ports_count", 0) + 1
+                                elif st == "closed":
+                                    self.session["closed_ports_count"] = self.session.get("closed_ports_count", 0) + 1
+                                elif st in ("filtered", "error"):
+                                    self.session["filtered_ports_count"] = self.session.get("filtered_ports_count", 0) + 1
                     return res
 
             tasks = [scan_task(p) for p in ports]
@@ -689,6 +725,8 @@ class PortScannerManager:
 
             open_results.sort(key=lambda x: x["port"])
             all_port_results.sort(key=lambda x: x["port"])
+            closed_count = sum(1 for r in all_port_results if r.get("state") == "closed")
+            filtered_count = sum(1 for r in all_port_results if r.get("state") in ("filtered", "error"))
 
             # Resolve reverse hostname if possible
             hostname = target_str
@@ -702,6 +740,8 @@ class PortScannerManager:
                 "hostname": hostname,
                 "status": "online",
                 "open_ports_count": len(open_results),
+                "closed_ports_count": closed_count,
+                "filtered_ports_count": filtered_count,
                 "total_scanned_ports": len(all_port_results),
                 "open_ports": open_results,
                 "all_ports": all_port_results
@@ -719,6 +759,8 @@ class PortScannerManager:
                 "completed_at_str": completed_str,
                 "duration_s": round(completed_time - self.session["started_at"], 2),
                 "open_ports_count": len(open_results),
+                "closed_ports_count": closed_count,
+                "filtered_ports_count": filtered_count,
                 "total_ports": total_ports,
                 "active_hosts_count": 1,
                 "results": [host_entry]
@@ -732,13 +774,15 @@ class PortScannerManager:
                         "progress_pct": 100.0,
                         "scanned_ports": total_ports,
                         "open_ports_count": len(open_results),
+                        "closed_ports_count": closed_count,
+                        "filtered_ports_count": filtered_count,
                         "active_hosts_count": 1,
                         "results": [host_entry],
                         "completed_at": completed_time,
                         "completed_at_str": completed_str,
                         "last_completed_scan": completed_record,
                         "duration_s": round(completed_time - self.session["started_at"], 2),
-                        "message": f"Scan completed. Found {len(open_results)} open port(s) on {target_str}."
+                        "message": f"Scan completed. Found {len(open_results)} open port(s), {closed_count} closed, {filtered_count} filtered on {target_str}."
                     })
 
         # ----------------------------------------------------------------------
@@ -828,6 +872,8 @@ class PortScannerManager:
             port_checks_done = 0
             all_network_results = []
             total_open_across_network = 0
+            total_closed_across_network = 0
+            total_filtered_across_network = 0
 
             with self._lock:
                 if self.session.get("scan_id") == scan_id:
@@ -856,6 +902,14 @@ class PortScannerManager:
                             if self.session.get("scan_id") == scan_id and self.session.get("status") == "scanning":
                                 self.session["scanned_ports"] = port_checks_done
                                 self.session["progress_pct"] = phase2_pct
+                                if isinstance(pres, dict):
+                                    st = pres.get("state")
+                                    if st == "open":
+                                        self.session["open_ports_count"] = self.session.get("open_ports_count", 0) + 1
+                                    elif st == "closed":
+                                        self.session["closed_ports_count"] = self.session.get("closed_ports_count", 0) + 1
+                                    elif st in ("filtered", "error"):
+                                        self.session["filtered_ports_count"] = self.session.get("filtered_ports_count", 0) + 1
                         return pres
 
                 host_tasks = [host_port_task(p) for p in ports]
@@ -869,7 +923,12 @@ class PortScannerManager:
 
                 host_open.sort(key=lambda x: x["port"])
                 host_all.sort(key=lambda x: x["port"])
+                host_closed = sum(1 for r in host_all if r.get("state") == "closed")
+                host_filtered = sum(1 for r in host_all if r.get("state") in ("filtered", "error"))
+
                 total_open_across_network += len(host_open)
+                total_closed_across_network += host_closed
+                total_filtered_across_network += host_filtered
 
                 hostname = host_ip
                 try:
@@ -882,6 +941,8 @@ class PortScannerManager:
                     "hostname": hostname,
                     "status": "online",
                     "open_ports_count": len(host_open),
+                    "closed_ports_count": host_closed,
+                    "filtered_ports_count": host_filtered,
                     "total_scanned_ports": len(host_all),
                     "open_ports": host_open,
                     "all_ports": host_all
@@ -892,6 +953,8 @@ class PortScannerManager:
                     if self.session.get("scan_id") == scan_id and self.session.get("status") == "scanning":
                         self.session["results"] = list(all_network_results)
                         self.session["open_ports_count"] = total_open_across_network
+                        self.session["closed_ports_count"] = total_closed_across_network
+                        self.session["filtered_ports_count"] = total_filtered_across_network
 
             completed_time = time.time()
             completed_str = time.strftime("%H:%M:%S")
@@ -905,6 +968,8 @@ class PortScannerManager:
                 "completed_at_str": completed_str,
                 "duration_s": round(completed_time - self.session["started_at"], 2),
                 "open_ports_count": total_open_across_network,
+                "closed_ports_count": total_closed_across_network,
+                "filtered_ports_count": total_filtered_across_network,
                 "total_ports": total_port_checks,
                 "active_hosts_count": len(discovered_live_hosts),
                 "results": all_network_results
@@ -918,6 +983,8 @@ class PortScannerManager:
                         "progress_pct": 100.0,
                         "scanned_ports": total_port_checks,
                         "open_ports_count": total_open_across_network,
+                        "closed_ports_count": total_closed_across_network,
+                        "filtered_ports_count": total_filtered_across_network,
                         "active_hosts_count": len(discovered_live_hosts),
                         "results": all_network_results,
                         "completed_at": completed_time,
@@ -926,7 +993,8 @@ class PortScannerManager:
                         "duration_s": round(completed_time - self.session["started_at"], 2),
                         "message": (
                             f"Network scan complete: Discovered {len(discovered_live_hosts)} active host(s) "
-                            f"with {total_open_across_network} open port(s) in {net_obj}."
+                            f"with {total_open_across_network} open port(s), {total_closed_across_network} closed, "
+                            f"{total_filtered_across_network} filtered in {net_obj}."
                         )
                     })
 

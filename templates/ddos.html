@@ -716,11 +716,11 @@
         <div class="section-container">
           <div class="section-header">
             <div class="section-badge">
-              <i class="fas fa-bullseye"></i> Network Reconnaissance
+              <i class="fas fa-bullseye"></i> Network Reconnaissance & Service Analysis
             </div>
-            <h2 class="section-title">Port & Network Reconnaissance Scanner</h2>
+            <h2 class="section-title">Port Scanning & Service Analysis</h2>
             <p class="section-subtitle">
-              Autonomous multi-mode host discovery and service port enumeration powered by internal asynchronous Python engine.
+              High-performance asynchronous TCP stream probing, standard service classification, banner interrogation, and exposure evaluation.
             </p>
           </div>
 
@@ -751,6 +751,9 @@
                 <span class="ps-status-pill ps-state-ready" id="psStateBadge">Ready</span>
               </div>
               <div class="ps-header-right">
+                <span class="ps-proto-badge" title="Transport protocol used by scanner">
+                  <i class="fas fa-layer-group"></i> Protocol: <strong>TCP Connect</strong>
+                </span>
                 <span class="ps-local-ip-badge" id="psLocalIpBadge">
                   <i class="fas fa-circle-dot"></i> Local IP: Detecting...
                 </span>
@@ -805,9 +808,10 @@
                 <div class="ps-adv-item">
                   <label for="psTimeoutSelect">Socket Timeout:</label>
                   <select id="psTimeoutSelect" class="ps-select">
-                    <option value="0.2">Fast (0.2s - LAN only)</option>
+                    <option value="0.2">Fast (0.2s - Low Latency)</option>
                     <option value="0.5" selected>Normal (0.5s - Recommended)</option>
                     <option value="1.0">Thorough (1.0s - High Latency)</option>
+                    <option value="2.0">Extended (2.0s - Deep Probe)</option>
                   </select>
                 </div>
                 <div class="ps-adv-item">
@@ -815,8 +819,12 @@
                   <select id="psConcurrencySelect" class="ps-select">
                     <option value="50">Conservative (50 connections)</option>
                     <option value="150" selected>Balanced (150 connections)</option>
-                    <option value="250">Aggressive (250 connections)</option>
+                    <option value="250">High Speed (250 connections)</option>
                   </select>
+                </div>
+                <div class="ps-adv-notice">
+                  <i class="fas fa-shield-halved"></i>
+                  <span>Non-intrusive TCP handshake. Only authorized targets will be probed.</span>
                 </div>
               </div>
 
@@ -838,11 +846,11 @@
                 </div>
 
                 <div class="ps-export-group" id="psExportGroup" style="display:none;">
-                  <button type="button" id="psExportJsonBtn" class="ps-btn-secondary" title="Export JSON">
-                    <i class="fas fa-file-code"></i> JSON
+                  <button type="button" id="psExportJsonBtn" class="ps-btn-secondary" title="Export Genuine Scan Results as JSON">
+                    <i class="fas fa-file-code"></i> Export JSON
                   </button>
-                  <button type="button" id="psExportCsvBtn" class="ps-btn-secondary" title="Export CSV">
-                    <i class="fas fa-file-csv"></i> CSV
+                  <button type="button" id="psExportCsvBtn" class="ps-btn-secondary" title="Export Genuine Scan Results as CSV">
+                    <i class="fas fa-file-csv"></i> Export CSV
                   </button>
                 </div>
               </div>
@@ -861,23 +869,31 @@
                 </div>
               </div>
 
-              <!-- KPI Summary Counters -->
+              <!-- KPI Summary Counters (5 Core Metrics + Hosts) -->
               <div class="ps-kpi-grid" id="psKpiGrid" style="display:none;">
-                <div class="ps-kpi-card">
+                <div class="ps-kpi-card" id="psKpiCardTested">
+                  <span class="ps-kpi-val" id="psKpiScanned">0</span>
+                  <span class="ps-kpi-lbl">Ports Tested</span>
+                </div>
+                <div class="ps-kpi-card highlight-kpi-open" id="psKpiCardOpen">
+                  <span class="ps-kpi-val" id="psKpiOpen">0</span>
+                  <span class="ps-kpi-lbl">Open Ports</span>
+                </div>
+                <div class="ps-kpi-card" id="psKpiCardClosed">
+                  <span class="ps-kpi-val" id="psKpiClosed">0</span>
+                  <span class="ps-kpi-lbl">Closed (RST)</span>
+                </div>
+                <div class="ps-kpi-card" id="psKpiCardFiltered">
+                  <span class="ps-kpi-val" id="psKpiFiltered">0</span>
+                  <span class="ps-kpi-lbl">Filtered / Timeout</span>
+                </div>
+                <div class="ps-kpi-card" id="psKpiCardDuration">
+                  <span class="ps-kpi-val" id="psKpiDuration">0.0s</span>
+                  <span class="ps-kpi-lbl">Scan Duration</span>
+                </div>
+                <div class="ps-kpi-card" id="psKpiCardHosts" style="display:none;">
                   <span class="ps-kpi-val" id="psKpiHosts">0</span>
                   <span class="ps-kpi-lbl">Active Hosts</span>
-                </div>
-                <div class="ps-kpi-card">
-                  <span class="ps-kpi-val" id="psKpiScanned">0</span>
-                  <span class="ps-kpi-lbl">Scanned Ports</span>
-                </div>
-                <div class="ps-kpi-card highlight-kpi">
-                  <span class="ps-kpi-val" id="psKpiOpen">0</span>
-                  <span class="ps-kpi-lbl">Open Ports Found</span>
-                </div>
-                <div class="ps-kpi-card">
-                  <span class="ps-kpi-val" id="psKpiDuration">0.0s</span>
-                  <span class="ps-kpi-lbl">Scan Time</span>
                 </div>
               </div>
 
@@ -893,26 +909,60 @@
           <div class="ps-results-wrapper" id="psResultsWrapper" style="display:none;">
             <div class="ps-results-toolbar">
               <div class="ps-filter-tabs">
-                <button type="button" class="ps-filter-pill active" data-filter="open">
-                  Open Ports Only <span class="ps-count-badge" id="psFilterOpenCount">0</span>
+                <button type="button" class="ps-filter-pill active" data-filter="all">
+                  All Tested Ports <span class="ps-count-badge" id="psFilterAllCount">0</span>
                 </button>
-                <button type="button" class="ps-filter-pill" data-filter="all">
-                  All Scanned Ports <span class="ps-count-badge" id="psFilterAllCount">0</span>
+                <button type="button" class="ps-filter-pill" data-filter="open">
+                  Open Only <span class="ps-count-badge" id="psFilterOpenCount">0</span>
+                </button>
+                <button type="button" class="ps-filter-pill" data-filter="closed">
+                  Closed <span class="ps-count-badge" id="psFilterClosedCount">0</span>
+                </button>
+                <button type="button" class="ps-filter-pill" data-filter="filtered">
+                  Filtered / Timeout <span class="ps-count-badge" id="psFilterFilteredCount">0</span>
                 </button>
               </div>
-              <div class="ps-results-timestamp" id="psResultsTimestamp" style="display:none;" title="Scan timestamp">
-                <i class="fas fa-clock"></i>
-                <span id="psTimestampText">Last scanned at --:--:--</span>
-              </div>
-              <div class="ps-search-box">
-                <i class="fas fa-magnifying-glass"></i>
-                <input type="text" id="psSearchInput" placeholder="Filter by port or service..." />
+
+              <div class="ps-toolbar-right">
+                <div class="ps-results-timestamp" id="psResultsTimestamp" style="display:none;" title="Scan timestamp">
+                  <i class="fas fa-clock"></i>
+                  <span id="psTimestampText">Last scanned at --:--:--</span>
+                </div>
+                <div class="ps-search-box">
+                  <i class="fas fa-magnifying-glass"></i>
+                  <input type="text" id="psSearchInput" placeholder="Filter by port, service, banner..." />
+                </div>
               </div>
             </div>
 
             <!-- Dynamic Results Container -->
             <div id="psResultsContent" class="ps-results-content">
               <!-- Injected dynamically via PortScannerUI in main.js -->
+            </div>
+          </div>
+
+          <!-- Port Details Modal / Drawer -->
+          <div class="ps-modal-backdrop" id="psDetailsModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="psModalTitle">
+            <div class="ps-modal-dialog">
+              <div class="ps-modal-header">
+                <div class="ps-modal-title-wrap">
+                  <span class="ps-modal-badge" id="psModalPortBadge">Port 80 / TCP</span>
+                  <h3 class="ps-modal-title" id="psModalTitle">Service & Exposure Details</h3>
+                </div>
+                <button type="button" class="ps-modal-close" id="psModalCloseBtn" aria-label="Close details">
+                  <i class="fas fa-xmark"></i>
+                </button>
+              </div>
+              <div class="ps-modal-body" id="psModalBody">
+                <!-- Injected dynamically via JavaScript -->
+              </div>
+              <div class="ps-modal-footer">
+                <span class="ps-modal-disclaimer">
+                  <i class="fas fa-circle-info"></i>
+                  Service detection reflects network accessibility. An open port does not constitute a confirmed vulnerability.
+                </span>
+                <button type="button" class="ps-btn-secondary" id="psModalFooterCloseBtn">Close</button>
+              </div>
             </div>
           </div>
         </div>
