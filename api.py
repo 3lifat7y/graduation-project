@@ -1518,7 +1518,7 @@ def start_scan():
             force_restart = request.args.get("force_restart", "false").lower() in ("true", "1") or request.args.get("restart", "false").lower() in ("true", "1")
 
         ACTIVE_CAPTURE_STATES = ["scanning", "starting", "monitoring", "prediction_available", "no_traffic", "insufficient_traffic"]
-        if is_monitoring and current_scan_session.get("status") in ACTIVE_CAPTURE_STATES:
+        if is_monitoring or current_scan_session.get("status") in ACTIVE_CAPTURE_STATES:
             if force_restart:
                 log_diag("SCAN_RESTART", "Force restart requested: stopping active capture before starting new session on requested adapter.",
                          scan_id=current_scan_session.get("scan_id"))

@@ -1065,21 +1065,20 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Requirement 9: If user manually stopped monitoring earlier, do not restart unexpectedly; wait for Start click.
-    if (!isScanning && userManuallyStopped) {
-      console.log("[AdapterHub] Adapter selection updated while monitoring manually stopped. Retaining stopped state.");
+    // If monitoring is not actively running, do not start capturing automatically.
+    // Retain the idle/stopped state until the user explicitly clicks Start Monitoring.
+    if (!isScanning) {
+      console.log("[AdapterHub] Adapter selection updated while monitoring is stopped/idle. Retaining idle state.");
       return;
     }
 
     console.log(`[AdapterHub] Auto-triggering capture on '${activeAd ? activeAd.name : val}' (seq: ${currentSeq}, wasScanning: ${isScanning})...`);
 
-    // Requirement 2: Safely stop and clean up previous capture worker before starting the new one
-    if (isScanning) {
-      await stopScan(true);
-      if (currentSeq !== adapterSwitchSeq) {
-        console.log(`[AdapterHub] Discarding outdated switch sequence ${currentSeq} (current: ${adapterSwitchSeq})`);
-        return;
-      }
+    // Safely stop and clean up previous capture worker before starting the new one
+    await stopScan(true);
+    if (currentSeq !== adapterSwitchSeq) {
+      console.log(`[AdapterHub] Discarding outdated switch sequence ${currentSeq} (current: ${adapterSwitchSeq})`);
+      return;
     }
 
     // Requirement 5: Reset packet counters and telemetry displays to clean zero state
@@ -2761,6 +2760,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let sortField = "port"; // 'port' | 'state' | 'service' | 'latency'
     let sortDirection = "asc"; // 'asc' | 'desc'
     let selectedPortDetail = null;
+    let isAutoScanPending = false;
 
     // DOM Elements
     const tabLocalhost = document.getElementById("psTabLocalhost");
@@ -3953,7 +3953,7 @@ document.addEventListener("DOMContentLoaded", () => {
         targetParam = "";
       }
 
-      // Check one-time auto-trigger session token
+      // Check one-time auto-trigger session token from Network Discovery Scan Port action
       let autoTrigger = null;
       try {
         const raw = sessionStorage.getItem("port_scan_auto_trigger");
@@ -3966,6 +3966,18 @@ document.addEventListener("DOMContentLoaded", () => {
         autoTrigger = null;
       }
 
+      // Clean the trigger from URL history state immediately so refresh (F5) does not re-run auto-scan!
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        if (cleanParams.has("trigger")) {
+          cleanParams.delete("trigger");
+          const cleanQuery = cleanParams.toString() ? `?${cleanParams.toString()}` : "";
+          window.history.replaceState({ view: "port-scanner" }, "", `${window.location.pathname}${cleanQuery}`);
+        }
+      } catch (e) {
+        // ignore history state errors
+      }
+
       if (!targetParam && autoTrigger && autoTrigger.ip) {
         targetParam = autoTrigger.ip.trim();
       }
@@ -3976,23 +3988,17 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Determine if auto-scan should be triggered (user explicitly clicked Scan Ports)
-      const isAutoScanRequested = (
-        triggerParam === "discovery" ||
-        (autoTrigger && (autoTrigger.ip === targetParam || Date.now() - (autoTrigger.timestamp || 0) < 30000))
+      // Determine if auto-scan should be triggered:
+      // STRICT REQUIREMENT: Auto-scan is permitted ONLY when triggered by an explicit Scan Port click
+      // verified by a fresh one-time autoTrigger token. Stale navigation state, normal navigation,
+      // and page refresh must NEVER start an auto-scan!
+      const isFreshTrigger = Boolean(
+        autoTrigger &&
+        autoTrigger.ip &&
+        (Date.now() - (autoTrigger.timestamp || 0) < 15000) &&
+        (!targetParam || targetParam === autoTrigger.ip)
       );
-
-      // Clean the trigger from URL history state so refresh (F5) does not re-run auto-scan!
-      try {
-        if (triggerParam && window.history && window.history.replaceState) {
-          const cleanParams = new URLSearchParams(window.location.search);
-          cleanParams.delete("trigger");
-          const cleanQuery = cleanParams.toString() ? `?${cleanParams.toString()}` : "";
-          window.history.replaceState({ view: "port-scanner" }, "", `${window.location.pathname}${cleanQuery}`);
-        }
-      } catch (e) {
-        // ignore history state errors
-      }
+      const isAutoScanRequested = isFreshTrigger;
 
       // Validate target address
       if (!isValidTargetAddress(targetParam)) {
@@ -4015,16 +4021,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (isAutoScanRequested) {
-        // Verify not already scanning
-        if (isPortScanning) {
+        // Verify not already scanning and not already pending dispatch
+        if (isPortScanning || isAutoScanPending) {
           return;
         }
+        isAutoScanPending = true;
         // Small delay to ensure DOM and view styles are settled
         setTimeout(() => {
+          isAutoScanPending = false;
           startScan();
         }, 120);
       } else {
-        // If not an auto-scan (e.g. user refreshed while keeping target in URL), attach or show status
+        // If not an auto-scan (e.g. user refreshed while keeping target in URL, or normal navigation),
+        // check/attach to an already active scan, or retain idle state
         checkAndAttachActivePortScan();
       }
     }
