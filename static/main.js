@@ -162,6 +162,391 @@ document.addEventListener("DOMContentLoaded", () => {
   const allCards = Array.from(document.querySelectorAll(".attack-card-item"));
 
   // ============================================================================
+  // Live Traffic Stream & Detected Attacks UI Controller
+  // ============================================================================
+  const liveTrafficTableBody = document.getElementById("liveTrafficTableBody");
+  const trafficTableEmptyRow = document.getElementById("trafficTableEmptyRow");
+  const liveTrafficCounterPill = document.getElementById("liveTrafficCounterPill");
+  const liveStreamBadge = document.getElementById("liveStreamBadge");
+  const liveStreamStatusText = document.getElementById("liveStreamStatusText");
+  const trafficSearchInput = document.getElementById("trafficSearchInput");
+  const trafficFilterBtns = document.querySelectorAll(".traffic-filter-btn");
+
+  const attacksListContainer = document.getElementById("attacksListContainer");
+  const emptyAttacksState = document.getElementById("emptyAttacksState");
+  const attackCountBadge = document.getElementById("attackCountBadge");
+  const clearAttackHistoryBtn = document.getElementById("clearAttackHistoryBtn");
+
+  const attackDetailsModal = document.getElementById("attackDetailsModal");
+  const closeAttackModalBtn = document.getElementById("closeAttackModalBtn");
+  const attackModalBackdrop = document.getElementById("attackModalBackdrop");
+  const modalAttackBody = document.getElementById("modalAttackBody");
+  const modalAttackTitle = document.getElementById("modalAttackTitle");
+  const modalAttackSubtitle = document.getElementById("modalAttackSubtitle");
+
+  let livePacketsBuffer = [];
+  const detectedAttacksRegistry = new Map();
+  let activeTrafficFilter = "all";
+  let trafficSearchTerm = "";
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function updateLiveTrafficStream(incomingPackets, isCapturing, totalCaptured) {
+    if (liveStreamBadge && liveStreamStatusText) {
+      if (isCapturing) {
+        liveStreamBadge.classList.add("active");
+        liveStreamStatusText.textContent = "Live Intercept";
+      } else {
+        liveStreamBadge.classList.remove("active");
+        liveStreamStatusText.textContent = "Stream Idle";
+      }
+    }
+
+    if (Array.isArray(incomingPackets) && incomingPackets.length > 0) {
+      const seenKeys = new Set(livePacketsBuffer.slice(-50).map(p => `${p.raw_timestamp || p.timestamp}_${p.src_ip}_${p.src_port}_${p.dst_ip}_${p.dst_port}_${p.length}`));
+      for (const pkt of incomingPackets) {
+        const key = `${pkt.raw_timestamp || pkt.timestamp}_${pkt.src_ip}_${pkt.src_port}_${pkt.dst_ip}_${pkt.dst_port}_${pkt.length}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          livePacketsBuffer.push(pkt);
+        }
+      }
+      if (livePacketsBuffer.length > 150) {
+        livePacketsBuffer = livePacketsBuffer.slice(-150);
+      }
+    }
+
+    if (liveTrafficCounterPill) {
+      const displayCount = totalCaptured !== undefined ? totalCaptured : livePacketsBuffer.length;
+      liveTrafficCounterPill.textContent = `${displayCount} Packets`;
+    }
+
+    renderLiveTrafficTable();
+  }
+
+  function renderLiveTrafficTable() {
+    if (!liveTrafficTableBody) return;
+
+    let filtered = livePacketsBuffer;
+    if (activeTrafficFilter !== "all") {
+      filtered = filtered.filter(p => {
+        const proto = (p.protocol || "").toUpperCase();
+        if (activeTrafficFilter === "tcp") return proto.includes("TCP");
+        if (activeTrafficFilter === "udp") return proto.includes("UDP");
+        if (activeTrafficFilter === "icmp") return proto.includes("ICMP") || (!proto.includes("TCP") && !proto.includes("UDP"));
+        return true;
+      });
+    }
+
+    if (trafficSearchTerm) {
+      const term = trafficSearchTerm.toLowerCase();
+      filtered = filtered.filter(p => {
+        return (
+          (p.src_ip && p.src_ip.toLowerCase().includes(term)) ||
+          (p.dst_ip && p.dst_ip.toLowerCase().includes(term)) ||
+          String(p.src_port).includes(term) ||
+          String(p.dst_port).includes(term) ||
+          (p.protocol && p.protocol.toLowerCase().includes(term)) ||
+          (p.flow_id && p.flow_id.toLowerCase().includes(term))
+        );
+      });
+    }
+
+    if (filtered.length === 0) {
+      liveTrafficTableBody.innerHTML = `
+        <tr class="empty-row" id="trafficTableEmptyRow">
+          <td colspan="6">
+            <div class="empty-traffic-state">
+              <i class="fas fa-satellite-dish"></i>
+              <p>${isScanning ? "Listening for live packets on active network adapter..." : "Waiting for live traffic... Click <strong>Start Monitoring</strong> to inspect packets."}</p>
+            </div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    const displayList = filtered.slice(-35).reverse();
+    const rowsHtml = displayList.map(pkt => {
+      const proto = escapeHtml(pkt.protocol || "TCP");
+      const protoClass = proto.toLowerCase().includes("tcp")
+        ? "row-proto-tcp"
+        : (proto.toLowerCase().includes("udp") ? "row-proto-udp" : "row-proto-icmp");
+      const timeStr = escapeHtml(pkt.timestamp || "--:--:--");
+      const srcStr = `${escapeHtml(pkt.src_ip || "0.0.0.0")}:${escapeHtml(pkt.src_port || "0")}`;
+      const dstStr = `${escapeHtml(pkt.dst_ip || "0.0.0.0")}:${escapeHtml(pkt.dst_port || "0")}`;
+      const lenStr = `${escapeHtml(pkt.length || 60)} B`;
+      const flagsStr = escapeHtml(pkt.flags || "--");
+
+      return `
+        <tr class="${protoClass}">
+          <td>${timeStr}</td>
+          <td>${srcStr}</td>
+          <td>${dstStr}</td>
+          <td class="col-proto">${proto}</td>
+          <td>${lenStr}</td>
+          <td>${flagsStr}</td>
+        </tr>`;
+    }).join("");
+
+    liveTrafficTableBody.innerHTML = rowsHtml;
+  }
+
+  function updateDetectedAttacksPanel(attacks) {
+    if (!attacksListContainer || !Array.isArray(attacks)) return;
+
+    for (const att of attacks) {
+      const detId = att.detection_id || `det_${att.scan_id}_${att.flow_id}_${att.label}`;
+      if (!detectedAttacksRegistry.has(detId)) {
+        detectedAttacksRegistry.set(detId, att);
+        createAttackCardElement(att, detId);
+      } else {
+        const existing = detectedAttacksRegistry.get(detId);
+        Object.assign(existing, att);
+        updateAttackCardElement(detId, att);
+      }
+    }
+
+    const count = detectedAttacksRegistry.size;
+    if (attackCountBadge) {
+      attackCountBadge.textContent = `${count} Detected`;
+    }
+
+    if (emptyAttacksState) {
+      emptyAttacksState.style.display = count > 0 ? "none" : "flex";
+    }
+  }
+
+  function createAttackCardElement(att, detId) {
+    const card = document.createElement("div");
+    card.className = "attack-card";
+    card.id = `card_${detId}`;
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("aria-label", `View details for ${att.label} detection`);
+
+    const labelStr = escapeHtml(att.label || "Threat Detected");
+    const confVal = typeof att.confidence === "number" ? att.confidence.toFixed(1) : "--";
+    const timeStr = escapeHtml(att.timestamp || "--:--:--");
+    const srcStr = `${escapeHtml(att.src_ip || "0.0.0.0")}:${escapeHtml(att.src_port || 0)}`;
+    const dstStr = `${escapeHtml(att.dst_ip || "0.0.0.0")}:${escapeHtml(att.dst_port || 0)}`;
+    const protoStr = escapeHtml(att.protocol || "TCP");
+
+    card.innerHTML = `
+      <div class="attack-card-top">
+        <span class="attack-label-badge"><i class="fas fa-biohazard"></i> ${labelStr}</span>
+        <span class="attack-time-meta" id="time_${detId}"><i class="fas fa-clock"></i> ${timeStr}</span>
+      </div>
+      <div class="attack-card-flow">
+        <span>${srcStr}</span>
+        <i class="fas fa-arrow-right flow-arrow"></i>
+        <span>${dstStr}</span>
+      </div>
+      <div class="attack-card-bottom">
+        <span class="attack-conf-pill" id="conf_${detId}">Confidence: ${confVal}%</span>
+        <div class="attack-card-actions">
+          <span class="proto-tag">${protoStr}</span>
+          <button type="button" class="btn-card-detail">Inspect Flow <i class="fas fa-chevron-right"></i></button>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      openAttackDetailsModal(att);
+    });
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openAttackDetailsModal(att);
+      }
+    });
+
+    if (emptyAttacksState && emptyAttacksState.nextSibling) {
+      attacksListContainer.insertBefore(card, emptyAttacksState.nextSibling);
+    } else {
+      attacksListContainer.appendChild(card);
+    }
+  }
+
+  function updateAttackCardElement(detId, att) {
+    const card = document.getElementById(`card_${detId}`);
+    if (!card) return;
+    const timeEl = document.getElementById(`time_${detId}`);
+    if (timeEl && att.last_seen_time) {
+      timeEl.innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(att.last_seen_time)}`;
+    }
+    const confEl = document.getElementById(`conf_${detId}`);
+    if (confEl && typeof att.confidence === "number") {
+      const countSuffix = att.occurrence_count && att.occurrence_count > 1 ? ` (x${att.occurrence_count})` : "";
+      confEl.textContent = `Confidence: ${att.confidence.toFixed(1)}%${countSuffix}`;
+    }
+  }
+
+  function openAttackDetailsModal(att) {
+    if (!attackDetailsModal || !modalAttackBody) return;
+    const summary = att.flow_summary || {};
+    const label = escapeHtml(att.label || "Threat Detected");
+    const conf = typeof att.confidence === "number" ? `${att.confidence.toFixed(2)}%` : "--%";
+    const flowDurationMs = summary.flow_duration_us ? (summary.flow_duration_us / 1000).toFixed(2) : "0.0";
+    const bytesSec = summary.flow_bytes_per_s ? Number(summary.flow_bytes_per_s).toLocaleString() : "0.0";
+    const pktsSec = summary.flow_packets_per_s ? Number(summary.flow_packets_per_s).toLocaleString() : "0.0";
+    const avgPktSize = summary.avg_packet_size ? `${Number(summary.avg_packet_size).toFixed(1)} B` : "--";
+
+    if (modalAttackTitle) modalAttackTitle.textContent = `${att.label} — Threat Details`;
+    if (modalAttackSubtitle) modalAttackSubtitle.textContent = `Detection Event ID: ${att.detection_id || "N/A"}`;
+
+    modalAttackBody.innerHTML = `
+      <div class="modal-meta-grid">
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Threat Vector</span>
+          <span class="meta-val threat-val">${label}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Model Confidence</span>
+          <span class="meta-val threat-val">${conf}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Detection Time</span>
+          <span class="meta-val">${escapeHtml(att.timestamp || "--:--:--")}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Last Active Seen</span>
+          <span class="meta-val">${escapeHtml(att.last_seen_time || att.timestamp || "--:--:--")}</span>
+        </div>
+        <div class="modal-meta-item full-width">
+          <span class="meta-lbl">Associated Flow Identifier</span>
+          <span class="meta-val">${escapeHtml(att.flow_id || "N/A")}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Source IP : Port</span>
+          <span class="meta-val">${escapeHtml(att.src_ip || "0.0.0.0")} : ${escapeHtml(att.src_port || 0)}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Destination IP : Port</span>
+          <span class="meta-val">${escapeHtml(att.dst_ip || "0.0.0.0")} : ${escapeHtml(att.dst_port || 0)}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Transport Protocol</span>
+          <span class="meta-val">${escapeHtml(att.protocol || "TCP")}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Monitoring Session ID</span>
+          <span class="meta-val">${escapeHtml(att.scan_id || "N/A")}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Flow Duration</span>
+          <span class="meta-val">${flowDurationMs} ms (${summary.flow_duration_us || 0} µs)</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Packets in Window</span>
+          <span class="meta-val">${summary.window_packets || summary.packets_captured || 0} pkts</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Throughput Rate</span>
+          <span class="meta-val">${bytesSec} B/s</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Packet Velocity</span>
+          <span class="meta-val">${pktsSec} Pkts/s</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Mean Packet Size</span>
+          <span class="meta-val">${avgPktSize}</span>
+        </div>
+        <div class="modal-meta-item">
+          <span class="meta-lbl">Deduplicated Hits</span>
+          <span class="meta-val">${att.occurrence_count || 1} window occurrences</span>
+        </div>
+      </div>
+    `;
+
+    attackDetailsModal.style.display = "flex";
+  }
+
+  function closeAttackModal() {
+    if (attackDetailsModal) {
+      attackDetailsModal.style.display = "none";
+    }
+  }
+
+  async function clearAttackHistory() {
+    try {
+      await fetch(`${API_BASE_URL}/detected-attacks/clear`, { method: "POST" });
+    } catch (e) {
+      console.warn("[DDoS-Guard] Failed to notify API of attack history clear:", e);
+    }
+    detectedAttacksRegistry.clear();
+    if (attacksListContainer) {
+      const cards = attacksListContainer.querySelectorAll(".attack-card");
+      cards.forEach(c => c.remove());
+    }
+    if (emptyAttacksState) {
+      emptyAttacksState.style.display = "flex";
+    }
+    if (attackCountBadge) {
+      attackCountBadge.textContent = "0 Detected";
+    }
+  }
+
+  // Bind traffic toolbar filters & search
+  trafficFilterBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      trafficFilterBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeTrafficFilter = btn.getAttribute("data-filter") || "all";
+      renderLiveTrafficTable();
+    });
+  });
+
+  if (trafficSearchInput) {
+    trafficSearchInput.addEventListener("input", (e) => {
+      trafficSearchTerm = e.target.value.trim();
+      renderLiveTrafficTable();
+    });
+  }
+
+  if (clearAttackHistoryBtn) {
+    clearAttackHistoryBtn.addEventListener("click", () => {
+      clearAttackHistory();
+    });
+  }
+
+  if (closeAttackModalBtn) {
+    closeAttackModalBtn.addEventListener("click", closeAttackModal);
+  }
+
+  if (attackModalBackdrop) {
+    attackModalBackdrop.addEventListener("click", closeAttackModal);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && attackDetailsModal && attackDetailsModal.style.display === "flex") {
+      closeAttackModal();
+    }
+  });
+
+  // Load existing detected attacks once on page initialization
+  async function loadInitialDetectedAttacks() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/detected-attacks`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.detected_attacks)) {
+          updateDetectedAttacksPanel(data.detected_attacks);
+        }
+      }
+    } catch (e) {}
+  }
+  loadInitialDetectedAttacks();
+
+  // ============================================================================
   // 3. Header & Service Status Synchronization
   // ============================================================================
   function updateServiceBadge(svc, drv) {
@@ -739,6 +1124,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initial interface discovery and heartbeat interval
   discoverInterfaces(false);
+  checkAndAttachActiveSession();
   setInterval(syncServiceStatus, 5000);
 
   // ============================================================================
@@ -775,6 +1161,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (radarBox) radarBox.classList.remove("active");
         if (resultChipState) resultChipState.textContent = "Standby";
+        if (liveStreamBadge && liveStreamStatusText) {
+          liveStreamBadge.classList.remove("active");
+          liveStreamStatusText.textContent = "Stream Idle";
+        }
 
         if (checkBtn) {
           checkBtn.disabled = false;
@@ -1076,6 +1466,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (radarPacketBlips) radarPacketBlips.innerHTML = "";
         lastCapturedPacketCount = 0;
         if (resultChipState) resultChipState.textContent = "Monitoring Stopped";
+        if (liveStreamBadge && liveStreamStatusText) {
+          liveStreamBadge.classList.remove("active");
+          liveStreamStatusText.textContent = "Stream Idle";
+        }
 
         if (checkBtn) {
           checkBtn.disabled = false;
@@ -1214,6 +1608,50 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   // 5. Scan Execution & Polling Lifecycle
   // ============================================================================
+  const ACTIVE_CAPTURE_STATES = [
+    "scanning", "starting", "monitoring", "prediction_available", "no_traffic", "insufficient_traffic"
+  ];
+
+  async function checkAndAttachActiveSession() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/scan-status`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.service_state || data.driver_status) {
+        updateServiceBadge(data.service_state, data.driver_status);
+      }
+
+      const isActive = Boolean(data.is_active || (data.status && ACTIVE_CAPTURE_STATES.includes(data.status)));
+      if (isActive && data.scan_id) {
+        activeScanId = data.scan_id;
+        isScanning = true;
+        userManuallyStopped = false;
+
+        // Sync live traffic stream and detected attacks
+        const isCapturing = true;
+        const totalCaptured = data.packets_captured !== undefined ? data.packets_captured : (data.flow_summary?.packets_captured);
+        if (Array.isArray(data.live_packets)) {
+          updateLiveTrafficStream(data.live_packets, isCapturing, totalCaptured);
+        }
+        if (Array.isArray(data.detected_attacks)) {
+          updateDetectedAttacksPanel(data.detected_attacks);
+        }
+
+        // Apply state to UI
+        setUIState(data.status, data);
+
+        // Ensure continuous status polling interval is active
+        if (!scanPollInterval) {
+          scanPollInterval = setInterval(pollScanStatus, 500);
+        }
+        console.log(`[DDoS-Guard] Reconnected to active continuous monitoring session: ${activeScanId} (${data.status})`);
+      }
+    } catch (err) {
+      console.warn("[DDoS-Guard] Active session check error:", err);
+    }
+  }
+
   async function startScan(opts = {}) {
     const forceRestart = Boolean(opts && opts.forceRestart);
     const isUserExplicitStart = (!opts || opts.switchSeq === undefined);
@@ -1360,6 +1798,13 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      // If already scanning or active session reconnected, reflect running state immediately
+      if (startData.status === "already_scanning" || startData.is_active) {
+        isScanning = true;
+        const targetState = (startData.status === "already_scanning" ? (startData.current_status || "monitoring") : startData.status);
+        setUIState(targetState, startData);
+      }
+
       // Begin polling status every 500ms continuously until Stop is clicked
       if (scanPollInterval) clearInterval(scanPollInterval);
       scanPollInterval = setInterval(pollScanStatus, 500);
@@ -1383,6 +1828,12 @@ document.addEventListener("DOMContentLoaded", () => {
         updateServiceBadge(data.service_state, data.driver_status);
       }
 
+      // If activeScanId was not yet registered on this client view, adopt active backend session
+      if (!activeScanId && data.scan_id && (data.is_active || ACTIVE_CAPTURE_STATES.includes(data.status))) {
+        activeScanId = data.scan_id;
+        isScanning = true;
+      }
+
       // STRICT CHECK: Reject any poll data from a previous or mismatched scan session
       if (activeScanId && data.scan_id && data.scan_id !== activeScanId) {
         return;
@@ -1390,6 +1841,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const status = data.status;
       const isContinuous = data.continuous !== false;
+
+      // Update Live Traffic Stream and Detected Attacks Panel
+      const isCapturing = (status === "monitoring" || status === "starting" || status === "scanning" || status === "prediction_available");
+      const totalCaptured = data.packets_captured !== undefined ? data.packets_captured : (data.flow_summary?.packets_captured);
+      if (Array.isArray(data.live_packets)) {
+        updateLiveTrafficStream(data.live_packets, isCapturing, totalCaptured);
+      } else {
+        updateLiveTrafficStream([], isCapturing, totalCaptured);
+      }
+
+      if (Array.isArray(data.detected_attacks)) {
+        updateDetectedAttacksPanel(data.detected_attacks);
+      }
 
       if (status === "starting" || status === "scanning") {
         setUIState("starting", data);
@@ -1453,6 +1917,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     activeScanId = null;
     isScanning = false;
+    updateLiveTrafficStream([], false);
 
     try {
       const res = await fetch(`${API_BASE_URL}/scan-stop`, { method: "POST" });
@@ -1976,6 +2441,7 @@ document.addEventListener("DOMContentLoaded", () => {
       setTopNavActive("monitoring");
       window.scrollTo({ top: 0, behavior: "smooth" });
       discoverInterfaces(true);
+      checkAndAttachActiveSession();
 
       if (updateHistory) {
         history.pushState({ view: "monitoring" }, "", "?view=monitoring");
@@ -3182,7 +3648,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Port Scanner UI
   PortScannerUI.init();
 
-  window.addEventListener("beforeunload", () => {
-    if (isScanning) stopScan(true);
-  });
+  // Lifecycle Decoupled: Navigating between sections or leaving the page does NOT
+  // terminate backend packet capture. Capture continues until user explicitly clicks Stop.
 });

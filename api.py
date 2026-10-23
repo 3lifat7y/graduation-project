@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -102,7 +102,14 @@ CLASS_LABELS = {
     13: "Web Attack - SQL Injection", 14: "Web Attack - XSS"
 }
 
-BENIGN_IDX = 0
+BENIGN_IDX: Optional[int] = 0
+BENIGN_LABEL: Optional[str] = "Benign"
+CONFIG_ERROR: Optional[str] = None
+
+detected_attacks_lock = threading.Lock()
+detected_attacks_history: List[Dict[str, Any]] = []
+MAX_ATTACK_HISTORY = 300
+
 model = None
 scaler = None
 FEATURE_COLUMNS = None
@@ -147,6 +154,9 @@ current_scan_session = {
     "is_attack": False,
     "confidence": 0.0,
     "flow_summary": {},
+    "current_flow": {},
+    "live_packets": [],
+    "detected_attacks_count": 0,
     "error": None,
     "message": "Ready to monitor network traffic."
 }
@@ -258,16 +268,274 @@ def load_model_and_scaler():
                 
         FEATURE_COLUMNS = getattr(scaler, 'feature_names_in_', None)
 
-    # Detect benign index
-    benign_candidates = [k for k, v in CLASS_LABELS.items() if str(v).lower() in ["benign", "normal", "safe"]]
-    BENIGN_IDX = benign_candidates[0] if benign_candidates else 0
-        
-    num_feats = getattr(model, 'n_features_in_', len(FEATURE_COLUMNS) if FEATURE_COLUMNS is not None else 0)
-    print(f"✅ Model loaded successfully → {num_feats} features, {len(CLASS_LABELS)} classes (Benign index: {BENIGN_IDX})")
-    print(f"✅ Scaler loaded → {type(scaler).__name__}")
+def resolve_benign_configuration(labels_dict=None):
+    """
+    Dynamically identifies the benign label and index from a label mapping dict.
+    Returns (benign_idx, benign_label, config_error).
+    """
+    target = labels_dict if labels_dict is not None else CLASS_LABELS
+    benign_candidates = []
+    for k, v in target.items():
+        clean_v = str(v).strip().lower()
+        if clean_v in ["benign", "normal", "safe", "whitelist", "legitimate"]:
+            benign_candidates.append((int(k), str(v).strip()))
+
+    if benign_candidates:
+        return benign_candidates[0][0], benign_candidates[0][1], None
+    else:
+        err = "Model Configuration Error: Unable to locate verified benign/normal baseline traffic label in model label mapping."
+        return None, None, err
+
+
+# Detect benign index and label dynamically from verified model configuration
+BENIGN_IDX, BENIGN_LABEL, CONFIG_ERROR = resolve_benign_configuration(CLASS_LABELS)
+
+num_feats = getattr(model, 'n_features_in_', len(FEATURE_COLUMNS) if FEATURE_COLUMNS is not None else 0)
+print(f"✅ Model loaded successfully → {num_feats} features, {len(CLASS_LABELS)} classes (Benign index: {BENIGN_IDX}, Label: '{BENIGN_LABEL}')")
+print(f"✅ Scaler loaded → {type(scaler).__name__}")
 
 # Initialize model and scaler on module import
 load_model_and_scaler()
+
+
+def is_benign_label(label: Any) -> bool:
+    """Case-insensitive and whitespace-trimmed check against verified model benign label."""
+    if BENIGN_LABEL is None or label is None:
+        return False
+    return str(label).strip().lower() == str(BENIGN_LABEL).strip().lower()
+
+
+def is_benign_index(pred_idx: Any) -> bool:
+    """Checks if numeric prediction index matches identified benign index."""
+    if BENIGN_IDX is None or pred_idx is None:
+        return False
+    try:
+        return int(pred_idx) == int(BENIGN_IDX)
+    except (ValueError, TypeError):
+        return False
+
+
+def get_supported_attack_labels() -> List[str]:
+    """Dynamically returns all verified attack labels from model configuration (excluding benign)."""
+    return [str(v).strip() for k, v in CLASS_LABELS.items() if not is_benign_label(v)]
+
+
+def record_detected_attack(
+    label: Optional[str] = None,
+    confidence: float = 0.0,
+    scan_id: Optional[str] = None,
+    prediction: Optional[int] = None,
+    src_ip: Optional[str] = None,
+    dst_ip: Optional[str] = None,
+    src_port: Optional[int] = None,
+    dst_port: Optional[int] = None,
+    protocol: Any = None,
+    flow_id: Optional[str] = None,
+    flow_summary: Optional[Dict[str, Any]] = None,
+    timestamp: Optional[str] = None,
+    flow_meta: Optional[Dict[str, Any]] = None,
+    **kwargs
+) -> Optional[Dict[str, Any]]:
+    """
+    Registers a detected attack event with strict benign exclusion,
+    full dynamic multi-class support, and intelligent flow-level deduplication.
+    Supports direct arguments or flow_meta dictionary.
+    """
+    if flow_meta:
+        src_ip = src_ip or flow_meta.get("src_ip")
+        dst_ip = dst_ip or flow_meta.get("dst_ip")
+        src_port = src_port if src_port is not None else flow_meta.get("src_port")
+        dst_port = dst_port if dst_port is not None else flow_meta.get("dst_port")
+        protocol = protocol or flow_meta.get("protocol")
+        flow_id = flow_id or flow_meta.get("flow_id")
+        flow_summary = flow_summary or flow_meta.get("flow_summary")
+        if not label and "label" in flow_meta:
+            label = flow_meta["label"]
+        if confidence == 0.0 and "confidence" in flow_meta:
+            try:
+                confidence = float(flow_meta["confidence"])
+            except (ValueError, TypeError):
+                confidence = 0.0
+        if prediction is None and "prediction" in flow_meta:
+            prediction = flow_meta["prediction"]
+
+    if CONFIG_ERROR is not None:
+        log_diag("ATTACK_RECORD_BLOCKED", f"Blocked attack recording due to model config error: {CONFIG_ERROR}")
+        return None
+
+    if not label or not str(label).strip():
+        return None
+
+    clean_label = str(label).strip()
+
+    # Strict Exclusion Gate: Benign label MUST NEVER be added to Detected Attacks
+    if is_benign_label(clean_label) or is_benign_index(prediction):
+        return None
+
+    if prediction is None:
+        for k, v in CLASS_LABELS.items():
+            if str(v).strip().lower() == clean_label.lower():
+                prediction = int(k)
+                break
+        if prediction is None:
+            prediction = 1
+
+    flow_summary = flow_summary or {}
+    now_ts = timestamp or time.strftime("%H:%M:%S")
+    now_epoch = time.time()
+    proto_str = str(protocol) if protocol is not None else "TCP"
+
+    s_ip = src_ip or flow_summary.get("src_ip") or "0.0.0.0"
+    d_ip = dst_ip or flow_summary.get("dst_ip") or "0.0.0.0"
+    s_port = int(src_port if src_port is not None else flow_summary.get("src_port", 0))
+    d_port = int(dst_port if dst_port is not None else flow_summary.get("dst_port", 0))
+    resolved_flow_id = flow_id or f"{s_ip}:{s_port} <-> {d_ip}:{d_port} ({proto_str})"
+    current_sid = scan_id or current_scan_session.get("scan_id") or "session_default"
+
+    with detected_attacks_lock:
+        # Check for existing detection of this exact flow in the current scan session
+        for existing in reversed(detected_attacks_history):
+            if existing.get("scan_id") == current_sid and existing.get("flow_id") == resolved_flow_id:
+                if str(existing.get("label")).strip().lower() == clean_label.lower():
+                    # Same flow, same attack: update latest stats and timestamp in-place without duplicating card
+                    existing["last_seen_time"] = now_ts
+                    existing["last_seen_epoch"] = now_epoch
+                    existing["confidence"] = confidence
+                    existing["flow_summary"] = flow_summary
+                    existing["occurrence_count"] = existing.get("occurrence_count", 1) + 1
+                    return existing
+                else:
+                    # Same flow, but attack label changed during lifecycle! Documented transition: record new event with reference
+                    log_diag("FLOW_LABEL_TRANSITION", f"Flow {resolved_flow_id} changed from '{existing.get('label')}' to '{clean_label}'")
+                    break
+
+        det_id = f"det_{current_sid}_{int(now_epoch * 1000)}_{secrets.token_hex(3)}"
+        attack_record = {
+            "detection_id": det_id,
+            "scan_id": current_sid,
+            "timestamp": now_ts,
+            "created_epoch": now_epoch,
+            "last_seen_time": now_ts,
+            "last_seen_epoch": now_epoch,
+            "label": clean_label,
+            "prediction": prediction,
+            "confidence": float(confidence),
+            "src_ip": s_ip,
+            "dst_ip": d_ip,
+            "src_port": s_port,
+            "dst_port": d_port,
+            "protocol": proto_str,
+            "flow_id": resolved_flow_id,
+            "flow_summary": flow_summary,
+            "occurrence_count": 1,
+            "is_attack": True
+        }
+
+        detected_attacks_history.append(attack_record)
+        if len(detected_attacks_history) > MAX_ATTACK_HISTORY:
+            detected_attacks_history.pop(0)
+
+        log_diag("ATTACK_PINNED", f"Pinned threat [{det_id}]: {clean_label} ({confidence}%) on {resolved_flow_id}")
+        return attack_record
+
+
+def evaluate_flow_prediction(
+    extracted_feats: Dict[str, Any],
+    scan_id: str,
+    total_pkts: int,
+    win_pkts: int,
+    throughput: float,
+    proto_str: str,
+    elapsed: float,
+    last_pkt: Any,
+    src_ip: Optional[str] = None,
+    dst_ip: Optional[str] = None,
+    src_port: Optional[int] = None,
+    dst_port: Optional[int] = None,
+    flow_id: Optional[str] = None,
+    live_packets: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    global CONFIG_ERROR
+    if CONFIG_ERROR is not None:
+        return {
+            "status": "error",
+            "error_type": "ConfigError",
+            "error": CONFIG_ERROR,
+            "message": f"Configuration Error: {CONFIG_ERROR}"
+        }
+
+    X = prepare_features(extracted_feats)
+    prediction = int(model.predict(X)[0])
+    label = CLASS_LABELS.get(prediction, "Unknown")
+    is_attack = not is_benign_label(label)
+    confidence = 100.0
+    if hasattr(model, 'predict_proba'):
+        try:
+            proba = model.predict_proba(X)[0]
+            confidence = round(float(proba[prediction]) * 100, 2)
+        except Exception:
+            pass
+
+    s_ip = src_ip or "0.0.0.0"
+    d_ip = dst_ip or "0.0.0.0"
+    s_port = int(src_port or 0)
+    d_port = int(dst_port or 0)
+    resolved_flow_id = flow_id or f"{s_ip}:{s_port} <-> {d_ip}:{d_port} ({proto_str})"
+
+    flow_summary = {
+        "packets_captured": total_pkts,
+        "window_packets": win_pkts,
+        "flow_duration_us": float(extracted_feats.get("Flow Duration", 0)),
+        "flow_bytes_per_s": round(float(extracted_feats.get("Flow Bytes/s", 0)), 2),
+        "flow_packets_per_s": round(float(extracted_feats.get("Flow Packets/s", 0)), 2),
+        "protocol": proto_str,
+        "avg_packet_size": round(float(extracted_feats.get("Avg Packet Size", 0)), 2),
+        "src_ip": s_ip,
+        "dst_ip": d_ip,
+        "src_port": s_port,
+        "dst_port": d_port,
+        "flow_id": resolved_flow_id
+    }
+
+    if is_attack:
+        record_detected_attack(
+            scan_id=scan_id,
+            label=label,
+            prediction=prediction,
+            confidence=confidence,
+            src_ip=s_ip,
+            dst_ip=d_ip,
+            src_port=s_port,
+            dst_port=d_port,
+            protocol=proto_str,
+            flow_id=resolved_flow_id,
+            flow_summary=flow_summary
+        )
+
+    msg = f"⚠️ Security Alert: Malicious {label} Traffic Signature Detected!" if is_attack else "✅ Security Status: Normal / Benign Traffic Flow Verified"
+
+    with detected_attacks_lock:
+        attack_count = len(detected_attacks_history)
+
+    return {
+        "status": "monitoring",
+        "prediction": prediction,
+        "label": label,
+        "is_attack": is_attack,
+        "confidence": confidence,
+        "packets_captured": total_pkts,
+        "window_packets": win_pkts,
+        "throughput_kbps": throughput,
+        "protocol": proto_str,
+        "flow_summary": flow_summary,
+        "current_flow": flow_summary,
+        "live_packets": live_packets or [],
+        "detected_attacks_count": attack_count,
+        "duration": elapsed,
+        "last_packet_time": last_pkt,
+        "message": msg,
+        "timestamp": time.strftime("%H:%M:%S")
+    }
 
 
 def prepare_features(data_dict: Dict[str, Any]) -> np.ndarray:
@@ -436,48 +704,26 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
                     last_log_t = now
 
                 if curr_st == "monitoring" and svc_status.get("features"):
-                    extracted_feats = svc_status.get("features")
                     try:
-                        X = prepare_features(extracted_feats)
-                        prediction = int(model.predict(X)[0])
-                        label = CLASS_LABELS.get(prediction, "Unknown")
-                        is_attack = bool(prediction != BENIGN_IDX and str(label).lower() not in ["benign", "normal", "safe"])
-                        confidence = 100.0
-                        if hasattr(model, 'predict_proba'):
-                            try:
-                                proba = model.predict_proba(X)[0]
-                                confidence = round(float(proba[prediction]) * 100, 2)
-                            except Exception:
-                                pass
-
-                        flow_summary = {
-                            "packets_captured": total_pkts,
-                            "window_packets": win_pkts,
-                            "flow_duration_us": float(extracted_feats.get("Flow Duration", 0)),
-                            "flow_bytes_per_s": round(float(extracted_feats.get("Flow Bytes/s", 0)), 2),
-                            "flow_packets_per_s": round(float(extracted_feats.get("Flow Packets/s", 0)), 2),
-                            "protocol": int(proto_num),
-                            "avg_packet_size": round(float(extracted_feats.get("Avg Packet Size", 0)), 2)
-                        }
-
+                        eval_res = evaluate_flow_prediction(
+                            extracted_feats=svc_status.get("features"),
+                            scan_id=scan_id,
+                            total_pkts=total_pkts,
+                            win_pkts=win_pkts,
+                            throughput=throughput,
+                            proto_str=proto_str,
+                            elapsed=elapsed,
+                            last_pkt=last_pkt,
+                            src_ip=svc_status.get("src_ip"),
+                            dst_ip=svc_status.get("dst_ip"),
+                            src_port=svc_status.get("src_port"),
+                            dst_port=svc_status.get("dst_port"),
+                            flow_id=svc_status.get("flow_id"),
+                            live_packets=svc_status.get("live_packets", [])
+                        )
                         with scan_session_lock:
                             if current_scan_session.get("scan_id") == scan_id:
-                                current_scan_session.update({
-                                    "status": "monitoring",
-                                    "prediction": prediction,
-                                    "label": label,
-                                    "is_attack": is_attack,
-                                    "confidence": confidence,
-                                    "packets_captured": total_pkts,
-                                    "window_packets": win_pkts,
-                                    "throughput_kbps": throughput,
-                                    "protocol": proto_str,
-                                    "flow_summary": flow_summary,
-                                    "duration": elapsed,
-                                    "last_packet_time": last_pkt,
-                                    "message": "⚠️ Security Alert: Malicious DDoS Traffic Signature Detected!" if is_attack else "✅ Security Status: Normal / Benign Traffic Flow Verified",
-                                    "timestamp": time.strftime("%H:%M:%S")
-                                })
+                                current_scan_session.update(eval_res)
                     except Exception as inf_err:
                         log_diag("INFERENCE_ERROR", f"Model inference exception: {inf_err}", scan_id=scan_id)
 
@@ -754,48 +1000,26 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
                     last_log_t = now
 
                 if curr_st == "monitoring" and worker_status.get("features"):
-                    extracted_feats = worker_status.get("features")
                     try:
-                        X = prepare_features(extracted_feats)
-                        prediction = int(model.predict(X)[0])
-                        label = CLASS_LABELS.get(prediction, "Unknown")
-                        is_attack = bool(prediction != BENIGN_IDX and str(label).lower() not in ["benign", "normal", "safe"])
-                        confidence = 100.0
-                        if hasattr(model, 'predict_proba'):
-                            try:
-                                proba = model.predict_proba(X)[0]
-                                confidence = round(float(proba[prediction]) * 100, 2)
-                            except Exception:
-                                pass
-
-                        flow_summary = {
-                            "packets_captured": total_pkts,
-                            "window_packets": win_pkts,
-                            "flow_duration_us": float(extracted_feats.get("Flow Duration", 0)),
-                            "flow_bytes_per_s": round(float(extracted_feats.get("Flow Bytes/s", 0)), 2),
-                            "flow_packets_per_s": round(float(extracted_feats.get("Flow Packets/s", 0)), 2),
-                            "protocol": int(proto_num),
-                            "avg_packet_size": round(float(extracted_feats.get("Avg Packet Size", 0)), 2)
-                        }
-
+                        eval_res = evaluate_flow_prediction(
+                            extracted_feats=worker_status.get("features"),
+                            scan_id=scan_id,
+                            total_pkts=total_pkts,
+                            win_pkts=win_pkts,
+                            throughput=throughput,
+                            proto_str=proto_str,
+                            elapsed=elapsed,
+                            last_pkt=last_pkt,
+                            src_ip=worker_status.get("src_ip"),
+                            dst_ip=worker_status.get("dst_ip"),
+                            src_port=worker_status.get("src_port"),
+                            dst_port=worker_status.get("dst_port"),
+                            flow_id=worker_status.get("flow_id"),
+                            live_packets=worker_status.get("live_packets", [])
+                        )
                         with scan_session_lock:
                             if current_scan_session.get("scan_id") == scan_id:
-                                current_scan_session.update({
-                                    "status": "monitoring",
-                                    "prediction": prediction,
-                                    "label": label,
-                                    "is_attack": is_attack,
-                                    "confidence": confidence,
-                                    "packets_captured": total_pkts,
-                                    "window_packets": win_pkts,
-                                    "throughput_kbps": throughput,
-                                    "protocol": proto_str,
-                                    "flow_summary": flow_summary,
-                                    "duration": elapsed,
-                                    "last_packet_time": last_pkt,
-                                    "message": "⚠️ Security Alert: Malicious DDoS Traffic Signature Detected!" if is_attack else "✅ Security Status: Normal / Benign Traffic Flow Verified",
-                                    "timestamp": time.strftime("%H:%M:%S")
-                                })
+                                current_scan_session.update(eval_res)
                     except Exception as inf_err:
                         log_diag("INFERENCE_ERROR", f"Model inference exception: {inf_err}", scan_id=scan_id)
 
@@ -1293,7 +1517,8 @@ def start_scan():
             req_adapter_netname = request.args.get("network_name")
             force_restart = request.args.get("force_restart", "false").lower() in ("true", "1") or request.args.get("restart", "false").lower() in ("true", "1")
 
-        if current_scan_session["status"] in ["scanning", "monitoring"]:
+        ACTIVE_CAPTURE_STATES = ["scanning", "starting", "monitoring", "prediction_available", "no_traffic", "insufficient_traffic"]
+        if is_monitoring and current_scan_session.get("status") in ACTIVE_CAPTURE_STATES:
             if force_restart:
                 log_diag("SCAN_RESTART", "Force restart requested: stopping active capture before starting new session on requested adapter.",
                          scan_id=current_scan_session.get("scan_id"))
@@ -1309,13 +1534,13 @@ def start_scan():
                 is_monitoring = False
                 current_scan_session["status"] = "stopped"
             else:
-                log_diag("SCAN_REJECT", "Scan request rejected: a monitoring session is already in progress.",
+                log_diag("SCAN_RECONNECT", "Scan request reconnected: a monitoring session is already in progress.",
                          scan_id=current_scan_session.get("scan_id"))
-                return jsonify({
-                    "status": "already_scanning",
-                    "message": "A network monitoring session is already in progress.",
-                    "scan_id": current_scan_session["scan_id"]
-                }), 200
+                resp = dict(current_scan_session)
+                resp["status"] = "already_scanning"
+                resp["is_active"] = True
+                resp["message"] = "Reconnected to existing active network monitoring session."
+                return jsonify(resp), 200
 
         log_diag("SCAN_START_REQUEST", f"New scan/monitoring requested: adapter={req_adapter_name} (idx={req_adapter_idx}, guid={req_adapter_guid}, net={req_adapter_netname}), continuous={continuous}, duration={duration}s, min_packets={min_packets}, force_restart={force_restart}")
 
@@ -1329,6 +1554,8 @@ def start_scan():
             "throughput_kbps": 0.0,
             "protocol": "--",
             "flow_summary": {},
+            "current_flow": {},
+            "live_packets": [],
             "error": None
         })
 
@@ -1676,11 +1903,62 @@ def start_scan():
 
 @app.route('/api/scan-status', methods=['GET'])
 def get_scan_status():
-    """Polls the active scan session state with synchronized service state."""
+    """Polls the active scan session state with synchronized service state and detected attacks."""
+    ACTIVE_CAPTURE_STATES = {"scanning", "starting", "monitoring", "prediction_available", "no_traffic", "insufficient_traffic"}
     with scan_session_lock:
         resp = dict(current_scan_session)
+        resp["is_active"] = bool(is_monitoring and resp.get("status") in ACTIVE_CAPTURE_STATES)
+        resp["is_capturing"] = resp["is_active"]
+    with detected_attacks_lock:
+        resp["detected_attacks"] = list(detected_attacks_history)
+        resp["detected_attacks_count"] = len(detected_attacks_history)
+    resp["benign_label"] = BENIGN_LABEL
+    resp["config_error"] = CONFIG_ERROR
+    resp["supported_attack_labels"] = get_supported_attack_labels()
     resp["service_state"] = get_service_status(include_ipc=True)
     return jsonify(resp), 200
+
+
+def get_detected_attacks_history() -> List[Dict[str, Any]]:
+    """Returns a copy of all recorded detected attacks."""
+    with detected_attacks_lock:
+        return [dict(x) for x in detected_attacks_history]
+
+
+def clear_detected_attacks_history():
+    """Clears detected attacks history cleanly without affecting capture or model."""
+    with detected_attacks_lock:
+        detected_attacks_history.clear()
+    with scan_session_lock:
+        current_scan_session["detected_attacks_count"] = 0
+
+
+@app.route('/api/detected-attacks', methods=['GET'])
+def get_detected_attacks():
+    """Returns all pinned attack detection events."""
+    attacks = get_detected_attacks_history()
+    return jsonify({
+        "status": "success",
+        "detected_attacks": attacks,
+        "count": len(attacks),
+        "benign_label": BENIGN_LABEL,
+        "config_error": CONFIG_ERROR
+    }), 200
+
+
+@app.route('/api/detected-attacks/clear', methods=['POST'])
+def clear_detected_attacks():
+    """
+    Clears the displayed detected attacks history cleanly.
+    Does NOT stop capture, does NOT modify model or scaler, and does not alter scan session.
+    """
+    clear_detected_attacks_history()
+    log_diag("ATTACK_HISTORY_CLEARED", "Detected attacks history cleared by user request.")
+    return jsonify({
+        "status": "success",
+        "message": "Detected attacks history cleared successfully.",
+        "count": 0
+    }), 200
 
 
 @app.route('/api/scan-rescan', methods=['GET', 'POST'])

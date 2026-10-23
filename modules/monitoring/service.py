@@ -225,7 +225,13 @@ class CaptureWorker:
                     "interface_index": self.current_result.get("interface_index"),
                     "last_packet_time": snap["last_packet_time"],
                     "features": snap["features"],
-                    "message": snap["message"]
+                    "message": snap["message"],
+                    "src_ip": snap.get("src_ip"),
+                    "dst_ip": snap.get("dst_ip"),
+                    "src_port": snap.get("src_port"),
+                    "dst_port": snap.get("dst_port"),
+                    "flow_id": snap.get("flow_id"),
+                    "live_packets": snap.get("live_packets", [])
                 }
             return dict(self.current_result)
 

@@ -596,6 +596,118 @@
               </div>
             </div>
           </div>
+
+          <!-- Live Network Traffic Stream & Detected Attacks Side Section -->
+          <div class="live-monitoring-workspace" id="liveMonitoringWorkspace">
+            <!-- Left/Main Column: Live Network Traffic Stream Table -->
+            <div class="live-traffic-panel" id="liveTrafficPanel">
+              <div class="panel-header-bar">
+                <div class="panel-title-group">
+                  <span class="panel-icon"><i class="fas fa-network-wired"></i></span>
+                  <div>
+                    <h3 class="panel-heading">Live Network Traffic Stream</h3>
+                    <p class="panel-subheading">Continuous real-time packet inspection and bidirectional flow telemetry from Scapy/Npcap</p>
+                  </div>
+                </div>
+                <div class="panel-actions-group">
+                  <span class="live-stream-badge" id="liveStreamBadge">
+                    <span class="pulse-dot"></span> <span id="liveStreamStatusText">Stream Idle</span>
+                  </span>
+                  <span class="traffic-counter-pill" id="liveTrafficCounterPill">0 Packets</span>
+                </div>
+              </div>
+
+              <!-- Live Traffic Filters Toolbar -->
+              <div class="traffic-toolbar">
+                <div class="traffic-filters">
+                  <button type="button" class="traffic-filter-btn active" data-filter="all">All Traffic</button>
+                  <button type="button" class="traffic-filter-btn" data-filter="tcp">TCP</button>
+                  <button type="button" class="traffic-filter-btn" data-filter="udp">UDP</button>
+                  <button type="button" class="traffic-filter-btn" data-filter="icmp">ICMP / Other</button>
+                </div>
+                <div class="traffic-search-wrap">
+                  <i class="fas fa-magnifying-glass"></i>
+                  <input type="text" id="trafficSearchInput" placeholder="Filter by IP or Port..." aria-label="Filter traffic by IP or Port" />
+                </div>
+              </div>
+
+              <!-- Live Traffic Table Container -->
+              <div class="traffic-table-container">
+                <table class="traffic-table" id="liveTrafficTable" aria-label="Live Network Traffic Table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Time</th>
+                      <th scope="col">Source IP:Port</th>
+                      <th scope="col">Destination IP:Port</th>
+                      <th scope="col">Protocol</th>
+                      <th scope="col">Length</th>
+                      <th scope="col">Flags / Info</th>
+                    </tr>
+                  </thead>
+                  <tbody id="liveTrafficTableBody">
+                    <tr class="empty-row" id="trafficTableEmptyRow">
+                      <td colspan="6">
+                        <div class="empty-traffic-state">
+                          <i class="fas fa-satellite-dish"></i>
+                          <p>Waiting for live traffic... Click <strong>Start Monitoring</strong> to inspect network traffic.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Right/Side Column: Detected Attacks Pinned Log -->
+            <div class="detected-attacks-panel" id="detectedAttacksPanel">
+              <div class="panel-header-bar attack-panel-header">
+                <div class="panel-title-group">
+                  <span class="panel-icon alert-icon"><i class="fas fa-shield-virus"></i></span>
+                  <div>
+                    <h3 class="panel-heading">Detected Attacks</h3>
+                    <p class="panel-subheading">Pinned AI intrusion classification results (Non-Benign)</p>
+                  </div>
+                </div>
+                <div class="panel-actions-group">
+                  <span class="attack-counter-badge" id="attackCountBadge">0 Detected</span>
+                  <button type="button" class="btn-clear-history" id="clearAttackHistoryBtn" title="Clear displayed attack detection history">
+                    <i class="fas fa-trash-can"></i> Clear History
+                  </button>
+                </div>
+              </div>
+
+              <!-- Pinned Attacks Container -->
+              <div class="attacks-list-container" id="attacksListContainer" role="log" aria-live="polite">
+                <div class="empty-attacks-state" id="emptyAttacksState">
+                  <i class="fas fa-shield-check"></i>
+                  <h4>No Hostile Vectors Detected</h4>
+                  <p>Verified normal/benign traffic is filtered out. Any model predictions classifying threats will be pinned here.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Attack Details Modal -->
+          <div class="attack-details-modal" id="attackDetailsModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modalAttackTitle">
+            <div class="modal-backdrop" id="attackModalBackdrop"></div>
+            <div class="modal-dialog">
+              <div class="modal-header">
+                <div class="modal-title-wrap">
+                  <i class="fas fa-triangle-exclamation modal-alert-icon"></i>
+                  <div>
+                    <h3 id="modalAttackTitle">Threat Detection Details</h3>
+                    <span class="modal-subtitle" id="modalAttackSubtitle">Flow Telemetry & Model Evidence</span>
+                  </div>
+                </div>
+                <button type="button" class="modal-close-btn" id="closeAttackModalBtn" aria-label="Close details" title="Close">
+                  <i class="fas fa-xmark"></i>
+                </button>
+              </div>
+              <div class="modal-body" id="modalAttackBody">
+                <!-- Injected dynamically via JavaScript -->
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

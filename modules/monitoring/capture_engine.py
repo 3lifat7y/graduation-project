@@ -590,6 +590,53 @@ class RollingFlowStatsCollector:
             base_res["message"] = f"Flow feature validation failed: {reason}"
             return base_res
 
+        # Extract flow metadata and bounded recent packet records for live telemetry
+        s_ip = collector.src_ip or (active_packets[0].get("src_ip", "0.0.0.0") if active_packets else "0.0.0.0")
+        d_ip = collector.dst_ip or (active_packets[0].get("dst_ip", "0.0.0.0") if active_packets else "0.0.0.0")
+        s_port = int(collector.src_port or (active_packets[0].get("src_port", 0) if active_packets else 0))
+        d_port = int(collector.dst_port or (active_packets[0].get("dst_port", 0) if active_packets else 0))
+        proto_num = int(collector.protocol_num or active_proto or 6)
+        proto_map = {6: "TCP", 17: "UDP", 1: "ICMP"}
+        proto_name = proto_map.get(proto_num, f"Proto {proto_num}")
+        flow_id = f"{s_ip}:{s_port} <-> {d_ip}:{d_port} ({proto_name})"
+
+        recent_live_packets = []
+        for p in active_packets[-30:]:
+            p_flags = []
+            raw_flags = p.get("flags")
+            if isinstance(raw_flags, dict):
+                for f_name, f_val in raw_flags.items():
+                    if f_val:
+                        p_flags.append(f_name)
+            elif isinstance(raw_flags, (str, int)):
+                p_flags.append(str(raw_flags))
+            flags_str = ", ".join(p_flags) if p_flags else "--"
+            p_proto_num = int(p.get("protocol", 6))
+            p_proto_name = proto_map.get(p_proto_num, f"Proto {p_proto_num}")
+
+            p_ts = float(p.get("timestamp", time.time()))
+            time_formatted = time.strftime("%H:%M:%S", time.localtime(p_ts))
+
+            recent_live_packets.append({
+                "timestamp": time_formatted,
+                "raw_timestamp": p_ts,
+                "src_ip": p.get("src_ip", "0.0.0.0"),
+                "dst_ip": p.get("dst_ip", "0.0.0.0"),
+                "src_port": int(p.get("src_port", 0)),
+                "dst_port": int(p.get("dst_port", 0)),
+                "protocol": p_proto_name,
+                "length": int(p.get("length", 60)),
+                "flags": flags_str,
+                "flow_id": f"{p.get('src_ip', '0.0.0.0')}:{p.get('src_port', 0)} <-> {p.get('dst_ip', '0.0.0.0')}:{p.get('dst_port', 0)}"
+            })
+
+        base_res["src_ip"] = s_ip
+        base_res["dst_ip"] = d_ip
+        base_res["src_port"] = s_port
+        base_res["dst_port"] = d_port
+        base_res["flow_id"] = flow_id
+        base_res["live_packets"] = recent_live_packets
+
         base_res["status"] = "monitoring"
         base_res["features"] = features
         base_res["message"] = f"Active traffic: {window_count} packets in current window ({throughput_kbps} KB/s)."
