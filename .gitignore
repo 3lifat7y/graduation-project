@@ -56,3 +56,9 @@ Desktop.ini
 node_modules/
 .npm/
 .parcel-cache/
+
+# SQLite Database & Instance Directories
+instance/
+*.db
+*.sqlite
+*.sqlite3

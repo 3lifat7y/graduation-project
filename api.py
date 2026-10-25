@@ -36,9 +36,25 @@ from modules.monitoring.capture_engine import (
 from modules.monitoring.ipc_client import DDoSGuardIPCClient
 from modules.monitoring.service import CaptureWorker
 from modules.monitoring.service_helper import get_service_status, request_service_start, request_service_restart, is_service_online, is_authenticated_service_online
+from modules.auth.db import init_db
+from modules.auth.routes import auth_bp
+from modules.subscriptions.routes_admin import sub_admin_bp
+from modules.subscriptions.routes_user import sub_user_bp
+from modules.auth.security import SECRET_KEY
+from modules.auth.decorators import login_required, roles_required, admin_required
+from modules.subscriptions.decorators import subscription_required
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+app.config['SECRET_KEY'] = SECRET_KEY
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+app.register_blueprint(auth_bp)
+app.register_blueprint(sub_admin_bp)
+app.register_blueprint(sub_user_bp)
+
+try:
+    init_db()
+except Exception as _db_err:
+    print(f"⚠️ [DB INIT WARNING] Could not initialize database: {_db_err}")
 
 ipc_client = DDoSGuardIPCClient()
 standalone_worker = CaptureWorker()
@@ -1476,6 +1492,7 @@ def get_service_status_route():
 
 
 @app.route('/api/service-start', methods=['POST'])
+@admin_required
 def start_service_route():
     """Requests scoped UAC elevation to start the DDoSGuardSnifferService."""
     try:
@@ -1486,6 +1503,7 @@ def start_service_route():
 
 
 @app.route('/api/scan', methods=['GET', 'POST'])
+@subscription_required(feature="can_live_monitoring")
 def start_scan():
     """Initiates a continuous or discrete live network traffic monitoring session."""
     global current_scan_session, is_monitoring, live_collector, last_injected_flow
@@ -1953,6 +1971,7 @@ def get_detected_attacks():
 
 
 @app.route('/api/detected-attacks/clear', methods=['POST'])
+@admin_required
 def clear_detected_attacks():
     """
     Clears the displayed detected attacks history cleanly.
@@ -1968,6 +1987,7 @@ def clear_detected_attacks():
 
 
 @app.route('/api/scan-rescan', methods=['GET', 'POST'])
+@subscription_required(feature="can_live_monitoring")
 def rescan_active_session():
     """
     Performs a non-intrusive health inspection of the active monitoring session.
@@ -2509,6 +2529,7 @@ def get_port_scan_network_info():
 
 
 @app.route('/api/port-scan/start', methods=['POST'])
+@subscription_required(feature="can_port_scan")
 def start_port_scan():
     """Initiates an isolated port scan session."""
     try:
@@ -2579,6 +2600,7 @@ def get_network_discovery_info_route():
 
 
 @app.route('/api/network-discovery/start', methods=['POST'])
+@subscription_required(feature="can_network_discovery")
 def start_network_discovery():
     """Initiates an isolated network discovery sweep across the target local subnet."""
     try:
