@@ -3,8 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Network Security System: Autonomous Local Network Discovery & Hardware Device Asset Inventory with ARP, ICMP, and OUI Manufacturer Detection." />
-  <meta name="theme-color" content="#F7F5EF" />
+  <meta name="description" content="SCOUT: Autonomous Local Network Discovery & Hardware Device Asset Inventory with ARP, ICMP, and OUI Manufacturer Detection." />
+  <meta name="application-name" content="SCOUT" />
+  <meta name="apple-mobile-web-app-title" content="SCOUT" />
+  <meta name="theme-color" content="#FAFAFA" />
+
+  <!-- Favicon and Application Icons -->
+  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/images/apple-touch-icon.png" />
 
   <!-- Anti-Flash Synchronous Theme Initializer -->
   <script>
@@ -15,11 +23,11 @@
         var activeTheme = savedTheme ? savedTheme : (systemDark ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', activeTheme);
         var metaTheme = document.querySelector('meta[name="theme-color"]');
-        if (metaTheme) metaTheme.setAttribute('content', activeTheme === 'dark' ? '#101411' : '#F7F5EF');
+        if (metaTheme) metaTheme.setAttribute('content', activeTheme === 'dark' ? '#09090B' : '#FAFAFA');
       } catch (e) {}
     })();
   </script>
-  <title>Network Security System — Local Network Discovery & Asset Inventory</title>
+  <title>SCOUT — Local Network Discovery & Asset Inventory</title>
 
   <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,7 +37,7 @@
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-  <!-- Network Security System Design System -->
+  <!-- SCOUT Design System -->
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="app-layout network-discovery-page">
@@ -39,13 +47,14 @@
   <!-- Collapsible Sidebar Navigation -->
   <aside class="app-sidebar" id="appSidebar" aria-label="Main Navigation">
     <div class="sidebar-header">
-      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="Network Security System Home">
-        <div class="brand-shield" aria-hidden="true">
-          <i class="fas fa-shield-halved"></i>
+      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="SCOUT Home">
+        <div class="brand-logo-wrap sidebar-expanded-logo">
+          <img src="/static/images/scout-logo.png" alt="SCOUT" class="scout-brand-logo scout-logo-light" />
+          <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="scout-brand-logo scout-logo-dark" />
         </div>
-        <div class="brand-text-wrap">
-          <span class="brand-title">Network Security</span>
-          <span class="brand-subtitle">System Console</span>
+        <div class="brand-icon-wrap sidebar-collapsed-logo" title="SCOUT">
+          <img src="/static/images/scout-icon.png" alt="SCOUT" class="scout-brand-icon scout-logo-light" />
+          <img src="/static/images/scout-icon-dark.png" alt="SCOUT" class="scout-brand-icon scout-logo-dark" />
         </div>
       </a>
       <button class="sidebar-mobile-close-btn" id="sidebarMobileCloseBtn" type="button" aria-label="Close navigation sidebar" title="Close Sidebar">
@@ -97,8 +106,12 @@
         <button class="top-nav-sidebar-toggle" id="navbarSidebarToggleBtn" type="button" aria-label="Toggle navigation sidebar" title="Toggle Sidebar">
           <i class="fas fa-bars"></i>
         </button>
-        <a href="/" class="top-nav-brand" aria-label="Network Security System Home">
-          <span class="top-nav-title">Network Security System</span>
+        <a href="/" class="top-nav-brand" aria-label="SCOUT Home">
+          <div class="top-nav-logo-wrap">
+            <img src="/static/images/scout-logo.png" alt="SCOUT" class="scout-nav-logo scout-logo-light" />
+            <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="scout-nav-logo scout-logo-dark" />
+          </div>
+          <span class="top-nav-title visually-hidden">SCOUT</span>
         </a>
       </div>
 
@@ -401,8 +414,8 @@
         <div class="footer-top-row">
           <div class="footer-brand-col">
             <div class="footer-logo">
-              <i class="fas fa-shield-halved logo-icon"></i>
-              <span class="logo-name">Network Security System</span>
+              <img src="/static/images/scout-logo.png" alt="SCOUT" class="footer-scout-logo scout-logo-light" />
+              <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="footer-scout-logo scout-logo-dark" />
             </div>
             <p class="footer-tagline">
               Autonomous multi-vector cyber defense, real-time ML traffic telemetry, active port enumeration, and high-performance network reconnaissance.
@@ -429,7 +442,7 @@
         </div>
 
         <div class="footer-bottom-row">
-          <p class="footer-note">© 2025–2026 Network Security System Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
+          <p class="footer-note">© 2025–2026 SCOUT Cybersecurity Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
         </div>
       </div>
     </footer>

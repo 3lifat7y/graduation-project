@@ -2364,7 +2364,7 @@ document.addEventListener("DOMContentLoaded", () => {
         themeToggleBtn.setAttribute("aria-label", titleStr);
       }
       if (metaTheme) {
-        metaTheme.setAttribute("content", isDark ? "#101411" : "#F7F5EF");
+        metaTheme.setAttribute("content", isDark ? "#09090B" : "#FAFAFA");
       }
 
       if (animate) {
@@ -2430,6 +2430,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.style.overflow = "";
 
     if (targetView === "monitoring") {
+      document.title = "SCOUT — Live Network Monitoring & Intrusion Detection";
       document.body.classList.add("dedicated-mode-monitoring");
       document.body.classList.remove("dedicated-mode-port-scanner", "home-view");
 
@@ -2455,6 +2456,7 @@ document.addEventListener("DOMContentLoaded", () => {
         history.pushState({ view: "monitoring" }, "", "?view=monitoring");
       }
     } else if (targetView === "port-scanner") {
+      document.title = "SCOUT — Port Scanning & Service Analysis";
       document.body.classList.add("dedicated-mode-port-scanner");
       document.body.classList.remove("dedicated-mode-monitoring", "home-view");
 
@@ -2486,6 +2488,7 @@ document.addEventListener("DOMContentLoaded", () => {
         history.pushState({ view: "port-scanner" }, "", "?view=port-scanner");
       }
     } else {
+      document.title = "SCOUT — Autonomous Cyber Threat Defense & Telemetry";
       // Home Page Mode: Live Monitoring and Port Scanner are NEVER displayed on Home!
       document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner");
       document.body.classList.add("home-view");
@@ -4117,7 +4120,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.clearRect(0, 0, width, height);
 
       const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-      const nodeRgb = isDark ? "72, 139, 110" : "53, 92, 74";
+      const nodeRgb = isDark ? "163, 230, 53" : "101, 163, 13";
 
       // Connecting lines
       for (let i = 0; i < nodes.length; i++) {

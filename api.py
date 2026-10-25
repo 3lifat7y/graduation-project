@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
 import pickle
 import json
@@ -1352,6 +1352,12 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
 @app.route('/')
 def home():
     return render_template('ddos.html')
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static', 'images'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 
 @app.route('/api/adapter-info', methods=['GET'])

@@ -1594,7 +1594,7 @@
         themeToggleBtn.setAttribute('aria-label', titleStr);
       }
       if (metaTheme) {
-        metaTheme.setAttribute('content', isDark ? '#101411' : '#F7F5EF');
+        metaTheme.setAttribute('content', isDark ? '#09090B' : '#FAFAFA');
       }
 
       if (animate) {

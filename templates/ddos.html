@@ -3,8 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Network Security System: Autonomous Real-Time Traffic Inspection, Multi-Class Intrusion Detection, Port Enumeration & Subnet Reconnaissance." />
-  <meta name="theme-color" content="#F7F5EF" />
+  <meta name="description" content="SCOUT: Autonomous Real-Time Traffic Inspection, Multi-Class Intrusion Detection, Port Enumeration & Subnet Reconnaissance." />
+  <meta name="application-name" content="SCOUT" />
+  <meta name="apple-mobile-web-app-title" content="SCOUT" />
+  <meta name="theme-color" content="#FAFAFA" />
+
+  <!-- Favicon and Application Icons -->
+  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/images/apple-touch-icon.png" />
 
   <!-- Anti-Flash Synchronous Theme Initializer -->
   <script>
@@ -15,11 +23,11 @@
         var activeTheme = savedTheme ? savedTheme : (systemDark ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', activeTheme);
         var metaTheme = document.querySelector('meta[name="theme-color"]');
-        if (metaTheme) metaTheme.setAttribute('content', activeTheme === 'dark' ? '#101411' : '#F7F5EF');
+        if (metaTheme) metaTheme.setAttribute('content', activeTheme === 'dark' ? '#09090B' : '#FAFAFA');
       } catch (e) {}
     })();
   </script>
-  <title>Network Security System — Autonomous Cyber Threat Defense & Telemetry</title>
+  <title>SCOUT — Autonomous Cyber Threat Defense & Telemetry</title>
 
   <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body), JetBrains Mono (Telemetry) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,7 +37,7 @@
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-  <!-- Network Security System Design System -->
+  <!-- SCOUT Design System -->
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="app-layout">
@@ -39,13 +47,14 @@
   <!-- Collapsible Sidebar Navigation -->
   <aside class="app-sidebar" id="appSidebar" aria-label="Main Navigation">
     <div class="sidebar-header">
-      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="Network Security System Home">
-        <div class="brand-shield" aria-hidden="true">
-          <i class="fas fa-shield-halved"></i>
+      <a href="/" class="sidebar-brand" id="sidebarBrandLink" aria-label="SCOUT Home">
+        <div class="brand-logo-wrap sidebar-expanded-logo">
+          <img src="/static/images/scout-logo.png" alt="SCOUT" class="scout-brand-logo scout-logo-light" />
+          <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="scout-brand-logo scout-logo-dark" />
         </div>
-        <div class="brand-text-wrap">
-          <span class="brand-title">Network Security</span>
-          <span class="brand-subtitle">System Console</span>
+        <div class="brand-icon-wrap sidebar-collapsed-logo" title="SCOUT">
+          <img src="/static/images/scout-icon.png" alt="SCOUT" class="scout-brand-icon scout-logo-light" />
+          <img src="/static/images/scout-icon-dark.png" alt="SCOUT" class="scout-brand-icon scout-logo-dark" />
         </div>
       </a>
       <button class="sidebar-mobile-close-btn" id="sidebarMobileCloseBtn" type="button" aria-label="Close navigation sidebar" title="Close Sidebar">
@@ -97,8 +106,12 @@
         <button class="top-nav-sidebar-toggle" id="navbarSidebarToggleBtn" type="button" aria-label="Toggle navigation sidebar" title="Toggle Sidebar">
           <i class="fas fa-bars"></i>
         </button>
-        <a href="/" class="top-nav-brand" aria-label="Network Security System Home">
-          <span class="top-nav-title">Network Security System</span>
+        <a href="/" class="top-nav-brand" aria-label="SCOUT Home">
+          <div class="top-nav-logo-wrap">
+            <img src="/static/images/scout-logo.png" alt="SCOUT" class="scout-nav-logo scout-logo-light" />
+            <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="scout-nav-logo scout-logo-dark" />
+          </div>
+          <span class="top-nav-title visually-hidden">SCOUT</span>
         </a>
       </div>
 
@@ -133,7 +146,7 @@
 
     <!-- Main Scrolling Body -->
     <main>
-      <!-- Section 1: Hero — Network Security System -->
+      <!-- Section 1: Hero — SCOUT Cyber Defense Platform -->
       <section class="hero-section" id="overview">
         <!-- Interactive Cybersecurity Constellation Background -->
         <canvas class="hero-cyber-canvas" id="cyberNetworkCanvas" aria-hidden="true"></canvas>
@@ -169,34 +182,46 @@
         <div class="hero-container">
           <div class="hero-content">
             <div class="hero-eyebrow">
-              <span class="eyebrow-pill"><i class="fas fa-shield-halved"></i> Enterprise Security Platform</span>
+              <span class="eyebrow-pill"><i class="fas fa-crosshairs"></i> SCOUT Enterprise Defense</span>
               <span class="eyebrow-divider">•</span>
-              <span class="eyebrow-text">Unified Threat Defense & Telemetry</span>
+              <span class="eyebrow-text">Autonomous Threat Reconnaissance & Telemetry</span>
             </div>
 
             <h1 class="hero-title">
-              Comprehensive <span class="gradient-text">Network Security System</span>
+              Autonomous Cyber Defense with <span class="gradient-text">SCOUT</span>
             </h1>
 
             <p class="hero-description">
-              Unified cybersecurity operations platform delivering real-time network traffic monitoring, automated threat detection, autonomous local subnet device discovery, and active port security scanning.
+              SCOUT is a unified cybersecurity operations platform delivering real-time network traffic monitoring, automated threat detection, autonomous local subnet device discovery, and active port security scanning.
             </p>
 
             <div class="hero-stats-grid">
-              <div class="hero-stat-card">
-                <span class="stat-number">Live</span>
+              <div class="hero-stat-card stat-card-live">
+                <div class="stat-header">
+                  <span class="stat-dot stat-dot-live"></span>
+                  <span class="stat-number">Live</span>
+                </div>
                 <span class="stat-label">Traffic Telemetry</span>
               </div>
-              <div class="hero-stat-card">
-                <span class="stat-number">14+</span>
+              <div class="hero-stat-card stat-card-threats">
+                <div class="stat-header">
+                  <span class="stat-dot stat-dot-threats"></span>
+                  <span class="stat-number">14+</span>
+                </div>
                 <span class="stat-label">Threat Signatures</span>
               </div>
-              <div class="hero-stat-card">
-                <span class="stat-number">Subnet</span>
+              <div class="hero-stat-card stat-card-subnet">
+                <div class="stat-header">
+                  <span class="stat-dot stat-dot-subnet"></span>
+                  <span class="stat-number">Subnet</span>
+                </div>
                 <span class="stat-label">Device Discovery</span>
               </div>
-              <div class="hero-stat-card">
-                <span class="stat-number">Port</span>
+              <div class="hero-stat-card stat-card-port">
+                <div class="stat-header">
+                  <span class="stat-dot stat-dot-port"></span>
+                  <span class="stat-number">Port</span>
+                </div>
                 <span class="stat-label">Security Auditing</span>
               </div>
             </div>
@@ -1090,7 +1115,7 @@
                   <span class="benign-status-pill"><span class="pulse-dot"></span> Legitimate Flow Verified</span>
                 </div>
                 <p>
-                  Represents everyday, non-hostile network traffic including authorized HTTPS web sessions, DNS lookups, streaming media, and authenticated database transactions. The Network Security System continuously models normal bidirectional flow dynamics across 77 statistical features, ensuring genuine traffic passes seamlessly without false alarms.
+                  Represents everyday, non-hostile network traffic including authorized HTTPS web sessions, DNS lookups, streaming media, and authenticated database transactions. The SCOUT platform continuously models normal bidirectional flow dynamics across 77 statistical features, ensuring genuine traffic passes seamlessly without false alarms.
                 </p>
                 <div class="benign-metrics-row">
                   <div class="benign-metric">
@@ -1174,8 +1199,14 @@
                   <span class="attack-type-tag tag-dos">Denial of Service</span>
                   <span class="protocol-tag">Class: DDoS</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos0.jpg" alt="DDoS Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-server"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 02</span>
+                  </div>
                 </div>
                 <h3>DDoS (Distributed DoS)</h3>
                 <p>Volumetric flood launched concurrently from multiple distributed botnets to exhaust bandwidth, deplete routing buffers, and disrupt service availability.</p>
@@ -1191,8 +1222,14 @@
                   <span class="attack-type-tag tag-dos">Denial of Service</span>
                   <span class="protocol-tag">Class: DoS Hulk</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos1.jpg" alt="DoS Hulk Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-bolt-lightning"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 04</span>
+                  </div>
                 </div>
                 <h3>DoS Hulk</h3>
                 <p>Generates high-rate, obfuscated HTTP GET requests with randomized user-agents and URLs to bypass caching servers and crash backend worker pools.</p>
@@ -1208,8 +1245,14 @@
                   <span class="attack-type-tag tag-dos">Denial of Service</span>
                   <span class="protocol-tag">Class: DoS GoldenEye</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos2.jpg" alt="DoS GoldenEye Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-link-slash"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 03</span>
+                  </div>
                 </div>
                 <h3>DoS GoldenEye</h3>
                 <p>Layer-7 application exhaustion attack that holds HTTP Keep-Alive and No-Cache connections open indefinitely until server socket pools are depleted.</p>
@@ -1225,8 +1268,14 @@
                   <span class="attack-type-tag tag-dos">Denial of Service</span>
                   <span class="protocol-tag">Class: DoS slowloris</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos3.jpg" alt="DoS Slowloris Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-clock-rotate-left"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 06</span>
+                  </div>
                 </div>
                 <h3>DoS Slowloris</h3>
                 <p>Low-and-slow HTTP starvation attack that transmits partial, incomplete request headers at slow intervals, locking connection tables with minimal bandwidth.</p>
@@ -1242,8 +1291,14 @@
                   <span class="attack-type-tag tag-dos">Denial of Service</span>
                   <span class="protocol-tag">Class: DoS Slowhttptest</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos4.jpg" alt="DoS Slowhttptest Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-sliders"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 05</span>
+                  </div>
                 </div>
                 <h3>DoS Slowhttptest</h3>
                 <p>Exploits web server concurrency limits by slowly sending HTTP POST message bodies or reading response data one byte at a time to tie up threads.</p>
@@ -1259,8 +1314,14 @@
                   <span class="attack-type-tag tag-web">Web Application</span>
                   <span class="protocol-tag">Class: Web Attack - SQL Injection</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos8.jpg" alt="SQL Injection Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-database"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 13</span>
+                  </div>
                 </div>
                 <h3>Web Attack — SQL Injection</h3>
                 <p>Injects malicious SQL query fragments into web form inputs or query parameters to subvert application logic, bypass auth, or extract database records.</p>
@@ -1276,8 +1337,14 @@
                   <span class="attack-type-tag tag-web">Web Application</span>
                   <span class="protocol-tag">Class: Web Attack - XSS</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos9.jpg" alt="Cross-Site Scripting Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-code"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 14</span>
+                  </div>
                 </div>
                 <h3>Web Attack — XSS</h3>
                 <p>Injects unauthorized JavaScript scripts into web application parameters, executing within end-user browsers to steal session tokens and credentials.</p>
@@ -1293,8 +1360,14 @@
                   <span class="attack-type-tag tag-web">Web Application</span>
                   <span class="protocol-tag">Class: Web Attack - Brute Force</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos10.jpg" alt="Web Brute Force Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-key"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 12</span>
+                  </div>
                 </div>
                 <h3>Web Attack — Brute Force</h3>
                 <p>Automated credential-guessing and password-spraying submissions targeted at web login interfaces and administrative authentication portals.</p>
@@ -1310,8 +1383,14 @@
                   <span class="attack-type-tag tag-brute">Brute Force</span>
                   <span class="protocol-tag">Class: SSH-Patator</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos11.jpg" alt="SSH-Patator Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-terminal"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 11</span>
+                  </div>
                 </div>
                 <h3>SSH-Patator</h3>
                 <p>Targeted multi-threaded dictionary brute force directed against Secure Shell (SSH) daemons to discover valid user credentials and gain shell access.</p>
@@ -1327,8 +1406,14 @@
                   <span class="attack-type-tag tag-brute">Brute Force</span>
                   <span class="protocol-tag">Class: FTP-Patator</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos12.jpg" alt="FTP-Patator Attack Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-folder-tree"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 07</span>
+                  </div>
                 </div>
                 <h3>FTP-Patator</h3>
                 <p>Automated high-velocity credential brute force against File Transfer Protocol (FTP) listeners, attempting thousands of dictionary combinations.</p>
@@ -1344,8 +1429,14 @@
                   <span class="attack-type-tag tag-brute">Vulnerability Exploit</span>
                   <span class="protocol-tag">Class: Heartbleed</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos13.jpg" alt="Heartbleed Exploit Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-heart-pulse"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 08</span>
+                  </div>
                 </div>
                 <h3>Heartbleed (CVE-2014-0160)</h3>
                 <p>Exploits OpenSSL TLS heartbeat extension buffer over-read flaw to leak up to 64KB of server memory containing private encryption keys and passwords.</p>
@@ -1361,8 +1452,14 @@
                   <span class="attack-type-tag tag-recon">Reconnaissance</span>
                   <span class="protocol-tag">Class: PortScan</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos5.jpg" alt="PortScan Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-crosshairs"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 10</span>
+                  </div>
                 </div>
                 <h3>PortScan Reconnaissance</h3>
                 <p>Systematic TCP/UDP port enumeration across network hosts to identify listening services, banner versions, and attack surfaces prior to exploitation.</p>
@@ -1378,8 +1475,14 @@
                   <span class="attack-type-tag tag-recon">Botnet Activity</span>
                   <span class="protocol-tag">Class: Bot</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos6.jpg" alt="Botnet Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-robot"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 01</span>
+                  </div>
                 </div>
                 <h3>Botnet Traffic (ARES / C2)</h3>
                 <p>Autonomous command-and-control communication and payload synchronization between compromised zombie hosts and centralized botmaster servers.</p>
@@ -1395,8 +1498,14 @@
                   <span class="attack-type-tag tag-recon">Intrusion</span>
                   <span class="protocol-tag">Class: Infiltration</span>
                 </div>
-                <div class="img-wrap">
-                  <img src="/static/images/ddos7.jpg" alt="Infiltration Diagram" loading="lazy" />
+                <div class="attack-icon-container">
+                  <div class="attack-icon-emblem">
+                    <i class="fas fa-user-secret"></i>
+                  </div>
+                  <div class="attack-vector-indicator">
+                    <span class="attack-vector-dot"></span>
+                    <span class="attack-vector-code">CLASS 09</span>
+                  </div>
                 </div>
                 <h3>Network Infiltration</h3>
                 <p>Internal network intrusion following initial compromise, involving privilege escalation, network mapping, and lateral movement across private subnets.</p>
@@ -1546,8 +1655,8 @@
         <div class="footer-main-row">
           <div class="footer-brand">
             <div class="footer-logo">
-              <i class="fas fa-shield-halved"></i>
-              <span>Network Security System</span>
+              <img src="/static/images/scout-logo.png" alt="SCOUT" class="footer-scout-logo scout-logo-light" />
+              <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="footer-scout-logo scout-logo-dark" />
             </div>
             <p class="footer-tagline">
               Autonomous multi-vector cyber defense, real-time ML traffic telemetry, active port enumeration, and high-performance network reconnaissance.
@@ -1579,7 +1688,7 @@
         </div>
 
         <div class="footer-bottom-row">
-          <p class="footer-note">© 2025–2026 Network Security System Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
+          <p class="footer-note">© 2025–2026 SCOUT Cybersecurity Research Team. All Rights Reserved. Faculty of Computers and AI Graduation Project.</p>
           <div class="footer-badges">
             <span class="cert-pill">SOC v2.5</span>
             <span class="cert-pill">CIC-IDS2017</span>
@@ -1594,7 +1703,7 @@
     <i class="fas fa-arrow-up"></i>
   </button>
 
-  <!-- Network Security System Client Controller -->
+  <!-- SCOUT Client Controller -->
   <script src="/static/main.js"></script>
 </body>
 </html>
