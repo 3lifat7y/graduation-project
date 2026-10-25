@@ -4250,9 +4250,185 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Initialize Hero Visual Enhancements
+  function initThreatIntelVideo() {
+    const video = document.getElementById("threatIntelBgVideo");
+    if (!video) return;
+
+    // Strict muted and volume zero enforcement
+    video.muted = true;
+    video.volume = 0;
+    video.removeAttribute("controls");
+
+    video.addEventListener("volumechange", () => {
+      if (!video.muted || video.volume > 0) {
+        video.muted = true;
+        video.volume = 0;
+      }
+    });
+
+    // Respect prefers-reduced-motion
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      try { video.pause(); } catch (e) {}
+      return;
+    }
+
+    // Autoplay attempt
+    const tryPlay = () => {
+      video.muted = true;
+      video.volume = 0;
+      const promise = video.play();
+      if (promise !== undefined) {
+        promise.catch(() => {
+          // Fallback on first user gesture if browser blocks immediate autoplay
+          const resumeOnInteract = () => {
+            video.muted = true;
+            video.volume = 0;
+            video.play().catch(() => {});
+            document.removeEventListener("click", resumeOnInteract);
+            document.removeEventListener("touchstart", resumeOnInteract);
+            document.removeEventListener("keydown", resumeOnInteract);
+          };
+          document.addEventListener("click", resumeOnInteract, { once: true, passive: true });
+          document.addEventListener("touchstart", resumeOnInteract, { once: true, passive: true });
+          document.addEventListener("keydown", resumeOnInteract, { once: true, passive: true });
+        });
+      }
+    };
+
+    tryPlay();
+
+    // IntersectionObserver to pause when scrolled out of view and resume when visible
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !document.hidden) {
+            if (video.paused) {
+              video.muted = true;
+              video.volume = 0;
+              video.play().catch(() => {});
+            }
+          } else {
+            if (!video.paused) {
+              video.pause();
+            }
+          }
+        });
+      }, { threshold: 0.05 });
+
+      const section = video.closest(".threat-intel-section");
+      if (section) observer.observe(section);
+    }
+
+    // Visibility change handling (tab inactive)
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        if (!video.paused) video.pause();
+      } else {
+        const section = video.closest(".threat-intel-section");
+        if (section) {
+          const rect = section.getBoundingClientRect();
+          if (rect.top < window.innerHeight && rect.bottom > 0) {
+            video.muted = true;
+            video.volume = 0;
+            video.play().catch(() => {});
+          }
+        }
+      }
+    });
+  }
+
+  function initDefensiveVideo() {
+    const video = document.getElementById("defensiveBgVideo");
+    if (!video) return;
+
+    // Strict muted and volume zero enforcement
+    video.muted = true;
+    video.volume = 0;
+    video.removeAttribute("controls");
+
+    video.addEventListener("volumechange", () => {
+      if (!video.muted || video.volume > 0) {
+        video.muted = true;
+        video.volume = 0;
+      }
+    });
+
+    // Respect prefers-reduced-motion
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      try { video.pause(); } catch (e) {}
+      return;
+    }
+
+    // Autoplay attempt
+    const tryPlay = () => {
+      video.muted = true;
+      video.volume = 0;
+      const promise = video.play();
+      if (promise !== undefined) {
+        promise.catch(() => {
+          // Fallback on first user gesture if browser blocks immediate autoplay
+          const resumeOnInteract = () => {
+            video.muted = true;
+            video.volume = 0;
+            video.play().catch(() => {});
+            document.removeEventListener("click", resumeOnInteract);
+            document.removeEventListener("touchstart", resumeOnInteract);
+            document.removeEventListener("keydown", resumeOnInteract);
+          };
+          document.addEventListener("click", resumeOnInteract, { once: true, passive: true });
+          document.addEventListener("touchstart", resumeOnInteract, { once: true, passive: true });
+          document.addEventListener("keydown", resumeOnInteract, { once: true, passive: true });
+        });
+      }
+    };
+
+    tryPlay();
+
+    // IntersectionObserver to pause when scrolled out of view and resume when visible
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !document.hidden) {
+            if (video.paused) {
+              video.muted = true;
+              video.volume = 0;
+              video.play().catch(() => {});
+            }
+          } else {
+            if (!video.paused) {
+              video.pause();
+            }
+          }
+        });
+      }, { threshold: 0.05 });
+
+      const section = video.closest(".prevention-section");
+      if (section) observer.observe(section);
+    }
+
+    // Visibility change handling (tab inactive)
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        if (!video.paused) video.pause();
+      } else {
+        const section = video.closest(".prevention-section");
+        if (section) {
+          const rect = section.getBoundingClientRect();
+          if (rect.top < window.innerHeight && rect.bottom > 0) {
+            video.muted = true;
+            video.volume = 0;
+            video.play().catch(() => {});
+          }
+        }
+      }
+    });
+  }
+
+  // Initialize Hero Visual Enhancements & Background Videos
   initCyberBackgroundCanvas();
   initHeroStatsAnimation();
+  initThreatIntelVideo();
+  initDefensiveVideo();
 
   // Initialize Port Scanner UI
   PortScannerUI.init();

@@ -1089,6 +1089,24 @@
 
       <!-- Section 5: Attack Classification -->
       <section class="threat-intel-section" id="threat-intelligence">
+        <div class="threat-intel-video-backdrop" aria-hidden="true">
+          <video
+            id="threatIntelBgVideo"
+            class="threat-intel-bg-video"
+            autoplay
+            loop
+            muted
+            playsinline
+            preload="metadata"
+            poster="/static/images/attack-bg-poster.svg"
+            tabindex="-1"
+            aria-hidden="true">
+            <source src="/static/images/attack-bg.mp4" type="video/mp4" />
+            <source src="/static/images/WhatsApp%20Video%202026-10-25%20at%205.41.24%20PM.mp4" type="video/mp4" />
+          </video>
+          <div class="threat-intel-video-overlay"></div>
+        </div>
+
         <div class="section-container">
           <div class="section-header text-center">
             <div class="section-badge">
@@ -1195,17 +1213,13 @@
             <div class="card-container" id="attackCardContainer">
               <!-- 1. DDoS (Class 2) -->
               <div class="card attack-card-item" data-category="dos">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-dos">Denial of Service</span>
-                  <span class="protocol-tag">Class: DDoS</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-server"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 02</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-dos">Denial of Service</span>
+                    <span class="protocol-tag">Class 02 · DDoS</span>
                   </div>
                 </div>
                 <h3>DDoS (Distributed DoS)</h3>
@@ -1218,17 +1232,13 @@
 
               <!-- 2. DoS Hulk (Class 4) -->
               <div class="card attack-card-item" data-category="dos">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-dos">Denial of Service</span>
-                  <span class="protocol-tag">Class: DoS Hulk</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-bolt-lightning"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 04</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-dos">Denial of Service</span>
+                    <span class="protocol-tag">Class 04 · DoS Hulk</span>
                   </div>
                 </div>
                 <h3>DoS Hulk</h3>
@@ -1241,17 +1251,13 @@
 
               <!-- 3. DoS GoldenEye (Class 3) -->
               <div class="card attack-card-item" data-category="dos">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-dos">Denial of Service</span>
-                  <span class="protocol-tag">Class: DoS GoldenEye</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-link-slash"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 03</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-dos">Denial of Service</span>
+                    <span class="protocol-tag">Class 03 · DoS GoldenEye</span>
                   </div>
                 </div>
                 <h3>DoS GoldenEye</h3>
@@ -1264,17 +1270,13 @@
 
               <!-- 4. DoS slowloris (Class 6) -->
               <div class="card attack-card-item" data-category="dos">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-dos">Denial of Service</span>
-                  <span class="protocol-tag">Class: DoS slowloris</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
-                    <i class="fas fa-clock-rotate-left"></i>
+                    <i class="fas fa-hourglass-half"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 06</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-dos">Denial of Service</span>
+                    <span class="protocol-tag">Class 06 · DoS slowloris</span>
                   </div>
                 </div>
                 <h3>DoS Slowloris</h3>
@@ -1287,17 +1289,13 @@
 
               <!-- 5. DoS Slowhttptest (Class 5) -->
               <div class="card attack-card-item" data-category="dos">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-dos">Denial of Service</span>
-                  <span class="protocol-tag">Class: DoS Slowhttptest</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-sliders"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 05</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-dos">Denial of Service</span>
+                    <span class="protocol-tag">Class 05 · DoS Slowhttptest</span>
                   </div>
                 </div>
                 <h3>DoS Slowhttptest</h3>
@@ -1310,17 +1308,13 @@
 
               <!-- 6. Web Attack - SQL Injection (Class 13) -->
               <div class="card attack-card-item" data-category="web">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-web">Web Application</span>
-                  <span class="protocol-tag">Class: Web Attack - SQL Injection</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-database"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 13</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-web">Web Application</span>
+                    <span class="protocol-tag">Class 13 · SQLi</span>
                   </div>
                 </div>
                 <h3>Web Attack — SQL Injection</h3>
@@ -1333,17 +1327,13 @@
 
               <!-- 7. Web Attack - XSS (Class 14) -->
               <div class="card attack-card-item" data-category="web">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-web">Web Application</span>
-                  <span class="protocol-tag">Class: Web Attack - XSS</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-code"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 14</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-web">Web Application</span>
+                    <span class="protocol-tag">Class 14 · XSS</span>
                   </div>
                 </div>
                 <h3>Web Attack — XSS</h3>
@@ -1356,17 +1346,13 @@
 
               <!-- 8. Web Attack - Brute Force (Class 12) -->
               <div class="card attack-card-item" data-category="web">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-web">Web Application</span>
-                  <span class="protocol-tag">Class: Web Attack - Brute Force</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-key"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 12</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-web">Web Application</span>
+                    <span class="protocol-tag">Class 12 · Web Brute</span>
                   </div>
                 </div>
                 <h3>Web Attack — Brute Force</h3>
@@ -1379,17 +1365,13 @@
 
               <!-- 9. SSH-Patator (Class 11) -->
               <div class="card attack-card-item" data-category="brute">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-brute">Brute Force</span>
-                  <span class="protocol-tag">Class: SSH-Patator</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-terminal"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 11</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-brute">Brute Force</span>
+                    <span class="protocol-tag">Class 11 · SSH-Patator</span>
                   </div>
                 </div>
                 <h3>SSH-Patator</h3>
@@ -1402,17 +1384,13 @@
 
               <!-- 10. FTP-Patator (Class 7) -->
               <div class="card attack-card-item" data-category="brute">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-brute">Brute Force</span>
-                  <span class="protocol-tag">Class: FTP-Patator</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-folder-tree"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 07</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-brute">Brute Force</span>
+                    <span class="protocol-tag">Class 07 · FTP-Patator</span>
                   </div>
                 </div>
                 <h3>FTP-Patator</h3>
@@ -1425,17 +1403,13 @@
 
               <!-- 11. Heartbleed (Class 8) -->
               <div class="card attack-card-item" data-category="brute">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-brute">Vulnerability Exploit</span>
-                  <span class="protocol-tag">Class: Heartbleed</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-heart-pulse"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 08</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-brute">Vulnerability Exploit</span>
+                    <span class="protocol-tag">Class 08 · Heartbleed</span>
                   </div>
                 </div>
                 <h3>Heartbleed (CVE-2014-0160)</h3>
@@ -1448,17 +1422,13 @@
 
               <!-- 12. PortScan (Class 10) -->
               <div class="card attack-card-item" data-category="recon">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-recon">Reconnaissance</span>
-                  <span class="protocol-tag">Class: PortScan</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-crosshairs"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 10</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-recon">Reconnaissance</span>
+                    <span class="protocol-tag">Class 10 · PortScan</span>
                   </div>
                 </div>
                 <h3>PortScan Reconnaissance</h3>
@@ -1471,17 +1441,13 @@
 
               <!-- 13. Bot (Class 1) -->
               <div class="card attack-card-item" data-category="recon">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-recon">Botnet Activity</span>
-                  <span class="protocol-tag">Class: Bot</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-robot"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 01</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-recon">Botnet Activity</span>
+                    <span class="protocol-tag">Class 01 · Bot</span>
                   </div>
                 </div>
                 <h3>Botnet Traffic (ARES / C2)</h3>
@@ -1494,17 +1460,13 @@
 
               <!-- 14. Infiltration (Class 9) -->
               <div class="card attack-card-item" data-category="recon">
-                <div class="card-badge-row">
-                  <span class="attack-type-tag tag-recon">Intrusion</span>
-                  <span class="protocol-tag">Class: Infiltration</span>
-                </div>
-                <div class="attack-icon-container">
+                <div class="attack-card-header">
                   <div class="attack-icon-emblem">
                     <i class="fas fa-user-secret"></i>
                   </div>
-                  <div class="attack-vector-indicator">
-                    <span class="attack-vector-dot"></span>
-                    <span class="attack-vector-code">CLASS 09</span>
+                  <div class="attack-card-badges">
+                    <span class="attack-type-tag tag-recon">Intrusion</span>
+                    <span class="protocol-tag">Class 09 · Infiltration</span>
                   </div>
                 </div>
                 <h3>Network Infiltration</h3>
@@ -1519,8 +1481,254 @@
         </div>
       </section>
 
+      <!-- Section: System Architecture Mind Map -->
+      <section class="system-architecture-section" id="system-architecture">
+        <div class="section-container">
+          <div class="section-header text-center">
+            <div class="section-badge">
+              <i class="fas fa-diagram-project"></i> Interactive System Architecture
+            </div>
+            <h2 class="section-title">SCOUT Architecture & Operations Mind Map</h2>
+            <p class="section-subtitle">
+              An interactive topological map detailing autonomous packet inspection, stateful feature extraction, multi-class threat inference, subnet asset reconnaissance, and port security scanning.
+            </p>
+          </div>
+
+          <!-- Mind Map Container Card with Interactive Viewport -->
+          <div class="mindmap-wrapper-card" id="mindmapWrapper">
+            <!-- Mind Map Top Toolbar -->
+            <div class="mindmap-toolbar">
+              <div class="mindmap-toolbar-left">
+                <span class="mindmap-status-pill">
+                  <span class="pulse-dot"></span> Interactive Topology
+                </span>
+                <span class="mindmap-hint-text">
+                  <i class="fas fa-hand-pointer"></i> Select any node to inspect architecture details
+                </span>
+              </div>
+              <div class="mindmap-toolbar-right">
+                <button type="button" class="mm-tool-btn mm-tool-btn-expand" id="mmToggleAllBranchesBtn" title="Expand / Collapse All Branches" aria-label="Toggle All Branches">
+                  <i class="fas fa-layer-group"></i> <span class="mm-btn-label">Toggle Branches</span>
+                </button>
+                <button type="button" class="mm-tool-btn" id="mmZoomInBtn" style="display: none;" aria-hidden="true" tabindex="-1"></button>
+                <button type="button" class="mm-tool-btn" id="mmZoomOutBtn" style="display: none;" aria-hidden="true" tabindex="-1"></button>
+                <button type="button" class="mm-tool-btn" id="mmFitBtn" style="display: none;" aria-hidden="true" tabindex="-1"></button>
+                <button type="button" class="mm-tool-btn" id="mmResetBtn" style="display: none;" aria-hidden="true" tabindex="-1"></button>
+              </div>
+            </div>
+
+            <!-- Viewport & Architecture Canvas -->
+            <div class="mindmap-viewport" id="mindmapViewport" role="region" aria-label="SCOUT System Architecture Mind Map">
+              <div class="mindmap-canvas" id="mindmapCanvas">
+                <!-- SVG Connector Canvas Behind Nodes -->
+                <svg class="mindmap-svg-canvas" id="mindmapSvg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+
+                <!-- Left Column: Child Nodes of Live Monitoring & Port Scanner -->
+                <div class="mm-column mm-col-left-children">
+                  <!-- Live Monitoring Children -->
+                  <div class="mm-child-group mm-group-monitoring" id="mmGroupMonitoringChildren">
+                    <div class="mm-node mm-node-child mm-node-teal" data-id="packet-capture" tabindex="0">
+                      <div class="mm-node-title">Packet Capture</div>
+                      <div class="mm-node-sub">Npcap · passive sniffing</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-teal" data-id="feature-extraction" tabindex="0">
+                      <div class="mm-node-title">Feature Extraction</div>
+                      <div class="mm-node-sub">77 bidirectional features</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-teal" data-id="xgboost-classifier" tabindex="0">
+                      <div class="mm-node-title">XGBoost Classifier</div>
+                      <div class="mm-node-sub">15 classes · CIC-IDS2017</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-teal" data-id="verdict" tabindex="0">
+                      <div class="mm-node-title">Verdict</div>
+                      <div class="mm-node-sub">class · confidence score</div>
+                    </div>
+                  </div>
+
+                  <!-- Port Scanner Children -->
+                  <div class="mm-child-group mm-group-portscan" id="mmGroupPortscanChildren">
+                    <div class="mm-node mm-node-child mm-node-amber" data-id="localhost" tabindex="0">
+                      <div class="mm-node-title">Localhost</div>
+                      <div class="mm-node-sub">127.0.0.1 loopback</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-amber" data-id="single-target" tabindex="0">
+                      <div class="mm-node-title">Single Target</div>
+                      <div class="mm-node-sub">one IP address</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-amber" data-id="subnet-scan" tabindex="0">
+                      <div class="mm-node-title">Subnet Scan</div>
+                      <div class="mm-node-sub">CIDR /24</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-amber" data-id="export" tabindex="0">
+                      <div class="mm-node-title">Export</div>
+                      <div class="mm-node-sub">JSON · CSV</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Left-Center Column: Major Branches 1 (Live Monitoring) & 2 (Port Scanner) -->
+                <div class="mm-column mm-col-left-branches">
+                  <div class="mm-node mm-node-major mm-node-teal" data-id="branch-monitoring" id="mmBranchMonitoring" tabindex="0">
+                    <div class="mm-node-header">
+                      <i class="fas fa-satellite-dish mm-major-icon"></i>
+                      <div class="mm-major-meta">
+                        <div class="mm-major-title">Live Monitoring</div>
+                        <div class="mm-major-sub">Real-time detection</div>
+                      </div>
+                      <button type="button" class="mm-branch-toggle" data-branch="monitoring" title="Collapse / Expand Branch" aria-label="Toggle Live Monitoring Branch">
+                        <i class="fas fa-chevron-left"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="mm-node mm-node-major mm-node-amber" data-id="branch-portscan" id="mmBranchPortscan" tabindex="0">
+                    <div class="mm-node-header">
+                      <i class="fas fa-bullseye mm-major-icon"></i>
+                      <div class="mm-major-meta">
+                        <div class="mm-major-title">Port Scanner</div>
+                        <div class="mm-major-sub">Service enumeration</div>
+                      </div>
+                      <button type="button" class="mm-branch-toggle" data-branch="portscan" title="Collapse / Expand Branch" aria-label="Toggle Port Scanner Branch">
+                        <i class="fas fa-chevron-left"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Center: Central SCOUT Node -->
+                <div class="mm-column mm-col-center">
+                  <div class="mm-node mm-node-core" id="mmNodeCore" data-id="branch-core" tabindex="0">
+                    <div class="mm-core-emblem">
+                      <img src="/static/images/scout-icon.png" alt="SCOUT Logo" class="scout-core-logo scout-logo-light" />
+                      <img src="/static/images/scout-icon-dark.png" alt="SCOUT Logo" class="scout-core-logo scout-logo-dark" />
+                    </div>
+                    <div class="mm-core-title">SCOUT</div>
+                    <div class="mm-core-badge">AUTONOMOUS NETWORK DEFENSE</div>
+                    <div class="mm-core-desc">Cybersecurity Monitoring & Analysis Engine</div>
+                  </div>
+                </div>
+
+                <!-- Right-Center Column: Major Branches 3 (Attack Classes) & 4 (Network Discovery) -->
+                <div class="mm-column mm-col-right-branches">
+                  <div class="mm-node mm-node-major mm-node-coral" data-id="branch-attacks" id="mmBranchAttacks" tabindex="0">
+                    <div class="mm-node-header">
+                      <div class="mm-major-meta">
+                        <div class="mm-major-title">Attack Classes</div>
+                        <div class="mm-major-sub">14 attacks + benign</div>
+                      </div>
+                      <i class="fas fa-shield-halved mm-major-icon"></i>
+                      <button type="button" class="mm-branch-toggle" data-branch="attacks" title="Collapse / Expand Branch" aria-label="Toggle Attack Classes Branch">
+                        <i class="fas fa-chevron-right"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="mm-node mm-node-major mm-node-blue" data-id="branch-discovery" id="mmBranchDiscovery" tabindex="0">
+                    <div class="mm-node-header">
+                      <div class="mm-major-meta">
+                        <div class="mm-major-title">Network Discovery</div>
+                        <div class="mm-major-sub">Asset inventory</div>
+                      </div>
+                      <i class="fas fa-sitemap mm-major-icon"></i>
+                      <button type="button" class="mm-branch-toggle" data-branch="discovery" title="Collapse / Expand Branch" aria-label="Toggle Network Discovery Branch">
+                        <i class="fas fa-chevron-right"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Column: Child Nodes of Attack Classes & Network Discovery -->
+                <div class="mm-column mm-col-right-children">
+                  <!-- Attack Classes Children -->
+                  <div class="mm-child-group mm-group-attacks" id="mmGroupAttacksChildren">
+                    <div class="mm-node mm-node-child mm-node-coral" data-id="dos" tabindex="0">
+                      <div class="mm-node-title">Denial of Service · 5</div>
+                      <div class="mm-node-sub">DDoS · Hulk · GoldenEye +2</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-coral" data-id="web-attacks" tabindex="0">
+                      <div class="mm-node-title">Web Attacks · 3</div>
+                      <div class="mm-node-sub">SQLi · XSS · Brute Force</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-coral" data-id="brute-force" tabindex="0">
+                      <div class="mm-node-title">Brute Force & Exploits · 3</div>
+                      <div class="mm-node-sub">SSH · FTP · Heartbleed</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-coral" data-id="recon-infil" tabindex="0">
+                      <div class="mm-node-title">Recon & Infiltration · 3</div>
+                      <div class="mm-node-sub">Portscan · Bot · Infiltration</div>
+                    </div>
+                  </div>
+
+                  <!-- Network Discovery Children -->
+                  <div class="mm-child-group mm-group-discovery" id="mmGroupDiscoveryChildren">
+                    <div class="mm-node mm-node-child mm-node-blue" data-id="arp-icmp" tabindex="0">
+                      <div class="mm-node-title">ARP + ICMP Sweep</div>
+                      <div class="mm-node-sub">non-intrusive probing</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-blue" data-id="mac-vendor" tabindex="0">
+                      <div class="mm-node-title">MAC & OUI Vendor</div>
+                      <div class="mm-node-sub">hardware fingerprint</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-blue" data-id="device-types" tabindex="0">
+                      <div class="mm-node-title">Device Types</div>
+                      <div class="mm-node-sub">router · PC · mobile · IoT</div>
+                    </div>
+                    <div class="mm-node mm-node-child mm-node-blue" data-id="inventory-views" tabindex="0">
+                      <div class="mm-node-title">Inventory Views</div>
+                      <div class="mm-node-sub">cards & table</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Interactive Details Panel (Revealed on click or selection) -->
+            <div class="mindmap-details-drawer" id="mindmapDetailsDrawer" aria-live="polite">
+              <div class="mm-drawer-header">
+                <div class="mm-drawer-badge" id="mmDrawerBadge">Branch: Live Monitoring</div>
+                <h4 class="mm-drawer-title" id="mmDrawerTitle">Packet Capture Engine</h4>
+                <button type="button" class="mm-drawer-close" id="mmDrawerCloseBtn" aria-label="Close details panel">
+                  <i class="fas fa-xmark"></i>
+                </button>
+              </div>
+              <div class="mm-drawer-body">
+                <p id="mmDrawerDesc">
+                  Kernel-level passive packet inspection operating via Scapy/Npcap with non-promiscuous fallback and Windows Service orchestration.
+                </p>
+                <div class="mm-drawer-meta-grid" id="mmDrawerMeta">
+                  <!-- Populated dynamically via JS dictionary -->
+                </div>
+              </div>
+              <div class="mm-drawer-footer">
+                <a href="/?view=monitoring" class="btn-primary mm-drawer-action-btn" id="mmDrawerActionBtn">
+                  <i class="fas fa-arrow-up-right-from-square"></i> Open Live Monitoring
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Section 6: Defensive Architecture -->
       <section class="prevention-section" id="prevention">
+        <div class="defensive-video-backdrop" aria-hidden="true">
+          <video
+            id="defensiveBgVideo"
+            class="defensive-bg-video"
+            autoplay
+            loop
+            muted
+            playsinline
+            preload="metadata"
+            poster="/static/images/attack-bg-poster.svg"
+            tabindex="-1"
+            aria-hidden="true">
+            <source src="/static/images/attack-bg.mp4" type="video/mp4" />
+            <source src="/static/images/WhatsApp%20Video%202026-10-25%20at%205.41.24%20PM.mp4" type="video/mp4" />
+          </video>
+          <div class="defensive-video-overlay"></div>
+        </div>
+
         <div class="section-container">
           <div class="section-header text-center">
             <div class="section-badge">
@@ -1705,5 +1913,7 @@
 
   <!-- SCOUT Client Controller -->
   <script src="/static/main.js"></script>
+  <!-- SCOUT System Architecture Mind Map Controller -->
+  <script src="/static/mindmap.js"></script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="cyberGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#18181B" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#09090B" stop-opacity="0.98" />
+      <stop offset="100%" stop-color="#09090B" stop-opacity="1" />
+    </radialGradient>
+    <linearGradient id="limeFlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A3E635" stop-opacity="0.08" />
+      <stop offset="50%" stop-color="#15803D" stop-opacity="0.04" />
+      <stop offset="100%" stop-color="#09090B" stop-opacity="0" />
+    </linearGradient>
+    <pattern id="gridPattern" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(163, 230, 53, 0.05)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#cyberGlow)" />
+  <rect width="100%" height="100%" fill="url(#limeFlow)" />
+  <rect width="100%" height="100%" fill="url(#gridPattern)" />
+</svg>
