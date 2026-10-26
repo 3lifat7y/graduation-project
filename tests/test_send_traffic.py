@@ -14,6 +14,7 @@ Automated unit tests for scripts/send_traffic.py:
 
 import sys
 import os
+import json
 import unittest
 from io import StringIO
 from unittest.mock import patch, MagicMock
@@ -332,6 +333,70 @@ class TestSendTrafficConnectivityAndConfiguration(unittest.TestCase):
                         mock_stream.assert_not_called()
                         out_text = captured_out.getvalue()
                         self.assertIn("[CANCELLED]", out_text)
+
+    def test_16_interactive_mode_1_continuous(self):
+        """16. Interactive Mode 1 selects Continuous Real-Time mode."""
+        with patch('builtins.input', side_effect=['1']):
+            is_cont, cnt = st.select_sending_mode_interactively(unit_name="records")
+            self.assertTrue(is_cont)
+            self.assertIsNone(cnt)
+
+    def test_17_interactive_mode_2_fixed_count(self):
+        """17. Interactive Mode 2 prompts for record count and validates positive integers."""
+        # Test invalid input ('bad', '-5', '0') followed by valid count '25'
+        with patch('builtins.input', side_effect=['2', 'bad', '-5', '0', '25']):
+            captured_out = StringIO()
+            with patch('sys.stdout', captured_out):
+                is_cont, cnt = st.select_sending_mode_interactively(unit_name="records")
+            self.assertFalse(is_cont)
+            self.assertEqual(cnt, 25)
+            out = captured_out.getvalue()
+            self.assertIn("not a valid integer", out)
+            self.assertIn("positive integer greater than zero", out)
+
+    def test_18_interactive_mode_exit(self):
+        """18. Interactive Mode option 0 exits cleanly."""
+        with patch('builtins.input', side_effect=['0']):
+            with self.assertRaises(SystemExit) as cm:
+                st.select_sending_mode_interactively(unit_name="records")
+            self.assertEqual(cm.exception.code, 0)
+
+    def test_19_dataset_record_cycling_when_count_exceeds_available(self):
+        """19. When requested count exceeds available records, replay cycles sequentially."""
+        records = [{"Feature_1": 1.0, "Label": "Benign"}, {"Feature_1": 2.0, "Label": "Benign"}]
+        replayed_payloads = []
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({
+            "status": "success",
+            "predicted_label": "Benign",
+            "prediction": 0,
+            "ground_truth": "Benign",
+            "match": True,
+            "confidence": 99.0
+        }).encode('utf-8')
+        mock_resp.__enter__.return_value = mock_resp
+
+        def fake_urlopen(req, **kwargs):
+            body = json.loads(req.data.decode('utf-8'))
+            replayed_payloads.append(body["features"]["Feature_1"])
+            return mock_resp
+
+        with patch('urllib.request.urlopen', side_effect=fake_urlopen):
+            captured_out = StringIO()
+            with patch('sys.stdout', captured_out):
+                stats = st.run_dataset_feature_stream(
+                    records=records,
+                    label="Benign",
+                    target_api_url="http://127.0.0.1:5000",
+                    interval=0.001,
+                    count=5
+                )
+
+        self.assertEqual(stats["sent"], 5)
+        self.assertEqual(stats["successful_inferences"], 5)
+        # Should cycle: rec0, rec1, rec0, rec1, rec0
+        self.assertEqual(replayed_payloads, [1.0, 2.0, 1.0, 2.0, 1.0])
 
 
 if __name__ == '__main__':

@@ -714,26 +714,92 @@ def resolve_label_argument(label_arg: str, sorted_label_counts: List[Tuple[str, 
     return None
 
 
+def select_sending_mode_interactively(unit_name: str = "records") -> Tuple[bool, Optional[int]]:
+    """
+    Displays the interactive sending mode selection menu:
+    [1] Continuous Real-Time
+    [2] Send a Specific Number
+    [0] Exit
+
+    Returns:
+        (is_continuous: bool, count: Optional[int])
+    """
+    print("\n" + "=" * 40)
+    print("       SCOUT Traffic Testing")
+    print("=" * 40)
+    print("\nSelect Sending Mode:\n")
+    print("[1] Continuous Real-Time")
+    print("[2] Send a Specific Number")
+    print("[0] Exit\n")
+
+    while True:
+        try:
+            choice = input("Choose an option: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n[CANCELLED] Operation aborted by user.")
+            sys.exit(0)
+
+        if not choice:
+            continue
+
+        if choice in ['0', 'q', 'quit', 'exit', 'cancel', 'n', 'no']:
+            print("\n[CANCELLED] Operation aborted by user.")
+            sys.exit(0)
+
+        if choice == '1':
+            return True, None
+
+        if choice == '2':
+            while True:
+                try:
+                    count_input = input(f"\nEnter the number of {unit_name} to send: ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    print("\n[CANCELLED] Operation aborted by user.")
+                    sys.exit(0)
+
+                if not count_input:
+                    continue
+
+                if count_input.lower() in ['q', 'quit', 'exit', 'cancel']:
+                    print("\n[CANCELLED] Operation aborted by user.")
+                    sys.exit(0)
+
+                try:
+                    cnt = int(count_input)
+                    if cnt <= 0:
+                        print(f"❌ Error: Count must be a positive integer greater than zero (received {cnt}). Please try again.")
+                        continue
+                    return False, cnt
+                except ValueError:
+                    print(f"❌ Error: '{count_input}' is not a valid integer. Please enter a positive integer.")
+                    continue
+
+        print(f"❌ Invalid selection '{choice}'. Please select 1, 2, or 0.")
+
+
 def confirm_replay_transmission(
     label: str,
     target_url: str,
     record_count: int,
     is_continuous: bool = True,
     interval: float = 0.5,
-    auto_confirm: bool = False
+    auto_confirm: bool = False,
+    available_count: Optional[int] = None
 ) -> bool:
     """Displays the selected label and session details and prompts for confirmation."""
     if auto_confirm:
         return True
 
     count_desc = "Continuous (Ctrl+C to stop)" if is_continuous else f"{record_count} records"
+    avail_str = f"{available_count} records" if available_count is not None else (f"{record_count} records" if is_continuous else "Available in dataset")
 
     print("\n" + "=" * 78)
     print("                 CONFIRMATION REQUIRED: DATASET REPLAY")
     print("=" * 78)
     print(f"  Target Destination    : {target_url.rstrip('/')}/api/replay-feature")
     print(f"  Selected Label        : {label}")
-    print(f"  Available Records     : {record_count}")
+    if available_count is not None:
+        print(f"  Available in Dataset  : {avail_str}")
     print(f"  Transmission Mode     : {count_desc}")
     print(f"  Transmission Interval : {interval}s")
     print(f"  Workflow Architecture : Layer-7 Feature Replay (Dedicated ML Evaluation)")
@@ -799,13 +865,13 @@ def run_dataset_feature_stream(
     - Never passes the 'Label' column as an input feature (strictly excludes 'Label' key).
     - Sends ground truth exclusively under the 'ground_truth' key for receiver comparison.
     - Captures and displays real-time prediction, confidence score, and match status.
+    - Cycles through records sequentially when count > len(records) or in continuous mode.
     - Computes and prints comprehensive evaluation metrics at conclusion.
     """
-    import random
-
     endpoint = f"{target_api_url.rstrip('/')}/api/replay-feature"
     total_available = len(records)
-    count_desc = "Continuous (Ctrl+C to stop)" if (continuous or count is None or count <= 0) else f"{count}"
+    is_continuous = (continuous or count is None or count <= 0)
+    count_desc = "Continuous (Ctrl+C to stop)" if is_continuous else f"{count}"
 
     parsed_url = urlparse(target_api_url)
     api_host = parsed_url.hostname or "127.0.0.1"
@@ -821,7 +887,7 @@ def run_dataset_feature_stream(
     print(f"  Transmission Count    : {count_desc}")
     print(f"  Transmission Interval : {interval}s")
     print(f"  Request Timeout       : {timeout}s")
-    if continuous or count is None or count <= 0:
+    if is_continuous:
         print(f"  Periodic Health Check : Every {check_interval}s")
     print("=" * 78)
     print(f"Replaying '{label}' flow records to {endpoint}...\n")
@@ -835,7 +901,6 @@ def run_dataset_feature_stream(
     latencies: List[float] = []
     start_time = time.time()
     last_check_time = time.time()
-    is_continuous = (continuous or count is None or count <= 0)
 
     try:
         while True:
@@ -850,7 +915,9 @@ def run_dataset_feature_stream(
                     print(f"\n[STOP] Target is no longer reachable ({check_err}). Replay stopped.")
                     break
 
-            pkt = random.choice(records)
+            # Deterministic cycling through records (wraps around when end reached)
+            pkt = records[sent % total_available]
+
             # NEVER send ground truth label as an input feature
             features = {k: v for k, v in pkt.items() if k != "Label"}
             record_label = str(pkt.get("Label", label)).strip()
@@ -935,7 +1002,7 @@ def run_dataset_feature_stream(
                 print(f"\n[STOP] Reached 10 consecutive transmission errors. Replay stopped cleanly.")
                 break
 
-            if not is_continuous and count is not None and sent >= count:
+            if not is_continuous and count is not None and (successful_inferences >= count or sent >= count):
                 break
             time.sleep(interval)
 
@@ -953,6 +1020,8 @@ def run_dataset_feature_stream(
     print("=" * 78)
     print(f"  Target Destination    : {endpoint}")
     print(f"  Replayed Label        : {label}")
+    if not is_continuous and count is not None:
+        print(f"  Requested Records     : {count}")
     print(f"  Total Requests Sent   : {sent}")
     print(f"  Successful Inferences : {successful_inferences}")
     print(f"  Correct Predictions   : {correct_predictions} ({acc_pct}%)")
@@ -1154,18 +1223,26 @@ def main():
         print(f"\n❌ Zero records found for label '{selected_label}' in '{dataset_file.name}'.\n")
         sys.exit(1)
 
-    # 7. User Confirmation Prompt (Prompt before probing network)
+    # 7. Interactive Sending Mode Selection (if count/continuous not explicitly provided)
+    if args.count is None and not args.continuous and not cfg["auto_confirm"]:
+        is_cont, chosen_cnt = select_sending_mode_interactively(unit_name="records")
+        cfg["continuous"] = is_cont
+        cfg["count"] = chosen_cnt
+
+    # 8. User Confirmation Prompt (Prompt before probing network)
+    send_cnt = cfg["count"] if cfg["count"] is not None else len(label_records)
     if not confirm_replay_transmission(
         label=selected_label,
         target_url=target_api_url,
-        record_count=len(label_records),
+        record_count=send_cnt,
         is_continuous=cfg["continuous"],
         interval=cfg["interval"],
-        auto_confirm=cfg["auto_confirm"]
+        auto_confirm=cfg["auto_confirm"],
+        available_count=len(label_records)
     ):
         sys.exit(0)
 
-    # 8. Pre-flight check to Replay API endpoint
+    # 9. Pre-flight check to Replay API endpoint
     print(f"\n[CHECK] Checking target {host}:{cfg['api_port']} (Replay API Endpoint)...")
     reachable, err_reason = check_destination_service(
         host, cfg["api_port"], protocol="tcp", timeout=cfg["timeout"], check_http_endpoint=True, http_path="/api/health"

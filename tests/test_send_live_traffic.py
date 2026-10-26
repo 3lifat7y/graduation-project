@@ -284,6 +284,66 @@ class TestSendLiveTraffic(unittest.TestCase):
         self.assertEqual(slt_root.validate_destination_host, slt.validate_destination_host)
         self.assertEqual(slt_root.check_destination_service, slt.check_destination_service)
 
+    def test_16_interactive_sending_mode_continuous(self):
+        """16. Interactive Mode 1 selects Continuous Real-Time mode."""
+        with patch('builtins.input', side_effect=['1']):
+            is_cont, cnt = slt.select_sending_mode_interactively(unit_name="packets")
+            self.assertTrue(is_cont)
+            self.assertIsNone(cnt)
+
+    def test_17_interactive_sending_mode_fixed_count(self):
+        """17. Interactive Mode 2 prompts for packet count and rejects invalid input."""
+        with patch('builtins.input', side_effect=['2', 'xyz', '0', '-10', '50']):
+            captured_out = StringIO()
+            with patch('sys.stdout', captured_out):
+                is_cont, cnt = slt.select_sending_mode_interactively(unit_name="packets")
+            self.assertFalse(is_cont)
+            self.assertEqual(cnt, 50)
+            out = captured_out.getvalue()
+            self.assertIn("not a valid integer", out)
+            self.assertIn("positive integer greater than zero", out)
+
+    def test_18_interactive_sending_mode_exit(self):
+        """18. Interactive Mode option 0 exits cleanly."""
+        with patch('builtins.input', side_effect=['0']):
+            with self.assertRaises(SystemExit) as cm:
+                slt.select_sending_mode_interactively(unit_name="packets")
+            self.assertEqual(cm.exception.code, 0)
+
+    def test_19_interactive_protocol_selection(self):
+        """19. Protocol selection menu supports HTTP, TCP, UDP, and default."""
+        with patch('builtins.input', side_effect=['1']):
+            self.assertEqual(slt.select_protocol_interactively(), 'http')
+        with patch('builtins.input', side_effect=['2']):
+            self.assertEqual(slt.select_protocol_interactively(), 'tcp')
+        with patch('builtins.input', side_effect=['3']):
+            self.assertEqual(slt.select_protocol_interactively(), 'udp')
+        with patch('builtins.input', side_effect=['']):
+            self.assertEqual(slt.select_protocol_interactively(), 'http')
+
+    def test_20_continuous_mode_displays_running_counters(self):
+        """20. Continuous mode progress display uses running counter '#N' without fixed total."""
+        def mock_sleep_interrupt(secs):
+            raise KeyboardInterrupt()
+
+        captured_out = StringIO()
+        with patch('time.sleep', side_effect=mock_sleep_interrupt):
+            with patch('urllib.request.urlopen') as mock_url:
+                mock_resp = MagicMock()
+                mock_resp.status = 200
+                mock_url.return_value.__enter__.return_value = mock_resp
+                with patch('sys.stdout', captured_out):
+                    stats = slt.run_live_traffic_generator(
+                        host='127.0.0.1',
+                        port=8080,
+                        protocol='http',
+                        interval=0.01,
+                        count=None
+                    )
+        out = captured_out.getvalue()
+        self.assertIn("#1 | Protocol=HTTP", out)
+        self.assertNotIn("#1/Continuous", out)
+
 
 if __name__ == '__main__':
     unittest.main()

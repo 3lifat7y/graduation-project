@@ -139,6 +139,102 @@ def check_destination_service(
     return True, None
 
 
+def select_sending_mode_interactively(unit_name: str = "packets") -> Tuple[bool, Optional[int]]:
+    """
+    Displays the interactive sending mode selection menu:
+    [1] Continuous Real-Time
+    [2] Send a Specific Number
+    [0] Exit
+
+    Returns:
+        (is_continuous: bool, count: Optional[int])
+    """
+    print("\n" + "=" * 40)
+    print("       SCOUT Traffic Testing")
+    print("=" * 40)
+    print("\nSelect Sending Mode:\n")
+    print("[1] Continuous Real-Time")
+    print("[2] Send a Specific Number")
+    print("[0] Exit\n")
+
+    while True:
+        try:
+            choice = input("Choose an option: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n[CANCELLED] Operation aborted by user.")
+            sys.exit(0)
+
+        if not choice:
+            continue
+
+        if choice in ['0', 'q', 'quit', 'exit', 'cancel', 'n', 'no']:
+            print("\n[CANCELLED] Operation aborted by user.")
+            sys.exit(0)
+
+        if choice == '1':
+            return True, None
+
+        if choice == '2':
+            while True:
+                try:
+                    count_input = input(f"\nEnter the number of {unit_name} to send: ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    print("\n[CANCELLED] Operation aborted by user.")
+                    sys.exit(0)
+
+                if not count_input:
+                    continue
+
+                if count_input.lower() in ['q', 'quit', 'exit', 'cancel']:
+                    print("\n[CANCELLED] Operation aborted by user.")
+                    sys.exit(0)
+
+                try:
+                    cnt = int(count_input)
+                    if cnt <= 0:
+                        print(f"❌ Error: Count must be a positive integer greater than zero (received {cnt}). Please try again.")
+                        continue
+                    return False, cnt
+                except ValueError:
+                    print(f"❌ Error: '{count_input}' is not a valid integer. Please enter a positive integer.")
+                    continue
+
+        print(f"❌ Invalid selection '{choice}'. Please select 1, 2, or 0.")
+
+
+def select_protocol_interactively() -> str:
+    """
+    Displays interactive protocol selection menu for live wire traffic.
+    Returns: 'http', 'tcp', or 'udp'
+    """
+    print("\n" + "=" * 40)
+    print("      Select Traffic Protocol")
+    print("=" * 40)
+    print("\n[1] HTTP (Web requests to target port)")
+    print("[2] TCP  (Layer-4 TCP Handshake & Payload)")
+    print("[3] UDP  (Connectionless UDP Datagrams)")
+    print("[0] Exit\n")
+
+    while True:
+        try:
+            choice = input("Choose a protocol [default: 1]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n[CANCELLED] Operation aborted by user.")
+            sys.exit(0)
+
+        if choice in ['', '1', 'http', 'HTTP']:
+            return 'http'
+        elif choice in ['2', 'tcp', 'TCP']:
+            return 'tcp'
+        elif choice in ['3', 'udp', 'UDP']:
+            return 'udp'
+        elif choice in ['0', 'q', 'quit', 'exit', 'cancel']:
+            print("\n[CANCELLED] Operation aborted by user.")
+            sys.exit(0)
+        else:
+            print(f"❌ Invalid selection '{choice}'. Please select 1 (HTTP), 2 (TCP), 3 (UDP), or 0.")
+
+
 def run_live_traffic_generator(
     host: str,
     port: int = 8080,
@@ -181,6 +277,7 @@ def run_live_traffic_generator(
     sent = 0
     successful = 0
     failed = 0
+    consecutive_errors = 0
     latencies: List[float] = []
     start_time = time.time()
     last_check_time = time.time()
@@ -275,25 +372,32 @@ def run_live_traffic_generator(
                     status_desc = f"UDP Error: {ex}"
 
             sent += 1
-            limit_total = count_desc if is_continuous else f"{count}"
-            progress_str = f"{sent}/{limit_total}"
+            progress_str = f"#{sent}" if is_continuous else f"{sent}/{count}"
 
             if protocol.lower() == 'udp':
                 if success:
                     successful += 1
+                    consecutive_errors = 0
                     print(f"[LIVE] {progress_str:>10} | Protocol=UDP  | Result=transmitted (unconfirmed delivery) | Size={payload_size}B")
                 else:
                     failed += 1
+                    consecutive_errors += 1
                     print(f"[LIVE] {progress_str:>10} | Protocol=UDP  | Result=failed | Error={status_desc}")
             else:
                 if success:
                     successful += 1
+                    consecutive_errors = 0
                     print(f"[LIVE] {progress_str:>10} | Protocol={protocol.upper():<4} | Result=success | Latency={duration_ms:.1f}ms [{status_desc}]")
                 else:
                     failed += 1
+                    consecutive_errors += 1
                     print(f"[LIVE] {progress_str:>10} | Protocol={protocol.upper():<4} | Result=failed  | Error={status_desc}")
 
-            if not is_continuous and count is not None and sent >= count:
+            if consecutive_errors >= 10:
+                print(f"\n[STOP] Reached 10 consecutive transmission errors. Traffic generation stopped.")
+                break
+
+            if not is_continuous and count is not None and (successful >= count or sent >= count):
                 break
 
             time.sleep(interval)
@@ -309,6 +413,8 @@ def run_live_traffic_generator(
     print("                 LIVE TRAFFIC GENERATION SUMMARY")
     print("=" * 78)
     print(f"  Target Destination : {host}:{port} ({protocol.upper()})")
+    if not is_continuous and count is not None:
+        print(f"  Requested Packets  : {count}")
     print(f"  Frames Transmitted : {sent}")
     print(f"  Successful Sends   : {successful}")
     print(f"  Failed Sends       : {failed}")
@@ -334,6 +440,7 @@ def run_live_traffic_generator(
         "host": host,
         "port": port,
         "protocol": protocol,
+        "requested": count if not is_continuous else None,
         "sent": sent,
         "successful": successful,
         "failed": failed,
@@ -362,14 +469,14 @@ def parse_args():
     parser.add_argument(
         "--protocol",
         choices=["http", "tcp", "udp"],
-        default=TRAFFIC_PROTOCOL,
-        help=f"Transport protocol to generate (default: {TRAFFIC_PROTOCOL})."
+        default=None,
+        help=f"Transport protocol to generate (default: {TRAFFIC_PROTOCOL}). If omitted, selected interactively."
     )
     parser.add_argument(
         "--count",
         type=int,
-        default=DEFAULT_PACKET_COUNT,
-        help=f"Total number of packets to transmit (default: {DEFAULT_PACKET_COUNT})."
+        default=None,
+        help=f"Total number of packets to transmit (default: {DEFAULT_PACKET_COUNT}). If omitted, selected interactively."
     )
     parser.add_argument(
         "--continuous",
@@ -445,13 +552,12 @@ def main():
     if args.rate and args.rate > 0:
         effective_interval = round(1.0 / args.rate, 4)
 
-    packet_count = None if args.continuous else args.count
-
     # 2. Check-only mode
     if args.check_only:
-        print(f"\n[CHECK] Pre-flight connectivity check to {args.host}:{args.port} (Protocol: {args.protocol.upper()})...")
+        proto_chk = args.protocol.lower() if args.protocol else TRAFFIC_PROTOCOL
+        print(f"\n[CHECK] Pre-flight connectivity check to {args.host}:{args.port} (Protocol: {proto_chk.upper()})...")
         alive, reason = check_destination_service(
-            args.host, args.port, protocol=args.protocol, timeout=args.timeout
+            args.host, args.port, protocol=proto_chk, timeout=args.timeout
         )
         if alive:
             print(f"✅ Pre-flight connectivity check passed: {args.host}:{args.port} is reachable.")
@@ -460,21 +566,42 @@ def main():
             print(f"❌ Pre-flight check failed: {reason}")
             sys.exit(1)
 
-    # 3. Interactive confirmation (if not auto-confirmed)
-    count_desc = "Continuous (Ctrl+C to stop)" if args.continuous or packet_count is None else f"{packet_count} packets"
+    # 3. Interactive Mode Selection (Continuous vs Fixed Count)
+    if args.continuous:
+        is_continuous = True
+        packet_count = None
+    elif args.count is not None:
+        is_continuous = False
+        packet_count = max(1, int(args.count))
+    elif args.auto_confirm:
+        is_continuous = False
+        packet_count = DEFAULT_PACKET_COUNT
+    else:
+        is_continuous, packet_count = select_sending_mode_interactively(unit_name="packets")
+
+    # 4. Interactive Protocol Selection
+    if args.protocol is not None:
+        protocol = args.protocol.lower()
+    elif args.auto_confirm:
+        protocol = TRAFFIC_PROTOCOL
+    else:
+        protocol = select_protocol_interactively()
+
+    # 5. Interactive confirmation (if not auto-confirmed)
+    count_desc = "Continuous (Ctrl+C to stop)" if is_continuous or packet_count is None else f"{packet_count} packets"
     if not args.auto_confirm:
         print("\n" + "=" * 78)
         print("            SCOUT: LIVE NETWORK TRAFFIC GENERATION CONFIRMATION")
         print("=" * 78)
         print(f"  Target Destination : {args.host}:{args.port} (Resolved: {resolved_ip})")
-        print(f"  Transport Protocol : {args.protocol.upper()}")
+        print(f"  Transport Protocol : {protocol.upper()}")
         print(f"  Packet Count       : {count_desc}")
         print(f"  Transmission Rate  : {effective_interval}s interval ({round(1.0 / max(0.001, effective_interval), 1)} pkts/sec)")
         print(f"  Payload Size       : {args.payload_size} bytes")
         print(f"  Operation Mode     : Genuine Wire Frames (Captured by Npcap/Scapy on Receiver)")
         print("=" * 78)
         try:
-            confirm = input(f"Begin transmitting genuine {args.protocol.upper()} network frames to {args.host}:{args.port}? [y/N]: ").strip().lower()
+            confirm = input(f"Begin transmitting genuine {protocol.upper()} network frames to {args.host}:{args.port}? [y/N]: ").strip().lower()
             if confirm not in ['y', 'yes']:
                 print("\n[CANCELLED] Operation aborted by user.")
                 sys.exit(0)
@@ -482,14 +609,14 @@ def main():
             print("\n[CANCELLED] Operation aborted by user.")
             sys.exit(0)
 
-    # 4. Preflight connectivity probe
-    print(f"\n[CHECK] Probing target {args.host}:{args.port} (Protocol: {args.protocol.upper()})...")
+    # 6. Preflight connectivity probe
+    print(f"\n[CHECK] Probing target {args.host}:{args.port} (Protocol: {protocol.upper()})...")
     reachable, check_err = check_destination_service(
-        args.host, args.port, protocol=args.protocol, timeout=args.timeout
+        args.host, args.port, protocol=protocol, timeout=args.timeout
     )
     if not reachable:
         print("\n" + "!" * 78)
-        print(f"❌ TARGET DESTINATION SERVICE UNREACHABLE: {args.host}:{args.port} ({args.protocol.upper()})")
+        print(f"❌ TARGET DESTINATION SERVICE UNREACHABLE: {args.host}:{args.port} ({protocol.upper()})")
         print(f"   Reason: {check_err}")
         print("!" * 78)
         print("\n[STOP] Preflight check failed. Zero network traffic was transmitted.")
@@ -498,11 +625,11 @@ def main():
 
     print(f"[OK] Target destination service is reachable.")
 
-    # 5. Run Generator
+    # 7. Run Generator
     run_live_traffic_generator(
         host=args.host,
         port=args.port,
-        protocol=args.protocol,
+        protocol=protocol,
         interval=effective_interval,
         count=packet_count,
         timeout=args.timeout,
