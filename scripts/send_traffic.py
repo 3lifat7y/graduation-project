@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DDoS-Guard / SocNet: Cross-Device Traffic Generator & Connectivity Diagnostic Tool
-Generates bounded, benign network traffic (HTTP / TCP / UDP) across an authorized local Ethernet network
-from the Sender Computer to the Monitoring Computer without synthetic feature injection, or streams
-pre-extracted dataset flow features to the Monitoring Flask API for inference evaluation.
+SCOUT: Dedicated Dataset / API Testing & Model Evaluation Script
+================================================================
+Streams pre-extracted flow feature records from the test dataset (`test_set.csv`)
+over the network to the Receiver's dedicated `/api/replay-feature` endpoint.
+
+Validates model inference accuracy, class prediction distribution, and confidence scores
+without generating raw network packets or injecting synthetic traffic onto the physical wire.
+
+Key Principles:
+- Uses `test_set.csv` (or configured dataset) as the source of pre-extracted features.
+- Never sends the ground-truth label as an input feature (strictly excludes 'Label' key).
+- Sends feature records exclusively to `/api/replay-feature` on the Receiver API.
+- Displays real-time prediction feedback: Ground Truth, Prediction, Confidence, Match, Latency.
+- Provides comprehensive summary statistics (Accuracy %, Mismatches, Latency, Throughput).
+- Completely independent from live network packet generation (`scripts/send_live_traffic.py`).
 """
 
 import os
@@ -36,13 +47,16 @@ def get_project_root() -> Path:
 
 
 BASE_DIR = get_project_root()
-TEST_SET_PATH = str(BASE_DIR / "features_by_label.json")
+DEFAULT_CSV_DATASET = BASE_DIR / "final_output_new_dataset" / "datasets" / "test_set.csv"
+DEFAULT_JSON_DATASET = BASE_DIR / "features_by_label.json"
+
+TEST_SET_PATH = str(DEFAULT_CSV_DATASET if DEFAULT_CSV_DATASET.exists() else DEFAULT_JSON_DATASET)
 
 # ==================== USER CONFIGURATION ====================
 
 TARGET_HOST = "192.168.1.12"
-TARGET_PORT = 8080
-API_PORT = 5000
+TARGET_PORT = 8080                          # Traffic sink port (for backward compatibility)
+API_PORT = 5000                             # Monitoring API port
 
 # Workflow Configuration: Dataset Replay is the DEFAULT
 DEFAULT_WORKFLOW = "dataset"
@@ -54,12 +68,12 @@ DATASET_RECORD_COUNT: Optional[int] = None # None = continuous until Ctrl+C; or 
 DATASET_CONTINUOUS = True                   # Continuous replay by default
 DATASET_INTERVAL_SECONDS = 0.5              # Delay between replay requests
 
-# Real Wire Traffic settings (USED ONLY when --wire-traffic or --probe is explicitly specified)
+# Real Wire Traffic settings (BACKWARD COMPATIBILITY ONLY: Use send_live_traffic.py instead)
 TRAFFIC_PROTOCOL = "http"                   # http, tcp, or udp
 TRAFFIC_COUNT = 200                         # Count when real wire traffic is explicitly chosen
 TRAFFIC_INTERVAL_SECONDS = 0.5              # Delay between real traffic transmissions
-CONNECT_TIMEOUT_SECONDS = 3
-CONNECTIVITY_CHECK_INTERVAL_SECONDS = 5
+CONNECT_TIMEOUT_SECONDS = 3.0
+CONNECTIVITY_CHECK_INTERVAL_SECONDS = 5.0
 CONTINUOUS_MODE = False
 TRAFFIC_PAYLOAD_SIZE_BYTES = 256
 
@@ -150,12 +164,12 @@ def check_destination_service(
             url = f"http://{resolved_ip}:{port}{http_path}"
             req = urllib.request.Request(
                 url,
-                headers={"User-Agent": "SocNet-PreflightCheck/2.5"}
+                headers={"User-Agent": "SCOUT-PreflightCheck/3.0"}
             )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 if resp.status not in (200, 204, 301, 302):
                     return False, f"HTTP endpoint returned unexpected status code: {resp.status}"
-        except urllib.error.HTTPError as he:
+        except urllib.error.HTTPError:
             # Server answered with HTTP error code, meaning HTTP service is running
             pass
         except urllib.error.URLError as ue:
@@ -203,7 +217,7 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
         try:
             req = urllib.request.Request(
                 f"http://{resolved_ip}:{api_port}/api/health",
-                headers={"User-Agent": "SocNet-TrafficSender/2.5"}
+                headers={"User-Agent": "SCOUT-TrafficSender/3.0"}
             )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 if resp.status == 200:
@@ -228,7 +242,7 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
             results["remediation"] = (
                 "When running send_traffic.py on a separate Sender Computer, you MUST specify the Monitoring "
                 "Computer's Ethernet IPv4 address (not 127.0.0.1).\n"
-                "Example: python scripts/send_traffic.py --host 192.168.1.11 --port 8080\n"
+                "Example: python scripts/send_traffic.py --host 192.168.1.11 --api-port 5000\n"
                 "Or set TARGET_HOST at the top of scripts/send_traffic.py."
             )
         else:
@@ -238,8 +252,7 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
                 f" 1. Physical Layer : Ensure the Ethernet cable is securely connected to both computers and link LEDs are active.\n"
                 f" 2. Subnet Config  : Confirm both computers share the same IPv4 subnet (e.g. Sender: 192.168.1.X, Monitor: 192.168.1.Y).\n"
                 f" 3. Service Status : On the Monitoring Computer, ensure 'python api.py' is running.\n"
-                f" 4. Firewall Rule  : On the Monitoring Computer, configure Windows Firewall to permit inbound TCP on ports {api_port} and {traffic_port}.\n"
-                f"    Run as Administrator on Monitor: 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 ConfigureFirewall'"
+                f" 4. Firewall Rule  : On the Monitoring Computer, configure Windows Firewall to permit inbound TCP on ports {api_port} and {traffic_port}."
             )
     elif results["api_port_open"] and not results["traffic_port_open"]:
         results["error_reason"] = f"API port {api_port} is reachable, but traffic sink port {traffic_port} is not responding."
@@ -256,252 +269,206 @@ def check_remote_connectivity(host: str, traffic_port: int, api_port: int, timeo
 # ==============================================================================
 
 def parse_args():
-    p = argparse.ArgumentParser(
-        description="SocNet / DDoS-Guard: Cross-Device Traffic Generator & Pre-flight Diagnostics",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"""
-===============================================================================
-INSTRUCTIONS FOR TWO-COMPUTER ETHERNET DEPLOYMENT:
-===============================================================================
-1. On the MONITORING COMPUTER:
-   a. Connect the Ethernet cable and identify its IPv4 address (e.g. {TARGET_HOST}).
-   b. Configure Windows Firewall (run as Administrator once):
-      powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 ConfigureFirewall
-   c. Start the monitoring server:
-      python api.py
-   d. In your web browser, open http://127.0.0.1:{API_PORT} and click 'Start Monitoring'.
-
-2. On the SENDER COMPUTER:
-   a. Connect the Ethernet cable on the same subnet (e.g. 192.168.1.X).
-   b. Run pre-flight connectivity check:
-      python scripts/send_traffic.py --host {TARGET_HOST} --check-only
-   c. Send real HTTP benign network traffic (20 packets, 256 bytes payload):
-      python scripts/send_traffic.py --host {TARGET_HOST} --port {TARGET_PORT} --protocol http --count 20
-   d. Or stream dataset flow feature records for API model inference:
-      python scripts/send_traffic.py --host {TARGET_HOST} --api-port {API_PORT} --label BENIGN --count 20
-
-NOTE:
-- Default settings can be changed once at the top of scripts/send_traffic.py under USER CONFIGURATION.
-- CLI arguments override file defaults.
-- The sender NEVER silently falls back to 127.0.0.1 or an unconfigured destination.
-===============================================================================
-        """
+    parser = argparse.ArgumentParser(
+        description="SCOUT: Dedicated Dataset Feature Replay & Model Inference Evaluation Tool."
     )
-    # Destination Options
-    p.add_argument(
-        '--host', '-H', type=str, default=None,
-        help=f"Target Monitoring Computer Ethernet IPv4 address (default: {TARGET_HOST}, env: SOCNET_HOST)"
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=None,
+        help=f"Target Monitoring Computer host or IP address (default: {TARGET_HOST})."
     )
-    p.add_argument(
-        '--target', '-t', type=str, default=None,
-        help=f"Target server URL or host:port (e.g. http://{TARGET_HOST}:{TARGET_PORT}, env: SOCNET_TARGET)"
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=None,
+        help=f"Monitoring Flask API port (default: {API_PORT})."
     )
-    p.add_argument(
-        '--port', '-p', type=int, default=None,
-        help=f"Target port for real traffic sink on Monitoring Computer (default: {TARGET_PORT}, env: SOCNET_TRAFFIC_PORT)"
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=f"Traffic sink port (backward compatibility; default: {TARGET_PORT})."
     )
-    p.add_argument(
-        '--api-port', type=int, default=None,
-        help=f"Target Flask API port on Monitoring Computer (default: {API_PORT}, env: SOCNET_PORT)"
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Path to CSV test dataset file (default: final_output_new_dataset/datasets/test_set.csv) or JSON."
     )
-
-    # Traffic Flow Controls
-    p.add_argument(
-        '--protocol', type=str, default=None, choices=['http', 'tcp', 'udp'],
-        help=f"Transport / application protocol for real network traffic (default: {TRAFFIC_PROTOCOL})"
+    parser.add_argument(
+        "--label",
+        type=str,
+        default=None,
+        help="Dataset traffic label to replay (e.g. 'Benign', 'DDoS', 'PortScan'). If omitted, interactive menu opens."
     )
-    p.add_argument(
-        '--count', '-c', type=int, default=None,
-        help="Number of transmissions or records to send (default: 20; use --continuous for unlimited)"
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=None,
+        help="Number of records to replay. If omitted, replays continuously until Ctrl+C."
     )
-    p.add_argument(
-        '--continuous', dest='continuous', action='store_const', const=True, default=None,
-        help="Send continuously until stopped by user (Ctrl+C)"
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        default=None,
+        help="Replay dataset records continuously in random loop until Ctrl+C."
     )
-    p.add_argument(
-        '--no-continuous', dest='continuous', action='store_const', const=False,
-        help="Disable continuous mode and use bounded count"
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=None,
+        help=f"Delay between replay transmissions in seconds (default: {DATASET_INTERVAL_SECONDS}s)."
     )
-    p.add_argument(
-        '--interval', '-i', type=float, default=None,
-        help="Seconds between transmissions (default: 0.5s)"
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help=f"HTTP request timeout in seconds (default: {CONNECT_TIMEOUT_SECONDS}s)."
     )
-    p.add_argument(
-        '--timeout', type=float, default=None,
-        help=f"Socket / HTTP connection timeout in seconds (default: {CONNECT_TIMEOUT_SECONDS}s)"
+    parser.add_argument(
+        "--check-interval",
+        type=float,
+        default=None,
+        help=f"Target connectivity check interval during continuous stream (default: {CONNECTIVITY_CHECK_INTERVAL_SECONDS}s)."
     )
-    p.add_argument(
-        '--payload-size', type=int, default=None,
-        help=f"Traffic payload size in bytes for real traffic mode (default: {TRAFFIC_PAYLOAD_SIZE_BYTES})"
+    parser.add_argument(
+        "--list-labels", "--list",
+        action="store_true",
+        help="Discover and display available labels and record counts in dataset, then exit."
     )
-    p.add_argument(
-        '--check-interval', type=float, default=None,
-        help=f"Periodic connectivity check interval in seconds during continuous mode (default: {CONNECTIVITY_CHECK_INTERVAL_SECONDS}s)"
+    parser.add_argument(
+        "--check-only", "--check",
+        action="store_true",
+        help="Run pre-flight connectivity check to target API and exit."
     )
-    p.add_argument(
-        '--check-only', action='store_true',
-        help="Run pre-flight connectivity diagnostics then exit"
+    parser.add_argument(
+        "-y", "--yes",
+        dest="auto_confirm",
+        action="store_true",
+        help="Bypass interactive user confirmation prompt."
     )
 
-    # Mode Selection & Dataset Options
-    p.add_argument(
-        '--dataset-mode', '--dataset-replay', dest='dataset_mode', action='store_true',
-        help="Dataset Replay mode (DEFAULT): stream pre-extracted 77-feature flow records to /api/replay-feature"
+    # Backward-compatibility flags (for legacy wire traffic tests):
+    parser.add_argument(
+        "--wire-traffic",
+        action="store_true",
+        help="[Compatibility] Switch to wire traffic generation (prefer scripts/send_live_traffic.py)."
     )
-    p.add_argument(
-        '--wire-traffic', '--real-traffic', dest='wire_traffic', action='store_true',
-        help="Explicit real network traffic mode: transmit genuine Layer-4/Layer-7 network packets across the wire"
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="[Compatibility] Alias for wire traffic probe."
     )
-    p.add_argument(
-        '--probe', dest='probe', action='store_true',
-        help="Legacy alias for --wire-traffic: transmit genuine Layer-4/Layer-7 network packets"
+    parser.add_argument(
+        "--protocol",
+        type=str,
+        default=None,
+        help="[Compatibility] Transport protocol for wire traffic ('http', 'tcp', 'udp')."
     )
-    p.add_argument(
-        '--label', '-l', type=str, default=None,
-        help="Target dataset traffic label name or 1-based index (e.g. 'Benign', 'DDoS', or '2')"
-    )
-    p.add_argument(
-        '--dataset', type=str, default=None,
-        help="Path to feature dataset JSON file (default: features_by_label.json)"
-    )
-    p.add_argument(
-        '--list-labels', action='store_true',
-        help="List available traffic labels in the dataset JSON with record counts, then exit"
-    )
-    p.add_argument(
-        '--yes', '-y', dest='auto_confirm', action='store_true',
-        help="Automatically confirm transmission prompts without interactive prompt"
+    parser.add_argument(
+        "--payload-size",
+        type=int,
+        default=None,
+        help="[Compatibility] Wire packet payload size in bytes."
     )
 
-    # Backward Compatibility Aliases
-    p.add_argument('--simulate-dataset', dest='simulate_dataset', action='store_true', help="Legacy alias for dataset feature streaming")
-    p.add_argument('--attack', '-a', type=str, default=None, help="Legacy alias for --label: attack label name or index")
-    p.add_argument('--list', action='store_true', help="Alias for --list-labels: list available labels then exit")
-
-    return p.parse_args()
+    return parser.parse_args()
 
 
 def _safe_get(obj: Any, attr: str, expected_type: Any = None, default: Any = None) -> Any:
     val = getattr(obj, attr, default)
-    if val is None or hasattr(val, '_mock_name'):
+    if val is None or hasattr(val, '_mock_name') or type(val).__name__ in ('MagicMock', 'Mock'):
         return default
     if expected_type is not None:
-        if not isinstance(val, expected_type):
-            try:
-                val = expected_type(val)
-            except (ValueError, TypeError):
-                return default
+        try:
+            return expected_type(val)
+        except (ValueError, TypeError):
+            return default
     return val
 
 
 def resolve_effective_config(args) -> Dict[str, Any]:
     """
-    Resolves the single consistent source of truth by applying precedence:
-    CLI Arguments > Environment Variables > File-Level USER CONFIGURATION.
-    Validates all parameters before execution.
+    Consolidates CLI arguments, environment variables, and file-level defaults
+    into a validated configuration dictionary.
     """
-    # 1. Target Host Resolution
-    host = _safe_get(args, "host", str, default=None)
-    target_arg = _safe_get(args, "target", str, default=None)
-    if not host and target_arg:
-        if "://" in target_arg:
-            host = urlparse(target_arg).hostname
-        else:
-            host = target_arg.split(":")[0]
-    if not host:
-        host = os.environ.get("SOCNET_HOST")
-    if not host:
-        host = TARGET_HOST
+    # 1. Target URL parsing (e.g. --target http://192.168.1.99:9090)
+    target_url_arg = _safe_get(args, "target", str, default=None)
+    target_url_host = None
+    target_url_port = None
+    if target_url_arg:
+        t_clean = str(target_url_arg).strip()
+        if "://" not in t_clean:
+            t_clean = f"http://{t_clean}"
+        p_parsed = urlparse(t_clean)
+        if p_parsed.hostname:
+            target_url_host = p_parsed.hostname
+        if p_parsed.port:
+            target_url_port = p_parsed.port
 
-    host = str(host).strip()
-    if not host:
-        raise ValueError("Target host cannot be empty.")
+    # 2. Host Resolution
+    host_arg = _safe_get(args, "host", str, default=None)
+    if host_arg is not None and str(host_arg).strip():
+        host = str(host_arg).strip()
+    elif target_url_host:
+        host = target_url_host
+    elif os.environ.get("SOCNET_TARGET_HOST"):
+        host = os.environ["SOCNET_TARGET_HOST"].strip()
+    elif TARGET_HOST:
+        host = str(TARGET_HOST).strip()
+    else:
+        raise ValueError("Target host is not configured. Provide --host <IP> or set TARGET_HOST.")
 
-    valid_host, resolved_ip, host_err = validate_ip_or_host(host)
-    if not valid_host:
-        raise ValueError(f"Invalid target host '{host}': {host_err}")
+    valid, resolved_ip, err = validate_ip_or_host(host)
+    if not valid:
+        raise ValueError(f"Invalid host address '{host}': {err}")
 
-    # 2. Traffic Port Resolution
-    traffic_port = _safe_get(args, "port", int, default=None)
-    if traffic_port is None and target_arg and ":" in target_arg:
-        try:
-            traffic_port = int(urlparse(target_arg).port or target_arg.split(":")[-1].split("/")[0])
-        except (ValueError, TypeError):
-            pass
-    if traffic_port is None:
-        env_traffic_port = os.environ.get("SOCNET_TRAFFIC_PORT")
-        if env_traffic_port:
-            try:
-                traffic_port = int(env_traffic_port)
-            except ValueError:
-                pass
-    if traffic_port is None:
-        traffic_port = TARGET_PORT
+    # 3. Port Resolutions
+    api_port_arg = _safe_get(args, "api_port", int, default=None)
+    if api_port_arg is not None:
+        api_port = int(api_port_arg)
+    elif os.environ.get("SOCNET_API_PORT"):
+        api_port = int(os.environ["SOCNET_API_PORT"])
+    else:
+        api_port = int(API_PORT)
 
-    if not (1 <= traffic_port <= 65535):
-        raise ValueError(f"Invalid traffic port {traffic_port}. Must be between 1 and 65535.")
+    traffic_port_arg = _safe_get(args, "port", int, default=None)
+    if traffic_port_arg is not None:
+        traffic_port = int(traffic_port_arg)
+    elif target_url_port is not None:
+        traffic_port = int(target_url_port)
+    elif os.environ.get("SOCNET_TRAFFIC_PORT"):
+        traffic_port = int(os.environ["SOCNET_TRAFFIC_PORT"])
+    else:
+        traffic_port = int(TARGET_PORT)
 
-    # 3. API Port Resolution
-    api_port = _safe_get(args, "api_port", int, default=None)
-    if api_port is None:
-        env_api_port = os.environ.get("SOCNET_PORT")
-        if env_api_port:
-            try:
-                api_port = int(env_api_port)
-            except ValueError:
-                pass
-    if api_port is None:
-        api_port = API_PORT
+    # 4. Mode Resolution: Dataset Replay is default
+    is_wire_traffic = bool(_safe_get(args, "wire_traffic", bool, default=False) or _safe_get(args, "probe", bool, default=False))
+    mode = "real_traffic" if is_wire_traffic else "dataset"
 
-    if not (1 <= api_port <= 65535):
-        raise ValueError(f"Invalid API port {api_port}. Must be between 1 and 65535.")
-
-    # 4. Mode Selection
-    wire_flag = bool(
-        _safe_get(args, "wire_traffic", bool, default=False) or
-        _safe_get(args, "real_traffic", bool, default=False) or
-        _safe_get(args, "probe", bool, default=False)
-    )
-    dataset_flag = bool(
-        _safe_get(args, "dataset_mode", bool, default=False) or
-        _safe_get(args, "dataset_replay", bool, default=False) or
-        _safe_get(args, "simulate_dataset", bool, default=False)
-    )
-    label_arg = _safe_get(args, "label", str, default=None) or _safe_get(args, "attack", str, default=None)
+    # 4. Dataset Path Resolution
     dataset_arg = _safe_get(args, "dataset", str, default=None)
 
-    # Real wire traffic is ONLY selected if explicitly requested via wire flags,
-    # and no dataset flags or arguments were provided
-    if wire_flag and not (dataset_flag or label_arg or dataset_arg):
-        mode = "real_traffic"
-    else:
-        # DEFAULT WORKFLOW IS ALWAYS DATASET REPLAY
-        mode = "dataset"
-
-    # 5. Continuous Mode Resolution
+    # 5. Continuous vs Bounded Count Resolution
     continuous_arg = _safe_get(args, "continuous", bool, default=None)
     count_arg = _safe_get(args, "count", int, default=None)
+    label_arg = _safe_get(args, "label", str, default=None)
 
     if mode == "dataset":
         if continuous_arg is True:
             is_continuous = True
             count = None
-        elif continuous_arg is False:
-            is_continuous = False
-            count = max(1, int(count_arg)) if count_arg is not None else 20
         elif count_arg is not None:
-            # Explicit --count provided on CLI -> bounded test
             is_continuous = False
             count = max(1, int(count_arg))
         elif DATASET_RECORD_COUNT is not None:
             is_continuous = False
             count = max(1, int(DATASET_RECORD_COUNT))
         else:
-            # Default for Dataset Replay: CONTINUOUS (indefinitely until Ctrl+C)
             is_continuous = True
             count = None
     else:
-        # Real wire traffic mode
         if continuous_arg is not None:
             is_continuous = bool(continuous_arg)
         else:
@@ -514,9 +481,7 @@ def resolve_effective_config(args) -> Dict[str, Any]:
         else:
             count = max(0, int(TRAFFIC_COUNT))
 
-    # 6. Count Resolution (already handled above for both modes)
-
-    # 7. Interval Resolution
+    # 6. Interval Resolution
     interval_arg = _safe_get(args, "interval", float, default=None)
     if interval_arg is not None:
         interval = max(0.001, float(interval_arg))
@@ -525,7 +490,7 @@ def resolve_effective_config(args) -> Dict[str, Any]:
     else:
         interval = max(0.001, float(TRAFFIC_INTERVAL_SECONDS))
 
-    # 8. Protocol Resolution (for real traffic mode)
+    # 7. Protocol Resolution (for wire traffic mode)
     proto_arg = _safe_get(args, "protocol", str, default=None)
     if proto_arg is not None:
         protocol = str(proto_arg).strip().lower()
@@ -534,14 +499,14 @@ def resolve_effective_config(args) -> Dict[str, Any]:
     if protocol not in ("http", "tcp", "udp"):
         raise ValueError(f"Unsupported protocol '{protocol}'. Choose from 'http', 'tcp', or 'udp'.")
 
-    # 9. Payload Size Resolution (for real traffic mode)
+    # 8. Payload Size Resolution (for wire traffic mode)
     payload_arg = _safe_get(args, "payload_size", int, default=None)
     if payload_arg is not None:
         payload_size = max(1, min(65507, int(payload_arg)))
     else:
         payload_size = max(1, min(65507, int(TRAFFIC_PAYLOAD_SIZE_BYTES)))
 
-    # 10. Timeout & Connectivity Check Interval
+    # 9. Timeout & Connectivity Check Interval
     timeout_arg = _safe_get(args, "timeout", float, default=None)
     if timeout_arg is not None:
         timeout = max(0.1, float(timeout_arg))
@@ -554,7 +519,6 @@ def resolve_effective_config(args) -> Dict[str, Any]:
     else:
         check_interval = max(0.5, float(CONNECTIVITY_CHECK_INTERVAL_SECONDS))
 
-    # 11. Dataset Label Resolution
     label = label_arg
     if not label and mode == "dataset" and DATASET_LABEL:
         label = DATASET_LABEL
@@ -589,194 +553,11 @@ def resolve_target_config(args) -> Tuple[str, int, int]:
 
 
 # ==============================================================================
-# REAL NETWORK TRAFFIC GENERATOR (HTTP / TCP / UDP)
-# ==============================================================================
-
-def run_benign_traffic_generator(
-    host: str,
-    port: int,
-    protocol: str = 'http',
-    interval: float = 0.5,
-    count: Optional[int] = 20,
-    timeout: float = 3.0,
-    payload_size: int = 256,
-    check_interval: float = 5.0
-):
-    """
-    Transmits genuine, bounded Layer-4/Layer-7 network traffic to the target host and port.
-    Uses ordinary HTTP POST/GET requests or TCP/UDP probe datagrams.
-    Periodically checks target connectivity during continuous transmission.
-    """
-    is_continuous = (count is None or count <= 0)
-    count_desc = "Continuous (Ctrl+C to stop)" if is_continuous else f"{count}"
-
-    print("\n" + "=" * 75)
-    print("      SOCNET: REAL BENIGN NETWORK TRAFFIC GENERATOR (WIRE FRAMES)")
-    print("=" * 75)
-    print(f"  Target Destination   : {host}:{port}")
-    print(f"  Transport Protocol   : {protocol.upper()}")
-    print(f"  Payload Size         : {payload_size} bytes")
-    print(f"  Transmission Count   : {count_desc}")
-    print(f"  Transmission Interval: {interval}s")
-    print(f"  Connect Timeout      : {timeout}s")
-    if is_continuous:
-        print(f"  Periodic Re-check    : Every {check_interval}s")
-    print("=" * 75)
-    if protocol.lower() == "udp":
-        print("  NOTICE: UDP is a connectionless transport protocol. Datagrams are emitted")
-        print("          onto the wire; transmission success indicates local dispatch.")
-        print("=" * 75)
-    print(f"Transmitting genuine {protocol.upper()} network frames across the wire to {host}:{port}...\n")
-
-    sent = 0
-    successful = 0
-    failed = 0
-    latencies = []
-    start_time = time.time()
-    last_check_time = time.time()
-
-    try:
-        while True:
-            # Periodic reachability check during continuous transmission
-            now = time.time()
-            if is_continuous and (now - last_check_time) >= check_interval:
-                last_check_time = now
-                is_alive, check_err = check_destination_service(
-                    host, port, protocol=protocol, timeout=min(timeout, 2.0)
-                )
-                if not is_alive:
-                    print(f"\n[STOP] Target is no longer reachable ({check_err}). Transmission stopped.")
-                    break
-
-            frame_start = time.time()
-            success = False
-            status_desc = ""
-            duration_ms = 0.0
-
-            if protocol.lower() == 'http':
-                target_url = f"http://{host}:{port}/test?frame={sent + 1}&t={int(time.time() * 1000)}"
-                body_bytes = b"X" * max(0, payload_size)
-                req = urllib.request.Request(
-                    target_url,
-                    data=body_bytes,
-                    headers={
-                        "User-Agent": "SocNet-BenignTrafficProbe/2.5 (CrossDevice-Ethernet-Test)",
-                        "Content-Type": "application/octet-stream",
-                        "Accept": "application/json, text/plain, */*",
-                        "Connection": "close"
-                    },
-                    method="POST"
-                )
-                try:
-                    with urllib.request.urlopen(req, timeout=timeout) as resp:
-                        duration_ms = (time.time() - frame_start) * 1000
-                        latencies.append(duration_ms)
-                        status_desc = f"HTTP {resp.status} OK"
-                        success = True
-                except urllib.error.HTTPError as he:
-                    duration_ms = (time.time() - frame_start) * 1000
-                    latencies.append(duration_ms)
-                    status_desc = f"HTTP {he.code}"
-                    success = True  # Reached target HTTP service
-                except urllib.error.URLError as ue:
-                    status_desc = f"Connection Error: {ue.reason}"
-                except Exception as ex:
-                    status_desc = f"Error: {ex}"
-
-            elif protocol.lower() == 'tcp':
-                # Layer 4 TCP SYN Handshake & payload probe
-                try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.settimeout(timeout)
-                        res = s.connect_ex((host, port))
-                        duration_ms = (time.time() - frame_start) * 1000
-                        if res == 0:
-                            payload = f"SOCNET_PROBE_{sent + 1}_".encode('utf-8')
-                            payload = payload.ljust(payload_size, b'#')[:payload_size]
-                            s.sendall(payload)
-                            latencies.append(duration_ms)
-                            status_desc = f"TCP Handshake OK ({len(payload)}B)"
-                            success = True
-                        else:
-                            status_desc = f"TCP Refused (Errno {res})"
-                except Exception as ex:
-                    status_desc = f"TCP Error: {ex}"
-
-            else:  # UDP
-                try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                        s.settimeout(timeout)
-                        payload = f"SOCNET_UDP_PROBE_{sent + 1}_{time.time()}".encode('utf-8')
-                        payload = payload.ljust(payload_size, b'#')[:payload_size]
-                        s.sendto(payload, (host, port))
-                        duration_ms = (time.time() - frame_start) * 1000
-                        latencies.append(duration_ms)
-                        status_desc = f"Datagram Transmitted ({len(payload)}B)"
-                        success = True
-                except Exception as ex:
-                    status_desc = f"UDP Error: {ex}"
-
-            sent += 1
-            limit_total = count_desc if is_continuous else f"{count}"
-            progress_str = f"{sent}/{limit_total}"
-
-            if protocol.lower() == 'udp':
-                if success:
-                    successful += 1
-                    print(f"[SEND] {progress_str:>8} | Result=transmitted (unconfirmed delivery) | Size={payload_size}B")
-                else:
-                    failed += 1
-                    print(f"[SEND] {progress_str:>8} | Result=failed | Error={status_desc}")
-            else:
-                if success:
-                    successful += 1
-                    print(f"[SEND] {progress_str:>8} | Result=success | Latency={duration_ms:.1f}ms [{status_desc}]")
-                else:
-                    failed += 1
-                    print(f"[SEND] {progress_str:>8} | Result=failed  | Error={status_desc}")
-
-            if not is_continuous and count is not None and sent >= count:
-                break
-
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        print("\n\n[STOP] Traffic generation stopped cleanly by user (Ctrl+C).")
-
-    total_duration = max(0.001, round(time.time() - start_time, 2))
-    achieved_rate = round(sent / total_duration, 2)
-    avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else 0.0
-
-    print("\n" + "=" * 75)
-    print("                 TRAFFIC GENERATION SUMMARY")
-    print("=" * 75)
-    print(f"  Target Destination : {host}:{port} ({protocol.upper()})")
-    print(f"  Frames Transmitted : {sent}")
-    print(f"  Successful Sends   : {successful}")
-    print(f"  Failed Sends       : {failed}")
-    print(f"  Success Rate       : {round((successful / sent) * 100, 1) if sent > 0 else 0.0}%")
-    print(f"  Total Elapsed Time : {total_duration}s")
-    print(f"  Achieved Rate      : {achieved_rate} packets/sec")
-    if latencies and protocol.lower() != 'udp':
-        print(f"  Average Latency    : {avg_latency} ms (Min: {round(min(latencies), 1)}ms, Max: {round(max(latencies), 1)}ms)")
-    if protocol.lower() == 'udp':
-        print("  Delivery Notice    : UDP datagrams were dispatched across the network interface.")
-        print("                       Remote arrival cannot be confirmed without an application-layer reply.")
-    print("=" * 75)
-    if successful > 0:
-        print("✅ Traffic frames successfully transmitted across the wire.")
-        print("   Verify the packet counter on the Monitoring Computer dashboard increments.\n")
-    else:
-        print("⚠️ No traffic frames were successfully transmitted.")
-        print("   Review the pre-flight connectivity check diagnostics above.\n")
-
-
-# ==============================================================================
-# DATASET FEATURE STREAMING (MODEL INFERENCE API)
+# DATASET RESOLUTION & PARSING (CSV / JSON)
 # ==============================================================================
 
 def resolve_dataset_path(custom_path: Optional[str] = None) -> Path:
-    """Locates dataset JSON file."""
+    """Locates primary test dataset file (defaults to test_set.csv)."""
     if custom_path:
         p = Path(custom_path)
         if p.exists():
@@ -784,6 +565,7 @@ def resolve_dataset_path(custom_path: Optional[str] = None) -> Path:
         raise FileNotFoundError(f"Specified dataset file '{custom_path}' does not exist.")
 
     candidates = [
+        BASE_DIR / "final_output_new_dataset" / "datasets" / "test_set.csv",
         BASE_DIR / "features_by_label.json",
         BASE_DIR / "scripts" / "features_by_label.json",
         BASE_DIR / "features_by_label_test.json",
@@ -792,14 +574,44 @@ def resolve_dataset_path(custom_path: Optional[str] = None) -> Path:
     for c in candidates:
         if c.exists():
             return c
-    return BASE_DIR / "features_by_label.json"
+    return BASE_DIR / "final_output_new_dataset" / "datasets" / "test_set.csv"
 
 
 def load_dataset_records(dataset_path: Path) -> Tuple[Dict[str, List[Dict[str, Any]]], List[Tuple[str, int]]]:
-    """Loads and groups records by Label from JSON dataset."""
+    """
+    Loads and groups pre-extracted records by Label from CSV (test_set.csv) or JSON dataset.
+    Preserves all 77 numerical flow feature keys while retaining 'Label' for evaluation.
+    """
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset file '{dataset_path}' not found.")
 
+    ext = dataset_path.suffix.lower()
+
+    # 1. Handle CSV Datasets (test_set.csv)
+    if ext == ".csv":
+        try:
+            import pandas as pd
+            df = pd.read_csv(dataset_path, low_memory=False)
+            df.columns = df.columns.str.strip()
+
+            if "Label" not in df.columns:
+                raise ValueError(f"Dataset CSV '{dataset_path}' is missing required 'Label' column.")
+
+            # Replace NaNs/Infs with zero defaults to preserve clean numeric types
+            df = df.replace([float('inf'), float('-inf')], float('nan')).fillna(0.0)
+
+            records_by_label: Dict[str, List[Dict[str, Any]]] = {}
+            for lbl, grp in df.groupby("Label"):
+                lbl_clean = str(lbl).strip()
+                records_by_label[lbl_clean] = grp.to_dict(orient="records")
+
+            counts = [(lbl, len(rec_list)) for lbl, rec_list in records_by_label.items()]
+            counts.sort(key=lambda x: (x[0].lower() != "benign", -x[1], x[0]))
+            return records_by_label, counts
+        except Exception as ex:
+            raise ValueError(f"Failed to parse CSV dataset '{dataset_path}': {ex}")
+
+    # 2. Handle JSON Datasets (features_by_label.json)
     with open(dataset_path, "r", encoding="utf-8") as f:
         try:
             raw_data = json.load(f)
@@ -816,12 +628,12 @@ def load_dataset_records(dataset_path: Path) -> Tuple[Dict[str, List[Dict[str, A
         counts.sort(key=lambda x: (x[0].lower() != "benign", -x[1], x[0]))
         return records_by_label, counts
     else:
-        raise ValueError(f"Unsupported dataset structure in '{dataset_path}'. Expected JSON list or dict with 'all_data'.")
+        raise ValueError(f"Unsupported dataset structure in '{dataset_path}'. Expected CSV or JSON list/dict with 'all_data'.")
 
     if not records:
         raise ValueError(f"Dataset file '{dataset_path}' contains zero records.")
 
-    records_by_label: Dict[str, List[Dict[str, Any]]] = {}
+    records_by_label = {}
     for r in records:
         lbl = str(r.get("Label", "Unknown")).strip()
         if lbl not in records_by_label:
@@ -835,15 +647,15 @@ def load_dataset_records(dataset_path: Path) -> Tuple[Dict[str, List[Dict[str, A
 
 def select_dataset_label_interactively(sorted_label_counts: List[Tuple[str, int]]) -> Optional[str]:
     """Displays terminal menu listing available labels and prompts user selection."""
-    print("\n" + "=" * 75)
-    print("           SOCNET SENDER: DYNAMIC DATASET LABELS DISCOVERED")
-    print("=" * 75)
-    print(f" {'#':<4} | {'Label Name':<30} | {'Available Records':<18}")
-    print("-" * 75)
+    print("\n" + "=" * 78)
+    print("           SCOUT SENDER: DYNAMIC DATASET LABELS DISCOVERED")
+    print("=" * 78)
+    print(f" {'#':<4} | {'Label Name':<32} | {'Available Records':<18}")
+    print("-" * 78)
     for idx, (lbl, count) in enumerate(sorted_label_counts, start=1):
         is_attack_marker = " [Attack]" if lbl.lower() not in ["benign", "safe", "normal"] else " [Baseline]"
-        print(f" {idx:<4} | {lbl + is_attack_marker:<30} | {count:>6} records")
-    print("=" * 75)
+        print(f" {idx:<4} | {lbl + is_attack_marker:<32} | {count:>6} records")
+    print("=" * 78)
 
     while True:
         try:
@@ -910,25 +722,22 @@ def confirm_replay_transmission(
     interval: float = 0.5,
     auto_confirm: bool = False
 ) -> bool:
-    """
-    Displays the selected label and session details and requires explicit
-    user confirmation before any dataset replay transmission begins.
-    """
+    """Displays the selected label and session details and prompts for confirmation."""
     if auto_confirm:
         return True
 
     count_desc = "Continuous (Ctrl+C to stop)" if is_continuous else f"{record_count} records"
 
-    print("\n" + "=" * 75)
+    print("\n" + "=" * 78)
     print("                 CONFIRMATION REQUIRED: DATASET REPLAY")
-    print("=" * 75)
+    print("=" * 78)
     print(f"  Target Destination    : {target_url.rstrip('/')}/api/replay-feature")
     print(f"  Selected Label        : {label}")
     print(f"  Available Records     : {record_count}")
     print(f"  Transmission Mode     : {count_desc}")
     print(f"  Transmission Interval : {interval}s")
     print(f"  Workflow Architecture : Layer-7 Feature Replay (Dedicated ML Evaluation)")
-    print("=" * 75)
+    print("=" * 78)
 
     try:
         confirm = input(f"Start replaying '{label}' dataset records to {target_url}? [y/N]: ").strip().lower()
@@ -947,14 +756,14 @@ def confirm_attack_transmission(label: str, target_url: str, record_count: int) 
     if label.lower() in ["benign", "safe", "normal"]:
         return True
 
-    print("\n" + "!" * 75)
+    print("\n" + "!" * 78)
     print(f"⚠️  SECURITY CONFIRMATION REQUIRED: ATTACK DATASET SELECTED")
-    print("!" * 75)
+    print("!" * 78)
     print(f"  Target Destination : {target_url} (Monitoring API)")
     print(f"  Selected Vector    : '{label}'")
     print(f"  Records to Send    : {record_count}")
     print(f"  Safety Policy      : Bounded test transmission to authorized monitoring endpoint.")
-    print("!" * 75)
+    print("!" * 78)
 
     try:
         confirm = input(f"Are you sure you want to transmit '{label}' attack records to {target_url}? [y/N]: ").strip().lower()
@@ -968,6 +777,10 @@ def confirm_attack_transmission(label: str, target_url: str, record_count: int) 
         return False
 
 
+# ==============================================================================
+# DATASET FEATURE STREAMING (MODEL INFERENCE API)
+# ==============================================================================
+
 def run_dataset_feature_stream(
     records: List[Dict[str, Any]],
     label: str,
@@ -977,11 +790,16 @@ def run_dataset_feature_stream(
     continuous: bool = False,
     timeout: float = 3.0,
     check_interval: float = 5.0
-):
+) -> Dict[str, Any]:
     """
     Streams pre-extracted flow feature JSON records directly to /api/replay-feature
-    for real-time ML model classification and precision evaluation.
-    Periodically checks API connectivity during continuous transmission.
+    for real-time ML model classification and evaluation.
+
+    Strict Requirements:
+    - Never passes the 'Label' column as an input feature (strictly excludes 'Label' key).
+    - Sends ground truth exclusively under the 'ground_truth' key for receiver comparison.
+    - Captures and displays real-time prediction, confidence score, and match status.
+    - Computes and prints comprehensive evaluation metrics at conclusion.
     """
     import random
 
@@ -993,9 +811,9 @@ def run_dataset_feature_stream(
     api_host = parsed_url.hostname or "127.0.0.1"
     api_port = parsed_url.port or 5000
 
-    print("\n" + "=" * 75)
-    print("        SOCNET: DATASET REPLAY & INFERENCE EVALUATION WORKFLOW")
-    print("=" * 75)
+    print("\n" + "=" * 78)
+    print("        SCOUT: DATASET REPLAY & INFERENCE EVALUATION WORKFLOW")
+    print("=" * 78)
     print(f"  Target Destination    : {endpoint}")
     print(f"  Selected Label        : {label} ({total_available} records available)")
     print(f"  Payload Architecture  : Pre-extracted 77-feature flow JSON + Ground Truth")
@@ -1004,8 +822,8 @@ def run_dataset_feature_stream(
     print(f"  Transmission Interval : {interval}s")
     print(f"  Request Timeout       : {timeout}s")
     if continuous or count is None or count <= 0:
-        print(f"  Periodic Re-check     : Every {check_interval}s")
-    print("=" * 75)
+        print(f"  Periodic Health Check : Every {check_interval}s")
+    print("=" * 78)
     print(f"Replaying '{label}' flow records to {endpoint}...\n")
 
     sent = 0
@@ -1014,7 +832,7 @@ def run_dataset_feature_stream(
     mismatched_predictions = 0
     failed_requests = 0
     consecutive_errors = 0
-    latencies = []
+    latencies: List[float] = []
     start_time = time.time()
     last_check_time = time.time()
     is_continuous = (continuous or count is None or count <= 0)
@@ -1033,6 +851,7 @@ def run_dataset_feature_stream(
                     break
 
             pkt = random.choice(records)
+            # NEVER send ground truth label as an input feature
             features = {k: v for k, v in pkt.items() if k != "Label"}
             record_label = str(pkt.get("Label", label)).strip()
             payload = {
@@ -1047,7 +866,7 @@ def run_dataset_feature_stream(
                 data=req_bytes,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "SocNet-DatasetReplayStreamer/2.5"
+                    "User-Agent": "SCOUT-DatasetReplayStreamer/3.0"
                 },
                 method="POST"
             )
@@ -1129,9 +948,9 @@ def run_dataset_feature_stream(
     acc_pct = round((correct_predictions / successful_inferences) * 100, 1) if successful_inferences > 0 else 0.0
     mismatch_pct = round((mismatched_predictions / successful_inferences) * 100, 1) if successful_inferences > 0 else 0.0
 
-    print("\n" + "=" * 75)
+    print("\n" + "=" * 78)
     print("                  DATASET REPLAY INFERENCE SUMMARY")
-    print("=" * 75)
+    print("=" * 78)
     print(f"  Target Destination    : {endpoint}")
     print(f"  Replayed Label        : {label}")
     print(f"  Total Requests Sent   : {sent}")
@@ -1143,13 +962,70 @@ def run_dataset_feature_stream(
     print(f"  Measured Throughput   : {throughput} records/sec")
     if latencies:
         print(f"  Average Latency       : {avg_lat} ms (Min: {round(min(latencies), 1)}ms, Max: {round(max(latencies), 1)}ms)")
-    print("=" * 75)
+    print("=" * 78)
     if successful_inferences > 0:
         print(f"✅ Successfully evaluated {successful_inferences} '{label}' records against AI model.")
         print(f"   Model Accuracy on Session: {acc_pct}%\n")
     else:
         print("⚠️ No inference results were successfully obtained from the Monitoring API.")
         print(f"   Confirm that api.py is running on {target_api_url}.\n")
+
+    return {
+        "sent": sent,
+        "successful_inferences": successful_inferences,
+        "correct_predictions": correct_predictions,
+        "mismatches": mismatched_predictions,
+        "failed_requests": failed_requests,
+        "accuracy_pct": acc_pct,
+        "elapsed_seconds": elapsed,
+        "throughput": throughput,
+        "avg_latency_ms": avg_lat
+    }
+
+
+# ==============================================================================
+# BACKWARD COMPATIBILITY: WIRE TRAFFIC GENERATOR DELEGATION
+# ==============================================================================
+
+def run_benign_traffic_generator(
+    host: str,
+    port: int,
+    protocol: str = 'http',
+    interval: float = 0.5,
+    count: Optional[int] = 20,
+    timeout: float = 3.0,
+    payload_size: int = 256,
+    check_interval: float = 5.0
+):
+    """
+    Backward compatibility shim delegating real network traffic generation
+    to scripts.send_live_traffic.run_live_traffic_generator.
+    """
+    try:
+        from scripts.send_live_traffic import run_live_traffic_generator
+        return run_live_traffic_generator(
+            host=host,
+            port=port,
+            protocol=protocol,
+            interval=interval,
+            count=count,
+            timeout=timeout,
+            payload_size=payload_size,
+            check_interval=check_interval
+        )
+    except ImportError:
+        # Standalone inline fallback if send_live_traffic is not yet in path
+        from send_live_traffic import run_live_traffic_generator
+        return run_live_traffic_generator(
+            host=host,
+            port=port,
+            protocol=protocol,
+            interval=interval,
+            count=count,
+            timeout=timeout,
+            payload_size=payload_size,
+            check_interval=check_interval
+        )
 
 
 # ==============================================================================
@@ -1187,15 +1063,15 @@ def main():
         if dataset_error:
             print(f"\n❌ Error discovering dataset labels: {dataset_error}\n")
             sys.exit(1)
-        print("\n" + "=" * 75)
-        print(f"   SOCNET: AVAILABLE TRAFFIC LABELS IN DATASET ({dataset_file.name})")
-        print("=" * 75)
-        print(f" {'#':<4} | {'Label Name':<30} | {'Available Records':<18}")
-        print("-" * 75)
+        print("\n" + "=" * 78)
+        print(f"   SCOUT: AVAILABLE TRAFFIC LABELS IN DATASET ({dataset_file.name})")
+        print("=" * 78)
+        print(f" {'#':<4} | {'Label Name':<32} | {'Available Records':<18}")
+        print("-" * 78)
         for idx, (lbl, count) in enumerate(sorted_label_counts, start=1):
             is_attack_marker = " [Attack]" if lbl.lower() not in ["benign", "safe", "normal"] else " [Baseline]"
-            print(f" {idx:<4} | {lbl + is_attack_marker:<30} | {count:>6} records")
-        print("=" * 75 + "\n")
+            print(f" {idx:<4} | {lbl + is_attack_marker:<32} | {count:>6} records")
+        print("=" * 78 + "\n")
         sys.exit(0)
 
     # 4. Handle check-only diagnostics
@@ -1215,32 +1091,31 @@ def main():
             print(f"❌ Pre-flight check failed ({host}:{target_check_port}): {err_reason}")
             sys.exit(1)
 
-    # 5. Workflow Execution
+    # 5. Workflow Execution: Real Wire Traffic (Backward Compatibility)
     if cfg["mode"] == "real_traffic":
-        # REAL WIRE TRAFFIC (Explicitly requested via --wire-traffic or --probe)
         count_desc = "Continuous" if cfg["continuous"] else f"{cfg['count']}"
         target_service_str = f"{host}:{cfg['traffic_port']} ({cfg['protocol'].upper()})"
 
-        print("=" * 75)
+        print("=" * 78)
         print("        SOCNET SENDER: TARGET & CONNECTIVITY INITIALIZATION")
-        print("=" * 75)
+        print("=" * 78)
         print(f"  Target Host Address  : {host} (Resolved: {cfg['resolved_ip']})")
         print(f"  Selected Workflow    : Real Wire Traffic ({cfg['protocol'].upper()})")
         print(f"  Destination Service  : {target_service_str}")
         print(f"  Transmission Count   : {count_desc}")
         print(f"  Transmission Interval: {cfg['interval']}s")
         print(f"  Payload Size         : {cfg['payload_size']} bytes")
-        print("=" * 75)
+        print("=" * 78)
 
         print(f"\n[CHECK] Checking target {host}:{cfg['traffic_port']} (Protocol: {cfg['protocol'].upper()})...")
         reachable, err_reason = check_destination_service(
             host, cfg["traffic_port"], protocol=cfg["protocol"], timeout=cfg["timeout"], check_http_endpoint=False
         )
         if not reachable:
-            print("\n" + "!" * 75)
+            print("\n" + "!" * 78)
             print(f"❌ TARGET SERVICE UNREACHABLE: {host}:{cfg['traffic_port']} ({cfg['protocol'].upper()})")
             print(f"   Reason: {err_reason}")
-            print("!" * 75)
+            print("!" * 78)
             print("\n[STOP] Preflight check failed. Absolutely no network traffic will be transmitted.")
             sys.exit(1)
 
@@ -1255,79 +1130,67 @@ def main():
             payload_size=cfg["payload_size"],
             check_interval=cfg["check_interval"]
         )
+        return
 
-    else:
-        # DATASET REPLAY WORKFLOW (DEFAULT)
-        if dataset_error:
-            print(f"\n❌ DATASET FILE ERROR: {dataset_error}\n")
-            sys.exit(1)
+    # 6. Workflow Execution: Primary Dataset Replay
+    if dataset_error:
+        print(f"\n❌ DATASET INITIALIZATION ERROR: {dataset_error}\n")
+        sys.exit(1)
 
-        # 5a. Label selection: prompt interactively if not passed on CLI
-        selected_label = None
-        if cfg["label"]:
-            selected_label = resolve_label_argument(cfg["label"], sorted_label_counts)
-            if not selected_label:
-                print(f"\n❌ INVALID LABEL ARGUMENT: '{cfg['label']}' was not found in dataset {dataset_file.name}.")
-                print("Available labels:")
-                for idx, (lbl, cnt) in enumerate(sorted_label_counts, start=1):
-                    print(f"  {idx:>2}. {lbl:<25} ({cnt} records)")
-                sys.exit(1)
-
+    selected_label = None
+    if cfg["label"]:
+        selected_label = resolve_label_argument(cfg["label"], sorted_label_counts)
         if not selected_label:
-            selected_label = select_dataset_label_interactively(sorted_label_counts)
-            if not selected_label:
-                # User cancelled, exited, or entered invalid selection -> send NOTHING
-                sys.exit(0)
-
-        records_to_send = records_by_label.get(selected_label, [])
-        if not records_to_send:
-            print(f"\n❌ Error: Selected label '{selected_label}' has zero available records.")
+            print(f"\n❌ Specified label '{cfg['label']}' was not found in dataset '{dataset_file.name}'.")
+            print("   Run with '--list-labels' to view all available traffic classes.\n")
             sys.exit(1)
-
-        # 5b. Explicit confirmation before starting
-        auto_confirm = bool(cfg.get("auto_confirm", False))
-        confirmed = confirm_replay_transmission(
-            label=selected_label,
-            target_url=target_api_url,
-            record_count=len(records_to_send),
-            is_continuous=cfg["continuous"],
-            interval=cfg["interval"],
-            auto_confirm=auto_confirm
-        )
-        if not confirmed:
+    else:
+        selected_label = select_dataset_label_interactively(sorted_label_counts)
+        if not selected_label:
             sys.exit(0)
 
-        # 5c. Target Reachability Check (against Replay API endpoint, NOT port 8080)
-        print(f"\n[CHECK] Checking target {host}:{cfg['api_port']} (Replay API Endpoint)...")
-        reachable, err_reason = check_destination_service(
-            host, cfg["api_port"], protocol="tcp", timeout=cfg["timeout"], check_http_endpoint=True, http_path="/api/replay-status"
-        )
-        if not reachable:
-            print("\n" + "!" * 75)
-            print(f"❌ TARGET REPLAY API SERVICE UNREACHABLE: {host}:{cfg['api_port']}")
-            print(f"   Reason: {err_reason}")
-            print("!" * 75)
-            print("\n[STOP] Preflight check failed. Absolutely no feature records will be transmitted.")
-            print(f"Verify that api.py is running on {host} and port {cfg['api_port']} is accessible.")
-            print("Troubleshooting checklist:")
-            print(" 1. Physical Layer: Ensure Ethernet cable is connected between Sender and Monitor.")
-            print(" 2. Service Status: On Monitor, confirm 'python api.py' is running.")
-            print(f" 3. Firewall Rule : On Monitor, ensure inbound TCP port {cfg['api_port']} is permitted.\n")
-            sys.exit(1)
+    label_records = records_by_label.get(selected_label, [])
+    if not label_records:
+        print(f"\n❌ Zero records found for label '{selected_label}' in '{dataset_file.name}'.\n")
+        sys.exit(1)
 
-        print("[OK] Target Replay API is reachable.")
+    # 7. User Confirmation Prompt (Prompt before probing network)
+    if not confirm_replay_transmission(
+        label=selected_label,
+        target_url=target_api_url,
+        record_count=len(label_records),
+        is_continuous=cfg["continuous"],
+        interval=cfg["interval"],
+        auto_confirm=cfg["auto_confirm"]
+    ):
+        sys.exit(0)
 
-        # 5d. Launch Replay Stream
-        run_dataset_feature_stream(
-            records=records_to_send,
-            label=selected_label,
-            target_api_url=target_api_url,
-            interval=cfg["interval"],
-            count=cfg["count"],
-            continuous=cfg["continuous"],
-            timeout=cfg["timeout"],
-            check_interval=cfg["check_interval"]
-        )
+    # 8. Pre-flight check to Replay API endpoint
+    print(f"\n[CHECK] Checking target {host}:{cfg['api_port']} (Replay API Endpoint)...")
+    reachable, err_reason = check_destination_service(
+        host, cfg["api_port"], protocol="tcp", timeout=cfg["timeout"], check_http_endpoint=True, http_path="/api/health"
+    )
+    if not reachable:
+        print("\n" + "!" * 78)
+        print(f"❌ RECEIVER REPLAY API UNREACHABLE: {host}:{cfg['api_port']}")
+        print(f"   Reason: {err_reason}")
+        print("!" * 78)
+        print("\n[STOP] Preflight check failed. Ensure api.py is running on the Receiver.")
+        sys.exit(1)
+
+    print("[OK] Target Replay API is reachable.")
+
+    # 9. Execute Replay Stream
+    run_dataset_feature_stream(
+        records=label_records,
+        label=selected_label,
+        target_api_url=target_api_url,
+        interval=cfg["interval"],
+        count=cfg["count"],
+        continuous=cfg["continuous"],
+        timeout=cfg["timeout"],
+        check_interval=cfg["check_interval"]
+    )
 
 
 if __name__ == '__main__':
