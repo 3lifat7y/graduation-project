@@ -2488,18 +2488,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleRegPwd = document.getElementById("toggleRegPwd");
 
   function openAuthModal(defaultTab = "signin", notice = "") {
-    if (!authModal) return;
-    authModal.style.display = "flex";
-    authModal.setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
-    switchAuthTab(defaultTab);
     if (notice) {
-      if (signInAlert) {
-        signInAlert.className = "auth-alert error";
-        signInAlert.textContent = notice;
-        signInAlert.style.display = "block";
-      }
+      try {
+        sessionStorage.setItem("scout_auth_notice", notice);
+      } catch (_) {}
     }
+    const targetUrl = defaultTab === "register" ? "/register" : "/login";
+    window.location.href = targetUrl;
   }
 
   function closeAuthModal() {
@@ -2618,10 +2613,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dropdownPlans) dropdownPlans.style.display = "flex";
       if (publicAuthActions) publicAuthActions.style.display = "none";
       if (userProfileMenu) userProfileMenu.style.display = "block";
-      if (navUserName) navUserName.textContent = user.full_name || user.username;
+      if (navUserName) navUserName.textContent = user.full_name || user.email || user.username;
       if (navUserRoleBadge) navUserRoleBadge.textContent = user.role;
-      if (dropdownUserTitle) dropdownUserTitle.textContent = user.full_name || user.username;
+      if (dropdownUserTitle) dropdownUserTitle.textContent = user.full_name || user.email || user.username;
       if (dropdownUserEmail) dropdownUserEmail.textContent = user.email;
+
     } else {
       document.body.classList.remove("auth-authenticated", "auth-admin");
       document.body.classList.add("auth-anonymous");
@@ -5477,16 +5473,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Operator Profile & Password Management forms
     const userFullNameInput = document.getElementById("userDashFullNameInput");
     const userEmailInput = document.getElementById("userDashEmailInput");
+    const userPhoneInput = document.getElementById("userDashPhoneInput");
     const userSaveProfileBtn = document.getElementById("userDashSaveProfileBtn");
     const userProfileMsg = document.getElementById("userDashProfileMsg");
 
     if (userFullNameInput) userFullNameInput.value = currentUser.full_name || "";
     if (userEmailInput) userEmailInput.value = currentUser.email || "";
+    if (userPhoneInput) userPhoneInput.value = currentUser.phone_number || "";
 
     if (userSaveProfileBtn) {
       userSaveProfileBtn.onclick = async () => {
         const fn = userFullNameInput ? userFullNameInput.value.trim() : "";
         const em = userEmailInput ? userEmailInput.value.trim() : "";
+        const ph = userPhoneInput ? userPhoneInput.value.trim() : "";
         userSaveProfileBtn.disabled = true;
         userSaveProfileBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Updating...';
         try {
@@ -5494,7 +5493,7 @@ document.addEventListener("DOMContentLoaded", () => {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
-            body: JSON.stringify({ full_name: fn, email: em })
+            body: JSON.stringify({ full_name: fn, email: em, phone_number: ph })
           });
           const rData = await resp.json();
           if (resp.ok && rData.status === "success") {
@@ -5506,6 +5505,7 @@ document.addEventListener("DOMContentLoaded", () => {
               currentUser = rData.user;
               loadUserDashboard();
             }
+
           } else {
             if (userProfileMsg) {
               userProfileMsg.style.color = "#EF4444";
@@ -5992,20 +5992,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const dispName = document.getElementById("adminProfileDispName");
     const dispUser = document.getElementById("adminProfileDispUsername");
     const dispEmail = document.getElementById("adminProfileDispEmail");
+    const dispPhone = document.getElementById("adminProfileDispPhone");
     const dispStatus = document.getElementById("adminProfileDispStatus");
     const dispJoined = document.getElementById("adminProfileDispJoined");
     const dispLastLogin = document.getElementById("adminProfileDispLastLogin");
     const fullNameInput = document.getElementById("adminProfileFullNameInput");
     const emailInput = document.getElementById("adminProfileEmailInput");
+    const phoneInput = document.getElementById("adminProfilePhoneInput");
 
     try {
       const res = await fetch("/api/auth/me", { credentials: "same-origin" });
       const data = await res.json();
       if (res.ok && data.status === "success" && data.user) {
         const u = data.user;
-        if (dispName) dispName.textContent = u.full_name || u.username;
-        if (dispUser) dispUser.textContent = u.username;
+        if (dispName) dispName.textContent = u.full_name || u.email || u.username;
+        if (dispUser) dispUser.textContent = u.username || "—";
         if (dispEmail) dispEmail.textContent = u.email;
+        if (dispPhone) dispPhone.textContent = u.phone_number || "—";
         if (dispStatus) {
           dispStatus.textContent = u.is_active ? "Active" : "Disabled";
           dispStatus.className = u.is_active ? "info-val text-success" : "info-val text-danger";
@@ -6014,16 +6017,147 @@ document.addEventListener("DOMContentLoaded", () => {
         if (dispLastLogin) dispLastLogin.textContent = u.last_login_at ? formatUtcDate(u.last_login_at) : "Current Session";
         if (fullNameInput) fullNameInput.value = u.full_name || "";
         if (emailInput) emailInput.value = u.email || "";
+        if (phoneInput) phoneInput.value = u.phone_number || "";
       }
     } catch (_) {}
   }
 
+
+  // ==============================================================================
+  // Dedicated Administrative Action Confirmation Dialog Controller
+  // ==============================================================================
+  const adminConfirmActionModal = document.getElementById("adminConfirmActionModal");
+  const adminConfirmModalBackdrop = document.getElementById("adminConfirmModalBackdrop");
+  const adminConfirmModalCloseBtn = document.getElementById("adminConfirmModalCloseBtn");
+  const adminConfirmCancelBtn = document.getElementById("adminConfirmCancelBtn");
+  const adminConfirmSubmitBtn = document.getElementById("adminConfirmSubmitBtn");
+
+  let currentConfirmResolver = null;
+
+  function showAdminConfirmationModal({
+    title = "Confirm Administrative Action",
+    badge = "Security Confirmation",
+    badgeIcon = "fa-triangle-exclamation",
+    targetName = "Target Entity",
+    targetMeta = "",
+    consequencesText = "Are you sure you want to proceed with this action?",
+    isDestructive = true,
+    promptReason = false,
+    reasonLabel = "Reason / Notes",
+    reasonPlaceholder = "Enter reason...",
+    reasonValue = "",
+    confirmText = "Confirm Action",
+    confirmIcon = "fa-check"
+  }) {
+    return new Promise((resolve) => {
+      if (!adminConfirmActionModal) {
+        if (promptReason) {
+          const r = prompt(`${title}\n\n${consequencesText}\n\n${reasonLabel}:`, reasonValue);
+          resolve(r !== null ? { confirmed: true, reason: r.trim() } : { confirmed: false });
+        } else {
+          resolve({ confirmed: confirm(`${title}\n\n${consequencesText}`) });
+        }
+        return;
+      }
+
+      const modalTitle = document.getElementById("adminConfirmModalTitle");
+      const modalBadge = document.getElementById("adminConfirmModalBadge");
+      const targetDisp = document.getElementById("adminConfirmTargetName");
+      const metaDisp = document.getElementById("adminConfirmTargetMeta");
+      const consBox = document.getElementById("adminConfirmConsequencesBox");
+      const consText = document.getElementById("adminConfirmConsequencesText");
+      const promptGroup = document.getElementById("adminConfirmPromptGroup");
+      const reasonLbl = document.getElementById("adminConfirmReasonLabel");
+      const reasonInput = document.getElementById("adminConfirmReasonInput");
+      const submitText = document.getElementById("adminConfirmSubmitText");
+      const submitIcon = document.getElementById("adminConfirmSubmitIcon");
+      const alertBox = document.getElementById("adminConfirmModalAlert");
+
+      if (alertBox) alertBox.style.display = "none";
+      if (modalTitle) modalTitle.textContent = title;
+      if (modalBadge) modalBadge.innerHTML = `<i class="fas ${badgeIcon}"></i> ${escapeHtml(badge)}`;
+      if (targetDisp) targetDisp.textContent = targetName;
+      if (metaDisp) {
+        metaDisp.textContent = targetMeta;
+        metaDisp.style.display = targetMeta ? "inline-block" : "none";
+      }
+      if (consText) consText.textContent = consequencesText;
+      if (consBox) {
+        if (isDestructive) {
+          consBox.style.background = "rgba(239, 68, 68, 0.1)";
+          consBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+          consBox.style.color = "var(--text-primary, #F4F4F5)";
+        } else {
+          consBox.style.background = "rgba(245, 158, 11, 0.1)";
+          consBox.style.borderColor = "rgba(245, 158, 11, 0.3)";
+          consBox.style.color = "var(--text-primary, #F4F4F5)";
+        }
+      }
+
+      if (promptGroup) {
+        promptGroup.style.display = promptReason ? "block" : "none";
+        if (reasonLbl) reasonLbl.textContent = reasonLabel;
+        if (reasonInput) {
+          reasonInput.placeholder = reasonPlaceholder;
+          reasonInput.value = reasonValue;
+        }
+      }
+
+      if (submitText) submitText.textContent = confirmText;
+      if (submitIcon) submitIcon.className = `fas ${confirmIcon} auth-btn-icon`;
+      if (adminConfirmSubmitBtn) {
+        adminConfirmSubmitBtn.style.background = isDestructive ? "#EF4444" : "";
+        adminConfirmSubmitBtn.disabled = false;
+      }
+
+      adminConfirmActionModal.style.display = "flex";
+      document.body.style.overflow = "hidden";
+
+      currentConfirmResolver = (confirmed) => {
+        const enteredReason = reasonInput ? reasonInput.value.trim() : "";
+        adminConfirmActionModal.style.display = "none";
+        document.body.style.overflow = "";
+        resolve({ confirmed, reason: enteredReason });
+      };
+    });
+  }
+
+  const closeConfirmModal = () => {
+    if (currentConfirmResolver) {
+      currentConfirmResolver(false);
+      currentConfirmResolver = null;
+    }
+  };
+  if (adminConfirmModalCloseBtn) adminConfirmModalCloseBtn.addEventListener("click", closeConfirmModal);
+  if (adminConfirmCancelBtn) adminConfirmCancelBtn.addEventListener("click", closeConfirmModal);
+  if (adminConfirmModalBackdrop) adminConfirmModalBackdrop.addEventListener("click", closeConfirmModal);
+
+  if (adminConfirmSubmitBtn) {
+    adminConfirmSubmitBtn.addEventListener("click", () => {
+      if (currentConfirmResolver) {
+        currentConfirmResolver(true);
+        currentConfirmResolver = null;
+      }
+    });
+  }
+
+  // ==============================================================================
   // Subscription Administrative Lifecycle Actions
+  // ==============================================================================
   async function activateSubscription(subId, btn) {
     if (!subId) return;
-    if (!confirm(`Approve and activate subscription #${subId}?\n\nThis will provision immediate cybersecurity access and initialize billing terms.`)) {
-      return;
-    }
+    const confirmRes = await showAdminConfirmationModal({
+      title: "Approve Subscription Request",
+      badge: "Access Provisioning",
+      badgeIcon: "fa-check",
+      targetName: `Subscription #${subId}`,
+      targetMeta: `#${subId}`,
+      consequencesText: "Approving this request will provision immediate cybersecurity access and initialize billing terms for the operator.",
+      isDestructive: false,
+      confirmText: "Approve Request",
+      confirmIcon: "fa-check"
+    });
+    if (!confirmRes.confirmed) return;
 
     const originalContent = btn ? btn.innerHTML : "";
     if (btn) {
@@ -6040,6 +6174,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (res.ok && data.status === "success") {
+        if (typeof showToast === "function") showToast(data.message || "Subscription approved successfully.", "success");
         loadAdminRequests();
         loadAdminSubscriptions();
         loadAdminMetrics();
@@ -6058,8 +6193,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function rejectSubscription(subId, btn) {
     if (!subId) return;
-    const reason = prompt(`Enter rejection reason for subscription #${subId} (optional):`, "Request rejected by administrator.");
-    if (reason === null) return; // User cancelled
+    const confirmRes = await showAdminConfirmationModal({
+      title: "Reject Subscription Request",
+      badge: "Request Rejection",
+      badgeIcon: "fa-xmark",
+      targetName: `Subscription #${subId}`,
+      targetMeta: `#${subId}`,
+      consequencesText: "Rejecting this request will prevent access and notify the operator. A historical audit record will be preserved in compliance with security guidelines.",
+      isDestructive: true,
+      promptReason: true,
+      reasonLabel: "Rejection Reason",
+      reasonPlaceholder: "Reason for rejection...",
+      reasonValue: "Request rejected by administrator.",
+      confirmText: "Reject Request",
+      confirmIcon: "fa-xmark"
+    });
+    if (!confirmRes.confirmed) return;
 
     const originalContent = btn ? btn.innerHTML : "";
     if (btn) {
@@ -6072,10 +6221,11 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ reason: reason.trim() || "Request rejected by administrator." })
+        body: JSON.stringify({ reason: confirmRes.reason || "Request rejected by administrator." })
       });
       const data = await res.json();
       if (res.ok && data.status === "success") {
+        if (typeof showToast === "function") showToast(data.message || "Subscription rejected.", "success");
         loadAdminRequests();
         loadAdminSubscriptions();
         loadAdminMetrics();
@@ -6094,8 +6244,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function cancelSubscription(subId, btn) {
     if (!subId) return;
-    const reason = prompt(`Are you sure you want to terminate subscription #${subId}?\n\nEnter cancellation reason (optional):`, "Canceled by administrator.");
-    if (reason === null) return; // User cancelled
+    const confirmRes = await showAdminConfirmationModal({
+      title: "Cancel Active Subscription",
+      badge: "Subscription Revocation",
+      badgeIcon: "fa-ban",
+      targetName: `Subscription #${subId}`,
+      targetMeta: `#${subId}`,
+      consequencesText: "Terminating this active subscription will immediately revoke the operator's access rights. This action is permanently logged in the audit trail.",
+      isDestructive: true,
+      promptReason: true,
+      reasonLabel: "Cancellation Reason",
+      reasonPlaceholder: "Reason for termination...",
+      reasonValue: "Canceled by administrator.",
+      confirmText: "Terminate Subscription",
+      confirmIcon: "fa-ban"
+    });
+    if (!confirmRes.confirmed) return;
 
     const originalContent = btn ? btn.innerHTML : "";
     if (btn) {
@@ -6108,10 +6272,11 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ reason: reason.trim() || "Canceled by administrator." })
+        body: JSON.stringify({ reason: confirmRes.reason || "Canceled by administrator." })
       });
       const data = await res.json();
       if (res.ok && data.status === "success") {
+        if (typeof showToast === "function") showToast(data.message || "Subscription canceled.", "success");
         loadAdminSubscriptions();
         loadAdminMetrics();
       } else {
@@ -6125,6 +6290,468 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.innerHTML = originalContent;
       }
     }
+  }
+
+  async function deleteSubscription(subId, userLabel, planLabel, isForce, btn) {
+    if (!subId) return;
+    const confirmRes = await showAdminConfirmationModal({
+      title: "Delete Subscription Record",
+      badge: "Destructive Action",
+      badgeIcon: "fa-trash-can",
+      targetName: `${userLabel || 'Operator'} · ${planLabel || 'Plan'}`,
+      targetMeta: `#${subId}`,
+      consequencesText: "Are you sure you want to permanently delete this subscription record? This will remove the subscription and its chronological audit logs from the database.",
+      isDestructive: true,
+      confirmText: "Permanently Delete",
+      confirmIcon: "fa-trash-can"
+    });
+    if (!confirmRes.confirmed) return;
+
+    const originalContent = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Deleting...';
+    }
+
+    try {
+      const url = isForce ? `/api/admin/subscriptions/${subId}?force=true` : `/api/admin/subscriptions/${subId}`;
+      const response = await fetch(url, {
+        method: "DELETE",
+        credentials: "same-origin"
+      });
+      const data = await response.json();
+      if (response.ok && data.status === "success") {
+        if (typeof showToast === "function") showToast(data.message || "Subscription deleted successfully.", "success");
+        loadAdminRequests();
+        loadAdminSubscriptions();
+        loadAdminMetrics();
+      } else {
+        alert(data.message || "Failed to delete subscription.");
+      }
+    } catch (_) {
+      alert("Network error processing subscription deletion.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+      }
+    }
+  }
+
+  // ==============================================================================
+  // Admin Plan Details Modal Controller
+  // ==============================================================================
+  const adminPlanDetailsModal = document.getElementById("adminPlanDetailsModal");
+  const adminPlanDetailsModalCloseBtn = document.getElementById("adminPlanDetailsModalCloseBtn");
+  const adminPlanDetailsModalBackdrop = document.getElementById("adminPlanDetailsModalBackdrop");
+  const adminPlanDetailsAlert = document.getElementById("adminPlanDetailsAlert");
+
+  async function openPlanDetailsModal(planId) {
+    if (!adminPlanDetailsModal || !planId) return;
+    if (adminPlanDetailsAlert) adminPlanDetailsAlert.style.display = "none";
+    adminPlanDetailsModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+
+    const dId = document.getElementById("dossierPlanId");
+    const dCode = document.getElementById("dossierPlanCode");
+    const dPrice = document.getElementById("dossierPlanPrice");
+    const dDur = document.getElementById("dossierPlanDuration");
+    const dStatus = document.getElementById("dossierPlanStatus");
+    const dTotal = document.getElementById("dossierPlanTotalSubs");
+    const dActive = document.getElementById("dossierPlanActiveSubs");
+    const dCreated = document.getElementById("dossierPlanCreated");
+    const dDesc = document.getElementById("dossierPlanDescription");
+    const featGrid = document.getElementById("dossierPlanFeaturesGrid");
+    const tbody = document.getElementById("dossierPlanSubsTbody");
+    const actionsToolbar = document.getElementById("adminPlanDetailsActions");
+
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading plan records...</td></tr>`;
+
+    try {
+      const res = await fetch(`/api/admin/plans/${planId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.plan) {
+        if (adminPlanDetailsAlert) {
+          adminPlanDetailsAlert.className = "auth-alert error";
+          adminPlanDetailsAlert.textContent = data.message || "Failed to load plan specifications.";
+          adminPlanDetailsAlert.style.display = "block";
+        }
+        return;
+      }
+
+      const p = data.plan;
+      if (dId) dId.textContent = `#${p.id}`;
+      if (dCode) dCode.textContent = p.plan_code || "—";
+      if (dPrice) dPrice.textContent = `${p.currency || 'USD'} ${p.price === 0 ? 'Free' : '$' + p.price.toFixed(2)}`;
+      if (dDur) dDur.textContent = `${p.duration_value} ${p.duration_unit || 'days'}`;
+      if (dStatus) {
+        dStatus.textContent = p.is_active ? "Active in Catalog" : "Archived / Hidden";
+        dStatus.className = p.is_active ? "dossier-val text-success" : "dossier-val text-warning";
+      }
+      if (dTotal) dTotal.textContent = p.total_subscribers ?? p.subscribers_count ?? 0;
+      if (dActive) dActive.textContent = p.active_subscribers ?? 0;
+      if (dCreated) dCreated.textContent = formatUtcDate(p.created_at);
+      if (dDesc) dDesc.textContent = p.description || "No description provided.";
+
+      // Features
+      if (featGrid) {
+        const f = p.features || {};
+        featGrid.innerHTML = `
+          <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
+            <i class="fas ${f.can_live_monitoring ? 'fa-check text-success' : 'fa-xmark text-danger'}"></i>
+            <span>Live Telemetry & Detection</span>
+          </div>
+          <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
+            <i class="fas ${f.can_port_scan ? 'fa-check text-success' : 'fa-xmark text-danger'}"></i>
+            <span>Port Vulnerability Scanner</span>
+          </div>
+          <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
+            <i class="fas ${f.can_network_discovery ? 'fa-check text-success' : 'fa-xmark text-danger'}"></i>
+            <span>Subnet Reconnaissance</span>
+          </div>
+        `;
+      }
+
+      // Recent subscribers
+      const subs = p.recent_subscriptions || [];
+      if (tbody) {
+        if (subs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-muted">No subscribers found for this plan.</td></tr>`;
+        } else {
+          tbody.innerHTML = subs.map(s => `
+            <tr>
+              <td><code>#${s.id}</code></td>
+              <td><strong>${escapeHtml(s.username)}</strong>${s.user_email ? `<br><small class="text-muted">${escapeHtml(s.user_email)}</small>` : ''}</td>
+              <td><span class="sub-badge ${s.status}">${escapeHtml(s.status)}</span></td>
+              <td>${formatUtcDate(s.start_date)}</td>
+              <td>${formatUtcDate(s.end_date)}</td>
+            </tr>
+          `).join("");
+        }
+      }
+
+      // Actions Toolbar inside Plan Details Drawer
+      if (actionsToolbar) {
+        const subsCount = p.total_subscribers ?? p.subscribers_count ?? 0;
+        actionsToolbar.innerHTML = `
+          <button type="button" class="btn-admin-action dates" id="planDetailsEditBtn">
+            <i class="fas fa-pen-to-square"></i> Edit Plan
+          </button>
+          <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" id="planDetailsArchiveBtn">
+            <i class="fas ${p.is_active ? 'fa-box-archive' : 'fa-check'}"></i> ${p.is_active ? 'Archive Plan' : 'Restore Plan'}
+          </button>
+          ${subsCount > 0 ? `
+            <button type="button" class="btn-admin-action cancel disabled" id="planDetailsDeleteBtn" disabled title="Permanent deletion disabled: Plan has ${subsCount} associated subscriber record(s). Use Archive Plan instead." style="opacity: 0.55; cursor: not-allowed;">
+              <i class="fas fa-trash-can"></i> Delete Plan
+            </button>
+          ` : `
+            <button type="button" class="btn-admin-action cancel" id="planDetailsDeleteBtn">
+              <i class="fas fa-trash-can"></i> Delete Plan
+            </button>
+          `}
+        `;
+
+        const pEditBtn = document.getElementById("planDetailsEditBtn");
+        if (pEditBtn) {
+          pEditBtn.onclick = () => {
+            adminPlanDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+            openEditPlanModal(p);
+          };
+        }
+
+        const pArchiveBtn = document.getElementById("planDetailsArchiveBtn");
+        if (pArchiveBtn) {
+          pArchiveBtn.onclick = async () => {
+            await togglePlanActive(p.id, !p.is_active, pArchiveBtn);
+            openPlanDetailsModal(p.id);
+          };
+        }
+
+        const pDeleteBtn = document.getElementById("planDetailsDeleteBtn");
+        if (pDeleteBtn && subsCount === 0) {
+          pDeleteBtn.onclick = async () => {
+            await deletePlan(p.id, p.name, 0);
+            adminPlanDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+          };
+        }
+      }
+    } catch (_) {
+      if (adminPlanDetailsAlert) {
+        adminPlanDetailsAlert.className = "auth-alert error";
+        adminPlanDetailsAlert.textContent = "Network error loading plan details.";
+        adminPlanDetailsAlert.style.display = "block";
+      }
+    }
+  }
+
+  if (adminPlanDetailsModalCloseBtn) {
+    adminPlanDetailsModalCloseBtn.addEventListener("click", () => {
+      if (adminPlanDetailsModal) adminPlanDetailsModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+  if (adminPlanDetailsModalBackdrop) {
+    adminPlanDetailsModalBackdrop.addEventListener("click", () => {
+      if (adminPlanDetailsModal) adminPlanDetailsModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+
+  // ==============================================================================
+  // Admin Subscription & Request Details Modal Controller
+  // ==============================================================================
+  const adminSubDetailsModal = document.getElementById("adminSubDetailsModal");
+  const adminSubDetailsModalCloseBtn = document.getElementById("adminSubDetailsModalCloseBtn");
+  const adminSubDetailsModalBackdrop = document.getElementById("adminSubDetailsModalBackdrop");
+  const adminSubDetailsAlert = document.getElementById("adminSubDetailsAlert");
+
+  async function openSubDetailsModal(subId) {
+    if (!adminSubDetailsModal || !subId) return;
+    if (adminSubDetailsAlert) adminSubDetailsAlert.style.display = "none";
+    adminSubDetailsModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+
+    const dId = document.getElementById("dossierSubId");
+    const dUser = document.getElementById("dossierSubUsername");
+    const dEmail = document.getElementById("dossierSubEmail");
+    const dPlan = document.getElementById("dossierSubPlan");
+    const dStatus = document.getElementById("dossierSubStatus");
+    const dStart = document.getElementById("dossierSubStart");
+    const dEnd = document.getElementById("dossierSubEnd");
+    const dRem = document.getElementById("dossierSubRemaining");
+    const notesInput = document.getElementById("adminSubNotesInput");
+    const saveNotesBtn = document.getElementById("adminSubNotesSaveBtn");
+    const notesMsg = document.getElementById("adminSubNotesMsg");
+    const actionsToolbar = document.getElementById("adminSubDetailsActions");
+    const auditTbody = document.getElementById("adminSubAuditTbody");
+
+    if (auditTbody) auditTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading audit history...</td></tr>`;
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.subscription) {
+        if (adminSubDetailsAlert) {
+          adminSubDetailsAlert.className = "auth-alert error";
+          adminSubDetailsAlert.textContent = data.message || "Failed to load subscription dossier.";
+          adminSubDetailsAlert.style.display = "block";
+        }
+        return;
+      }
+
+      const s = data.subscription;
+      const opName = s.username || (s.user && (s.user.full_name || s.user.username)) || `User #${s.user_id}`;
+      const opEmail = s.user_email || (s.user && s.user.email) || "—";
+      const planName = s.plan_name || (s.plan && s.plan.name) || `Plan #${s.plan_id}`;
+      const statusClass = s.status === "active" ? "active" : (s.status === "pending" ? "pending" : (s.status === "expired" ? "expired" : "canceled"));
+
+      if (dId) dId.textContent = `#${s.id}`;
+      if (dUser) {
+        dUser.innerHTML = `<strong>${escapeHtml(opName)}</strong> <span class="user-id-chip" style="cursor:pointer;" title="Click to view Operator Dossier">View Dossier <i class="fas fa-arrow-up-right-from-square"></i></span>`;
+        const chip = dUser.querySelector(".user-id-chip");
+        if (chip) {
+          chip.onclick = () => {
+            adminSubDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+            openAdminUserDetails(s.user_id);
+          };
+        }
+      }
+      if (dEmail) dEmail.textContent = opEmail;
+      if (dPlan) dPlan.textContent = planName;
+      if (dStatus) {
+        dStatus.innerHTML = `<span class="sub-badge ${statusClass}">${escapeHtml(s.status.toUpperCase())}</span>`;
+      }
+      if (dStart) dStart.textContent = formatUtcDate(s.start_date);
+      if (dEnd) dEnd.textContent = formatUtcDate(s.end_date);
+      if (dRem) {
+        dRem.textContent = s.days_remaining !== null && s.days_remaining !== undefined ? `${s.days_remaining} day(s)` : "—";
+      }
+
+      // Notes
+      if (notesInput) notesInput.value = s.admin_notes || s.cancellation_reason || "";
+      if (notesMsg) notesMsg.style.display = "none";
+
+      if (saveNotesBtn) {
+        saveNotesBtn.onclick = async () => {
+          const newNotes = notesInput ? notesInput.value.trim() : "";
+          saveNotesBtn.disabled = true;
+          saveNotesBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+          try {
+            const nRes = await fetch(`/api/admin/subscriptions/${s.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({ admin_notes: newNotes })
+            });
+            const nData = await nRes.json();
+            if (nRes.ok && nData.status === "success") {
+              if (notesMsg) {
+                notesMsg.style.display = "block";
+                notesMsg.style.background = "rgba(16, 185, 129, 0.15)";
+                notesMsg.style.color = "#10B981";
+                notesMsg.textContent = "Notes saved successfully.";
+              }
+              openSubDetailsModal(s.id);
+            } else {
+              if (notesMsg) {
+                notesMsg.style.display = "block";
+                notesMsg.style.background = "rgba(239, 68, 68, 0.15)";
+                notesMsg.style.color = "#EF4444";
+                notesMsg.textContent = nData.message || "Failed to save notes.";
+              }
+            }
+          } catch (_) {
+            if (notesMsg) {
+              notesMsg.style.display = "block";
+              notesMsg.style.background = "rgba(239, 68, 68, 0.15)";
+              notesMsg.style.color = "#EF4444";
+              notesMsg.textContent = "Network error saving notes.";
+            }
+          } finally {
+            saveNotesBtn.disabled = false;
+            saveNotesBtn.innerHTML = '<i class="fas fa-save"></i> Save Notes';
+          }
+        };
+      }
+
+      // Contextual Action Buttons in Details Modal
+      if (actionsToolbar) {
+        let btns = "";
+        if (s.status === "pending") {
+          btns = `
+            <button type="button" class="btn-admin-action activate" id="modalSubApproveBtn">
+              <i class="fas fa-check"></i> Approve Request
+            </button>
+            <button type="button" class="btn-admin-action reject" id="modalSubRejectBtn">
+              <i class="fas fa-xmark"></i> Reject Request
+            </button>
+            <button type="button" class="btn-admin-action cancel" id="modalSubDeleteBtn">
+              <i class="fas fa-trash-can"></i> Delete Request
+            </button>
+          `;
+        } else if (s.status === "active") {
+          btns = `
+            <button type="button" class="btn-admin-action activate" id="modalSubExtendBtn">
+              <i class="fas fa-calendar-plus"></i> Extend Duration
+            </button>
+            <button type="button" class="btn-admin-action dates" id="modalSubDatesBtn">
+              <i class="fas fa-calendar"></i> Adjust Dates
+            </button>
+            <button type="button" class="btn-admin-action cancel" id="modalSubCancelBtn">
+              <i class="fas fa-ban"></i> Cancel Subscription
+            </button>
+          `;
+        } else if (s.status === "expired" || s.status === "canceled" || s.status === "rejected") {
+          btns = `
+            <button type="button" class="btn-admin-action activate" id="modalSubRenewBtn">
+              <i class="fas fa-rotate"></i> Renew Subscription
+            </button>
+            <button type="button" class="btn-admin-action dates" id="modalSubDatesBtn">
+              <i class="fas fa-calendar"></i> Adjust Dates
+            </button>
+            <button type="button" class="btn-admin-action cancel" id="modalSubDeleteBtn">
+              <i class="fas fa-trash-can"></i> Delete Record
+            </button>
+          `;
+        }
+        actionsToolbar.innerHTML = btns;
+
+        const appBtn = document.getElementById("modalSubApproveBtn");
+        if (appBtn) {
+          appBtn.onclick = async () => {
+            await activateSubscription(s.id, appBtn);
+            openSubDetailsModal(s.id);
+          };
+        }
+        const rejBtn = document.getElementById("modalSubRejectBtn");
+        if (rejBtn) {
+          rejBtn.onclick = async () => {
+            await rejectSubscription(s.id, rejBtn);
+            openSubDetailsModal(s.id);
+          };
+        }
+        const extBtn = document.getElementById("modalSubExtendBtn");
+        if (extBtn) {
+          extBtn.onclick = () => {
+            adminSubDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+            openAdminExtendModal({ id: s.id, user: opName, plan: planName });
+          };
+        }
+        const datesBtn = document.getElementById("modalSubDatesBtn");
+        if (datesBtn) {
+          datesBtn.onclick = () => {
+            adminSubDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+            openAdminDateModal(s.id, s.start_date, s.end_date);
+          };
+        }
+        const cancBtn = document.getElementById("modalSubCancelBtn");
+        if (cancBtn) {
+          cancBtn.onclick = async () => {
+            await cancelSubscription(s.id, cancBtn);
+            openSubDetailsModal(s.id);
+          };
+        }
+        const renewBtn = document.getElementById("modalSubRenewBtn");
+        if (renewBtn) {
+          renewBtn.onclick = () => {
+            adminSubDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+            openAdminRenewModal({ id: s.id, user: opName, plan: planName });
+          };
+        }
+        const delBtn = document.getElementById("modalSubDeleteBtn");
+        if (delBtn) {
+          delBtn.onclick = async () => {
+            await deleteSubscription(s.id, opName, planName, s.status !== "active", delBtn);
+            adminSubDetailsModal.style.display = "none";
+            document.body.style.overflow = "";
+          };
+        }
+      }
+
+      // Audit Logs
+      const logs = s.audit_logs || [];
+      if (auditTbody) {
+        if (logs.length === 0) {
+          auditTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted">No audit history recorded for this subscription.</td></tr>`;
+        } else {
+          auditTbody.innerHTML = logs.map(l => `
+            <tr>
+              <td><small>${formatUtcDate(l.timestamp)}</small></td>
+              <td><span class="user-role-badge ${l.action === 'ACTIVATED' ? 'admin-badge' : ''}">${escapeHtml(l.action)}</span></td>
+              <td>${l.previous_status ? `<span class="sub-badge ${l.previous_status}">${escapeHtml(l.previous_status)}</span>` : '—'}</td>
+              <td>${l.new_status ? `<span class="sub-badge ${l.new_status}">${escapeHtml(l.new_status)}</span>` : '—'}</td>
+              <td><small>${l.actor_id ? `#${l.actor_id}` : 'System'}</small></td>
+              <td><small class="text-muted">${escapeHtml(l.details || '—')}</small></td>
+            </tr>
+          `).join("");
+        }
+      }
+    } catch (_) {
+      if (adminSubDetailsAlert) {
+        adminSubDetailsAlert.className = "auth-alert error";
+        adminSubDetailsAlert.textContent = "Network error loading subscription details.";
+        adminSubDetailsAlert.style.display = "block";
+      }
+    }
+  }
+
+  if (adminSubDetailsModalCloseBtn) {
+    adminSubDetailsModalCloseBtn.addEventListener("click", () => {
+      if (adminSubDetailsModal) adminSubDetailsModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+  if (adminSubDetailsModalBackdrop) {
+    adminSubDetailsModalBackdrop.addEventListener("click", () => {
+      if (adminSubDetailsModal) adminSubDetailsModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
   }
 
   // Load Pending Requests & Approvals with Card-Based Layout and Fallback Table Sync
@@ -6241,11 +6868,17 @@ document.addEventListener("DOMContentLoaded", () => {
               </div>
             </div>
             <div class="request-card-footer">
+              <button type="button" class="btn-admin-action" data-sub-details-id="${r.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Request Details & Dossier">
+                <i class="fas fa-folder-open"></i> Details
+              </button>
               <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
-                <i class="fas fa-check"></i> Approve Request
+                <i class="fas fa-check"></i> Approve
               </button>
               <button type="button" class="btn-admin-action reject" data-rej-id="${r.id}" title="Reject request">
                 <i class="fas fa-xmark"></i> Reject
+              </button>
+              <button type="button" class="btn-admin-action cancel" data-sub-delete-id="${r.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete pending request record">
+                <i class="fas fa-trash-can"></i>
               </button>
             </div>
           </div>
@@ -6263,11 +6896,17 @@ document.addEventListener("DOMContentLoaded", () => {
             <td><span class="sub-badge pending">Pending</span></td>
             <td>
               <div class="admin-action-btn-group">
+                <button type="button" class="btn-admin-action" data-sub-details-id="${r.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Request Details">
+                  <i class="fas fa-folder-open"></i> Details
+                </button>
                 <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
                   <i class="fas fa-check"></i> Approve
                 </button>
                 <button type="button" class="btn-admin-action reject" data-rej-id="${r.id}" title="Reject request">
                   <i class="fas fa-xmark"></i> Reject
+                </button>
+                <button type="button" class="btn-admin-action cancel" data-sub-delete-id="${r.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete pending request">
+                  <i class="fas fa-trash-can"></i>
                 </button>
               </div>
             </td>
@@ -6280,11 +6919,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const bindActions = (container) => {
         if (!container) return;
+        container.querySelectorAll("[data-sub-details-id]").forEach(btn => {
+          btn.addEventListener("click", () => openSubDetailsModal(btn.getAttribute("data-sub-details-id")));
+        });
         container.querySelectorAll("[data-act-id]").forEach(btn => {
           btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
         });
         container.querySelectorAll("[data-rej-id]").forEach(btn => {
           btn.addEventListener("click", () => rejectSubscription(btn.getAttribute("data-rej-id"), btn));
+        });
+        container.querySelectorAll("[data-sub-delete-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const sid = btn.getAttribute("data-sub-delete-id");
+            const uLabel = btn.getAttribute("data-user");
+            const pLabel = btn.getAttribute("data-plan");
+            deleteSubscription(sid, uLabel, pLabel, true, btn);
+          });
         });
       };
 
@@ -6380,6 +7030,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const statusIcon = s.status === "active" ? "fa-circle-check" : (s.status === "pending" ? "fa-clock" : (s.status === "expired" ? "fa-circle-exclamation" : "fa-ban"));
 
         let actionBtns = `
+          <button type="button" class="btn-admin-action" data-sub-details-id="${s.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Subscription Details & Audit Dossier">
+            <i class="fas fa-folder-open"></i> Details
+          </button>
           <button type="button" class="btn-admin-action dates" data-dates-id="${s.id}" data-start="${s.start_date || ''}" data-end="${s.end_date || ''}" title="Adjust subscription dates">
             <i class="fas fa-calendar"></i> Dates
           </button>
@@ -6391,6 +7044,9 @@ document.addEventListener("DOMContentLoaded", () => {
             </button>
             <button type="button" class="btn-admin-action reject" data-rej-id="${s.id}" title="Reject request">
               <i class="fas fa-xmark"></i> Reject
+            </button>
+            <button type="button" class="btn-admin-action cancel" data-sub-delete-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete Request Record">
+              <i class="fas fa-trash-can"></i>
             </button>
           `;
         } else if (s.status === "active") {
@@ -6407,11 +7063,17 @@ document.addEventListener("DOMContentLoaded", () => {
             <button type="button" class="btn-admin-action activate" data-renew-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Renew expired subscription">
               <i class="fas fa-rotate"></i> Renew
             </button>
+            <button type="button" class="btn-admin-action cancel" data-sub-delete-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete Subscription Record">
+              <i class="fas fa-trash-can"></i>
+            </button>
           `;
         } else if (s.status === "canceled") {
           actionBtns += `
             <button type="button" class="btn-admin-action activate" data-renew-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Re-activate canceled subscription">
               <i class="fas fa-rotate"></i> Re-activate
+            </button>
+            <button type="button" class="btn-admin-action cancel" data-sub-delete-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete Subscription Record">
+              <i class="fas fa-trash-can"></i>
             </button>
           `;
         }
@@ -6480,6 +7142,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const bindActions = (container) => {
         if (!container) return;
+        container.querySelectorAll("[data-sub-details-id]").forEach(btn => {
+          btn.addEventListener("click", () => openSubDetailsModal(btn.getAttribute("data-sub-details-id")));
+        });
         container.querySelectorAll("[data-act-id]").forEach(btn => {
           btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
         });
@@ -6488,6 +7153,14 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         container.querySelectorAll("[data-canc-id]").forEach(btn => {
           btn.addEventListener("click", () => cancelSubscription(btn.getAttribute("data-canc-id"), btn));
+        });
+        container.querySelectorAll("[data-sub-delete-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const sid = btn.getAttribute("data-sub-delete-id");
+            const uLabel = btn.getAttribute("data-user");
+            const pLabel = btn.getAttribute("data-plan");
+            deleteSubscription(sid, uLabel, pLabel, true, btn);
+          });
         });
         container.querySelectorAll("[data-dates-id]").forEach(btn => {
           btn.addEventListener("click", () => {
@@ -6647,18 +7320,21 @@ document.addEventListener("DOMContentLoaded", () => {
           <button type="button" class="btn-card-action btn-card-details" data-view-user="${u.id}" title="View operator dossier, credentials, and full subscription lifecycle">
             <i class="fas fa-folder-open"></i> Details
           </button>
+          <button type="button" class="btn-card-action" data-edit-user="${u.id}" style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.3);" title="Edit operator profile details">
+            <i class="fas fa-pen-to-square"></i> Edit
+          </button>
         `;
 
         if (!isSelf) {
           if (isActive) {
             cardActionsHtml += `
-              <button type="button" class="btn-card-action btn-card-suspend" data-user-toggle="${u.id}" data-action="suspend" title="Suspend operator account and terminate active sessions">
+              <button type="button" class="btn-card-action btn-card-suspend" data-user-toggle="${u.id}" data-action="suspend" data-name="${escapeHtml(u.full_name || u.username || 'Operator')}" title="Suspend operator account and terminate active sessions">
                 <i class="fas fa-user-lock"></i> Suspend
               </button>
             `;
           } else {
             cardActionsHtml += `
-              <button type="button" class="btn-card-action btn-card-activate" data-user-toggle="${u.id}" data-action="activate" title="Reactivate operator account and permit login access">
+              <button type="button" class="btn-card-action btn-card-activate" data-user-toggle="${u.id}" data-action="activate" data-name="${escapeHtml(u.full_name || u.username || 'Operator')}" title="Reactivate operator account and permit login access">
                 <i class="fas fa-user-check"></i> Restore
               </button>
             `;
@@ -6678,8 +7354,9 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
           }
 
+          const userDisplayName = u.full_name || u.email || u.username || "Operator";
           cardActionsHtml += `
-            <button type="button" class="btn-card-action btn-card-delete" data-delete-user="${u.id}" data-username="${escapeHtml(u.username)}" title="Delete or safely archive operator account">
+            <button type="button" class="btn-card-action btn-card-delete" data-delete-user="${u.id}" data-username="${escapeHtml(userDisplayName)}" title="Delete or safely archive operator account">
               <i class="fas fa-trash-can"></i>
             </button>
           `;
@@ -6690,6 +7367,9 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
           `;
         }
+
+        const cardPrimaryName = u.full_name || u.email || u.username || 'Operator';
+        const cardSecondaryInfo = u.full_name ? u.email : (u.phone_number || u.username || '');
 
         // Card Template
         cardsHtml += `
@@ -6703,10 +7383,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
                 <div class="user-card-names">
                   <div class="user-card-title-row">
-                    <h4 class="user-card-username" title="${escapeHtml(u.username)}">${escapeHtml(u.username)}</h4>
+                    <h4 class="user-card-username" title="${escapeHtml(cardPrimaryName)}">${escapeHtml(cardPrimaryName)}</h4>
                     <span class="user-id-chip">#${u.id}</span>
                   </div>
-                  <div class="user-card-fullname">${escapeHtml(u.full_name || 'No display name configured')}</div>
+                  <div class="user-card-fullname">${escapeHtml(cardSecondaryInfo)}</div>
                 </div>
               </div>
               <div class="user-card-badge-col">
@@ -6726,6 +7406,11 @@ document.addEventListener("DOMContentLoaded", () => {
                   <i class="fas fa-envelope meta-icon"></i>
                   <span class="meta-text text-truncate">${escapeHtml(u.email)}</span>
                 </div>
+                ${u.phone_number ? `
+                <div class="user-card-meta-item" title="${escapeHtml(u.phone_number)}">
+                  <i class="fas fa-phone meta-icon"></i>
+                  <span class="meta-text text-truncate">${escapeHtml(u.phone_number)}</span>
+                </div>` : ''}
                 <div class="user-card-meta-row">
                   <div class="user-card-meta-item" title="Registration Date">
                     <i class="fas fa-calendar-plus meta-icon"></i>
@@ -6763,7 +7448,7 @@ document.addEventListener("DOMContentLoaded", () => {
         rowsHtml += `
           <tr>
             <td><code>#${u.id}</code></td>
-            <td><strong>${escapeHtml(u.username)}</strong>${u.full_name ? `<br><small class="text-muted">${escapeHtml(u.full_name)}</small>` : ''}</td>
+            <td><strong>${escapeHtml(u.full_name || u.email)}</strong>${u.phone_number ? `<br><small class="text-muted"><i class="fas fa-phone"></i> ${escapeHtml(u.phone_number)}</small>` : ''}</td>
             <td>${escapeHtml(u.email)}</td>
             <td><span class="user-role-badge ${isAdmin ? 'admin-badge' : ''}">${escapeHtml(u.role)}</span></td>
             <td><span class="sub-badge ${isActive ? 'active' : 'expired'}">${statusLabel}</span></td>
@@ -6773,6 +7458,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${cardActionsHtml}</td>
           </tr>
         `;
+
       }
 
       if (cardsGrid) cardsGrid.innerHTML = cardsHtml;
@@ -6787,11 +7473,24 @@ document.addEventListener("DOMContentLoaded", () => {
           });
         });
 
+        container.querySelectorAll("[data-edit-user]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const uid = btn.getAttribute("data-edit-user");
+            await openAdminUserDetails(uid);
+            const editInput = document.getElementById("adminUserEditFullName");
+            if (editInput) {
+              editInput.focus();
+              editInput.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          });
+        });
+
         container.querySelectorAll("[data-user-toggle]").forEach(btn => {
           btn.addEventListener("click", () => {
             const uid = btn.getAttribute("data-user-toggle");
             const action = btn.getAttribute("data-action");
-            toggleUserActive(uid, action === "activate", btn);
+            const name = btn.getAttribute("data-name") || `Operator #${uid}`;
+            toggleUserActive(uid, action === "activate", btn, name);
           });
         });
 
@@ -6830,11 +7529,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Operator Moderation Handlers: Toggle Active Status
-  async function toggleUserActive(userId, targetActive, btn) {
+  async function toggleUserActive(userId, targetActive, btn, username) {
     if (!userId) return;
     const actionText = targetActive ? "reactivate" : "suspend";
     if (!targetActive) {
-      if (!confirm("Are you sure you want to suspend this operator account? Active sessions will be terminated and login access will be blocked.")) return;
+      const confirmRes = await showAdminConfirmationModal({
+        title: "Suspend Operator Account",
+        badge: "Account Moderation",
+        badgeIcon: "fa-user-lock",
+        targetName: username || `Operator #${userId}`,
+        targetMeta: `#${userId}`,
+        consequencesText: "Suspending this operator will immediately terminate all active sessions and block login access. Account records and subscription history will be preserved.",
+        isDestructive: true,
+        confirmText: "Suspend Account",
+        confirmIcon: "fa-user-lock"
+      });
+      if (!confirmRes.confirmed) return;
     }
     const origHtml = btn ? btn.innerHTML : "";
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
@@ -6863,8 +7573,19 @@ document.addEventListener("DOMContentLoaded", () => {
   // Operator Moderation Handlers: Delete / Archive Account
   async function deleteAdminUser(userId, username, btn) {
     if (!userId) return;
-    const confirmed = confirm(`Are you sure you want to delete or archive operator '${username || '#' + userId}'?\n\nIf the operator has historical subscriptions, the account will be safely archived to preserve audit integrity. Otherwise, it will be permanently deleted.`);
-    if (!confirmed) return;
+    const confirmRes = await showAdminConfirmationModal({
+      title: "Delete / Archive Operator Account",
+      badge: "Account Removal",
+      badgeIcon: "fa-trash-can",
+      targetName: username || `Operator #${userId}`,
+      targetMeta: `#${userId}`,
+      consequencesText: "If the operator has historical subscriptions or audit records, the account will be safely archived to preserve audit integrity. If no associated records exist, the account will be permanently deleted.",
+      isDestructive: true,
+      confirmText: "Delete Account",
+      confirmIcon: "fa-trash-can"
+    });
+    if (!confirmRes.confirmed) return;
+
     const origHtml = btn ? btn.innerHTML : "";
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
     try {
@@ -6926,8 +7647,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const u = data.user;
       if (dId) dId.textContent = `#${u.id}`;
-      if (dUser) dUser.textContent = u.username;
+      if (dUser) dUser.textContent = u.username || "—";
       if (dEmail) dEmail.textContent = u.email;
+      const dPhone = document.getElementById("dossierPhone");
+      if (dPhone) dPhone.textContent = u.phone_number || "—";
       if (dName) dName.textContent = u.full_name || "—";
       if (dRole) dRole.textContent = u.role;
       if (dStatus) {
@@ -6940,15 +7663,18 @@ document.addEventListener("DOMContentLoaded", () => {
       // Populate Admin Edit Inputs
       const editNameInput = document.getElementById("adminUserEditFullName");
       const editEmailInput = document.getElementById("adminUserEditEmail");
+      const editPhoneInput = document.getElementById("adminUserEditPhone");
       const editSaveBtn = document.getElementById("adminUserEditSaveBtn");
       const editMsg = document.getElementById("adminUserEditMsg");
       if (editNameInput) editNameInput.value = u.full_name || "";
       if (editEmailInput) editEmailInput.value = u.email || "";
+      if (editPhoneInput) editPhoneInput.value = u.phone_number || "";
       if (editMsg) editMsg.style.display = "none";
       if (editSaveBtn) {
         editSaveBtn.onclick = async () => {
           const fn = editNameInput ? editNameInput.value.trim() : "";
           const em = editEmailInput ? editEmailInput.value.trim() : "";
+          const ph = editPhoneInput ? editPhoneInput.value.trim() : "";
           editSaveBtn.disabled = true;
           editSaveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
           try {
@@ -6956,8 +7682,9 @@ document.addEventListener("DOMContentLoaded", () => {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               credentials: "same-origin",
-              body: JSON.stringify({ full_name: fn, email: em })
+              body: JSON.stringify({ full_name: fn, email: em, phone_number: ph })
             });
+
             const rData = await resp.json();
             if (resp.ok && rData.status === "success") {
               if (editMsg) {
@@ -7205,15 +7932,24 @@ document.addEventListener("DOMContentLoaded", () => {
               </ul>
             </div>
             <div class="plan-card-footer">
+              <button type="button" class="btn-admin-action" data-plan-details-id="${p.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Plan Specifications & Subscribers">
+                <i class="fas fa-folder-open"></i> Details
+              </button>
               <button type="button" class="btn-admin-action dates" data-plan-edit-id="${p.id}" title="Edit plan parameters">
                 <i class="fas fa-pen-to-square"></i> Edit
               </button>
-              <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}" title="${p.is_active ? 'Deactivate and archive plan' : 'Restore and activate plan'}">
-                ${p.is_active ? '<i class="fas fa-power-off"></i> Archive' : '<i class="fas fa-check"></i> Restore'}
+              <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}" data-plan-name="${escapeHtml(p.name)}" title="${p.is_active ? 'Deactivate and archive plan' : 'Restore and activate plan'}">
+                <i class="fas ${p.is_active ? 'fa-box-archive' : 'fa-box-open'}"></i> ${p.is_active ? 'Archive Plan' : 'Restore Plan'}
               </button>
-              <button type="button" class="btn-admin-action cancel" data-plan-delete-id="${p.id}" data-plan-name="${escapeHtml(p.name)}" data-plan-subs="${subsCount}" title="Delete or Archive Plan">
-                <i class="fas fa-trash-can"></i>
-              </button>
+              ${subsCount > 0 ? `
+                <button type="button" class="btn-admin-action" disabled style="opacity: 0.45; cursor: not-allowed; background: rgba(239, 68, 68, 0.08); color: #EF4444; border: 1px dashed rgba(239, 68, 68, 0.3);" title="Cannot delete: ${subsCount} subscription(s) reference this plan. Archive the plan instead.">
+                  <i class="fas fa-trash-can"></i> Delete Plan
+                </button>
+              ` : `
+                <button type="button" class="btn-admin-action cancel" data-plan-delete-id="${p.id}" data-plan-name="${escapeHtml(p.name)}" data-plan-subs="${subsCount}" title="Permanently delete unused plan">
+                  <i class="fas fa-trash-can"></i> Delete Plan
+                </button>
+              `}
             </div>
           </div>
         `;
@@ -7229,15 +7965,24 @@ document.addEventListener("DOMContentLoaded", () => {
             <td><span class="sub-badge ${p.is_active ? 'active' : 'expired'}">${p.is_active ? 'Active' : 'Archived'}</span></td>
             <td>
               <div class="admin-action-btn-group">
+                <button type="button" class="btn-admin-action" data-plan-details-id="${p.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Plan Specifications">
+                  <i class="fas fa-folder-open"></i> Details
+                </button>
                 <button type="button" class="btn-admin-action dates" data-plan-edit-id="${p.id}" title="Edit plan parameters">
                   <i class="fas fa-pen-to-square"></i> Edit
                 </button>
-                <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}" title="${p.is_active ? 'Deactivate' : 'Activate'} plan">
-                  ${p.is_active ? '<i class="fas fa-power-off"></i> Archive' : '<i class="fas fa-check"></i> Restore'}
+                <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}" data-plan-name="${escapeHtml(p.name)}" title="${p.is_active ? 'Deactivate' : 'Activate'} plan">
+                  <i class="fas ${p.is_active ? 'fa-box-archive' : 'fa-box-open'}"></i> ${p.is_active ? 'Archive' : 'Restore'}
                 </button>
-                <button type="button" class="btn-admin-action cancel" data-plan-delete-id="${p.id}" data-plan-name="${escapeHtml(p.name)}" data-plan-subs="${subsCount}" title="Delete or Archive Plan">
-                  <i class="fas fa-trash-can"></i>
-                </button>
+                ${subsCount > 0 ? `
+                  <button type="button" class="btn-admin-action" disabled style="opacity: 0.45; cursor: not-allowed; background: rgba(239, 68, 68, 0.08); color: #EF4444; border: 1px dashed rgba(239, 68, 68, 0.3);" title="Cannot delete: ${subsCount} subscription(s) reference this plan. Archive the plan instead.">
+                    <i class="fas fa-trash-can"></i>
+                  </button>
+                ` : `
+                  <button type="button" class="btn-admin-action cancel" data-plan-delete-id="${p.id}" data-plan-name="${escapeHtml(p.name)}" data-plan-subs="${subsCount}" title="Permanently delete unused plan">
+                    <i class="fas fa-trash-can"></i>
+                  </button>
+                `}
               </div>
             </td>
           </tr>
@@ -7249,6 +7994,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const bindActions = (container) => {
         if (!container) return;
+        container.querySelectorAll("[data-plan-details-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            openPlanDetailsModal(btn.getAttribute("data-plan-details-id"));
+          });
+        });
+
         container.querySelectorAll("[data-plan-edit-id]").forEach(btn => {
           btn.addEventListener("click", () => {
             const pid = parseInt(btn.getAttribute("data-plan-edit-id"), 10);
@@ -7261,7 +8012,8 @@ document.addEventListener("DOMContentLoaded", () => {
           btn.addEventListener("click", () => {
             const pid = btn.getAttribute("data-plan-status-id");
             const nst = btn.getAttribute("data-new-status") === "true";
-            togglePlanActive(pid, nst, btn);
+            const pname = btn.getAttribute("data-plan-name") || `Plan #${pid}`;
+            togglePlanActive(pid, nst, btn, pname);
           });
         });
 
@@ -7369,11 +8121,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function deletePlan(planId, name, subsCount) {
     if (!planId) return;
-    const msg = subsCount > 0 
-      ? `Plan "${name}" has ${subsCount} associated subscription(s).\n\nTo preserve historical data integrity, this plan will be safely archived (deactivated) rather than permanently removed.\n\nProceed with archiving?`
-      : `Are you sure you want to permanently delete plan "${name}"? This operation cannot be undone.`;
+    if (subsCount > 0) {
+      alert(`Cannot delete plan "${name}": ${subsCount} subscription(s) reference this plan. To preserve audit and subscription integrity, please Archive the plan instead.`);
+      return;
+    }
 
-    if (!confirm(msg)) return;
+    const confirmRes = await showAdminConfirmationModal({
+      title: "Permanently Delete Plan",
+      badge: "Destructive Action",
+      badgeIcon: "fa-trash-can",
+      targetName: name || `Plan #${planId}`,
+      targetMeta: `#${planId}`,
+      consequencesText: `Plan "${name}" has zero active or historical subscriptions. Permanent deletion will remove this plan configuration permanently from the database. This action cannot be undone.`,
+      isDestructive: true,
+      confirmText: "Permanently Delete",
+      confirmIcon: "fa-trash-can"
+    });
+    if (!confirmRes.confirmed) return;
 
     try {
       const res = await fetch(`/api/admin/plans/${planId}`, {
@@ -7383,6 +8147,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       if (!res.ok) {
         alert(data.message || "Failed to remove plan.");
+      } else {
+        if (typeof showToast === "function") showToast(data.message || "Plan deleted successfully.", "success");
       }
       loadAdminPlans();
       loadAdminMetrics();
@@ -7392,12 +8158,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function togglePlanActive(planId, newStatus, btn) {
+  async function togglePlanActive(planId, newStatus, btn, planName) {
     if (!planId) return;
-    const actionLabel = newStatus ? "restore and activate" : "archive (deactivate)";
-    if (!confirm(`Are you sure you want to ${actionLabel} plan #${planId}?\n\n${newStatus ? "The plan will become visible for subscription requests." : "The plan will be hidden from public selection, but existing subscribers will retain their terms."}`)) {
-      return;
-    }
+    const confirmRes = await showAdminConfirmationModal({
+      title: newStatus ? "Restore Subscription Plan" : "Archive Subscription Plan",
+      badge: newStatus ? "Plan Activation" : "Plan Archival",
+      badgeIcon: newStatus ? "fa-box-open" : "fa-box-archive",
+      targetName: planName || `Plan #${planId}`,
+      targetMeta: `#${planId}`,
+      consequencesText: newStatus 
+        ? "Restoring this plan will activate it and list it in the public subscription catalog for operator requests."
+        : "Archiving this plan will remove it from the public subscription catalog. Existing active subscribers will not be disrupted.",
+      isDestructive: !newStatus,
+      confirmText: newStatus ? "Restore Plan" : "Archive Plan",
+      confirmIcon: newStatus ? "fa-box-open" : "fa-box-archive"
+    });
+    if (!confirmRes.confirmed) return;
 
     const originalContent = btn ? btn.innerHTML : "";
     if (btn) {
@@ -7414,6 +8190,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (res.ok && data.status === "success") {
+        if (typeof showToast === "function") showToast(data.message || `Plan ${newStatus ? 'restored' : 'archived'} successfully.`, "success");
         loadAdminPlans();
         loadAdminMetrics();
         loadPublicHomepagePlans();
@@ -8166,6 +8943,7 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const fullName = document.getElementById("adminProfileFullNameInput")?.value?.trim();
       const email = document.getElementById("adminProfileEmailInput")?.value?.trim();
+      const phone = document.getElementById("adminProfilePhoneInput")?.value?.trim();
       const submitBtn = document.getElementById("adminProfileSubmitBtn");
 
       if (!email) {
@@ -8184,9 +8962,10 @@ document.addEventListener("DOMContentLoaded", () => {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ full_name: fullName, email: email })
+          body: JSON.stringify({ full_name: fullName, email: email, phone_number: phone })
         });
         const data = await res.json();
+
         if (res.ok && data.status === "success") {
           if (adminProfileAlert) {
             adminProfileAlert.className = "auth-alert success";

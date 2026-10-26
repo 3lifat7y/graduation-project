@@ -135,6 +135,8 @@ class TestSubscriptionFrontendAndIntegration(unittest.TestCase):
 
         # 1. Register User
         reg_res = user_client.post("/api/auth/register", json={
+            "full_name": "Operator P25",
+            "phone_number": "+1 (555) 250-0199",
             "username": "operator_p25",
             "email": "operator_p25@scout.local",
             "password": "SecurePassword123!",

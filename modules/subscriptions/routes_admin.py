@@ -11,12 +11,14 @@ from sqlalchemy import func
 from modules.auth.models import User, utcnow
 from modules.auth.db import get_db_session
 from modules.auth.decorators import admin_required
+from modules.auth.security import normalize_phone_number, is_valid_email
 from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog
 from .services import sync_expired_subscriptions
 
 sub_admin_bp = Blueprint("sub_admin", __name__, url_prefix="/api/admin")
 
-EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
 
 
 # ==============================================================================
@@ -158,6 +160,65 @@ def create_admin_plan():
     }), 201
 
 
+@sub_admin_bp.route("/plans/<int:plan_id>", methods=["GET"])
+@admin_required
+def get_admin_plan_details(plan_id: int):
+    """
+    Returns complete plan details, pricing, feature flags,
+    and associated subscription statistics and history.
+    """
+    with get_db_session() as session:
+        plan = session.query(SubscriptionPlan).filter_by(id=plan_id).first()
+        if not plan:
+            return jsonify({"status": "error", "message": "Plan not found."}), 404
+
+        plan_dict = plan.to_dict()
+        total_subs = session.query(UserSubscription).filter_by(plan_id=plan.id).count()
+        active_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="active").count()
+        pending_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="pending").count()
+        expired_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="expired").count()
+        canceled_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="canceled").count()
+
+        plan_dict["metrics"] = {
+            "total_subscribers": total_subs,
+            "active_subscribers": active_subs,
+            "pending_subscribers": pending_subs,
+            "expired_subscribers": expired_subs,
+            "canceled_subscribers": canceled_subs
+        }
+        plan_dict["total_subscribers"] = total_subs
+        plan_dict["active_subscribers"] = active_subs
+        plan_dict["subscribers_count"] = total_subs
+
+        # Recent subscriptions under this plan (newest first, limit 25)
+        recent_subs = (
+            session.query(UserSubscription)
+            .filter_by(plan_id=plan.id)
+            .order_by(UserSubscription.id.desc())
+            .limit(25)
+            .all()
+        )
+        plan_dict["recent_subscriptions"] = [
+            {
+                "id": s.id,
+                "user_id": s.user_id,
+                "username": s.user.username if s.user else f"User #{s.user_id}",
+                "user_email": s.user.email if s.user else "",
+                "user_full_name": s.user.full_name if s.user else "",
+                "status": s.status,
+                "start_date": s.start_date.isoformat() if s.start_date else None,
+                "end_date": s.end_date.isoformat() if s.end_date else None,
+                "created_at": s.created_at.isoformat() if s.created_at else None
+            }
+            for s in recent_subs
+        ]
+
+    return jsonify({
+        "status": "success",
+        "plan": plan_dict
+    }), 200
+
+
 @sub_admin_bp.route("/plans/<int:plan_id>", methods=["PUT"])
 @admin_required
 def update_admin_plan(plan_id: int):
@@ -296,8 +357,10 @@ def list_admin_users():
             query = query.filter(
                 (func.lower(User.username).contains(search)) |
                 (func.lower(User.email).contains(search)) |
-                (func.lower(User.full_name).contains(search))
+                (func.lower(User.full_name).contains(search)) |
+                (func.coalesce(User.phone_number, "").contains(search))
             )
+
         if role_filter:
             query = query.filter_by(role=role_filter)
         if status_filter in ("active", "disabled", "inactive"):
@@ -437,13 +500,14 @@ def get_admin_user_details(user_id: int):
 def update_admin_user_profile(user_id: int):
     """
     Administrative profile modification for any user account.
-    Updates display full_name and email with syntax & duplicate validation.
+    Updates display full_name, email, and phone_number with syntax & duplicate validation.
     """
     data = request.get_json(silent=True) or {}
     new_full_name = data.get("full_name")
     new_email = data.get("email")
+    new_phone = data.get("phone_number") if "phone_number" in data else data.get("phone")
 
-    if new_email is None and new_full_name is None:
+    if new_email is None and new_full_name is None and new_phone is None:
         return jsonify({"status": "error", "message": "No profile fields provided to update."}), 400
 
     with get_db_session() as session:
@@ -455,7 +519,7 @@ def update_admin_user_profile(user_id: int):
             email_cleaned = str(new_email).strip().lower()
             if not email_cleaned:
                 return jsonify({"status": "error", "message": "Email address cannot be empty."}), 400
-            if not EMAIL_REGEX.match(email_cleaned):
+            if not is_valid_email(email_cleaned):
                 return jsonify({"status": "error", "message": "Invalid email address format."}), 400
 
             duplicate = session.query(User).filter(
@@ -467,17 +531,43 @@ def update_admin_user_profile(user_id: int):
 
             user.email = email_cleaned
 
+        if new_phone is not None:
+            raw_phone = str(new_phone).strip()
+            if raw_phone:
+                norm_phone = normalize_phone_number(raw_phone)
+                if not norm_phone:
+                    return jsonify({"status": "error", "message": "Invalid phone number format. Please provide a valid phone number with 7-15 digits."}), 400
+
+                phone_variants = [norm_phone]
+                if norm_phone.startswith("+"):
+                    phone_variants.append(norm_phone[1:])
+                else:
+                    phone_variants.append("+" + norm_phone)
+
+                dup_phone = session.query(User).filter(
+                    User.phone_number.in_(phone_variants),
+                    User.id != user.id
+                ).first()
+                if dup_phone:
+                    return jsonify({"status": "error", "message": "An account with this phone number already exists."}), 409
+
+                user.phone_number = norm_phone
+            else:
+                user.phone_number = None
+
         if new_full_name is not None:
             user.full_name = str(new_full_name).strip() or None
 
         session.flush()
         user_dict = user.to_dict()
 
+    display_label = user_dict.get("full_name") or user_dict.get("email") or user_dict.get("username")
     return jsonify({
         "status": "success",
-        "message": f"User profile for '{user_dict['username']}' updated successfully.",
+        "message": f"User profile for '{display_label}' updated successfully.",
         "user": user_dict
     }), 200
+
 
 
 @sub_admin_bp.route("/users/<int:user_id>/role", methods=["PATCH", "POST"])
@@ -549,14 +639,21 @@ def delete_admin_user(user_id: int):
         if not user:
             return jsonify({"status": "error", "message": "User not found."}), 404
 
-        # Guard: Check last active admin if deleting an Admin
-        if user.role == "Admin" and user.is_active:
-            active_admin_count = session.query(User).filter_by(role="Admin", is_active=True).count()
-            if active_admin_count <= 1:
+        # Guard: Check last admin if deleting an Admin
+        if user.role == "Admin":
+            total_admin_count = session.query(User).filter_by(role="Admin").count()
+            if total_admin_count <= 1:
                 return jsonify({
                     "status": "error",
-                    "message": "Cannot delete the last active Administrator on the platform."
+                    "message": "Cannot delete the last Administrator account on the platform."
                 }), 400
+            if user.is_active:
+                active_admin_count = session.query(User).filter_by(role="Admin", is_active=True).count()
+                if active_admin_count <= 1:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Cannot delete the last active Administrator on the platform."
+                    }), 400
 
         sub_count = session.query(UserSubscription).filter_by(user_id=user_id).count()
         if sub_count > 0:
@@ -609,14 +706,17 @@ def list_admin_subscriptions():
                     (UserSubscription.id == int(search)) |
                     (func.lower(User.username).contains(search)) |
                     (func.lower(User.email).contains(search)) |
-                    (func.lower(User.full_name).contains(search))
+                    (func.lower(User.full_name).contains(search)) |
+                    (func.coalesce(User.phone_number, "").contains(search))
                 )
             else:
                 query = query.filter(
                     (func.lower(User.username).contains(search)) |
                     (func.lower(User.email).contains(search)) |
-                    (func.lower(User.full_name).contains(search))
+                    (func.lower(User.full_name).contains(search)) |
+                    (func.coalesce(User.phone_number, "").contains(search))
                 )
+
 
         subs = query.order_by(UserSubscription.id.desc()).all()
         sub_list = [s.to_dict(include_audit=False) for s in subs]
@@ -625,6 +725,137 @@ def list_admin_subscriptions():
         "status": "success",
         "subscriptions": sub_list,
         "count": len(sub_list)
+    }), 200
+
+
+@sub_admin_bp.route("/subscriptions/<int:sub_id>", methods=["GET"])
+@admin_required
+def get_admin_subscription_details(sub_id: int):
+    """
+    Retrieves full subscription profile, user data, plan entitlements,
+    operational dates, admin notes, and chronological audit trail.
+    """
+    with get_db_session() as session:
+        sub = session.query(UserSubscription).filter_by(id=sub_id).first()
+        if not sub:
+            return jsonify({"status": "error", "message": "Subscription record not found."}), 404
+
+        sub_data = sub.to_dict(include_audit=True, include_admin_notes=True)
+
+        # Enrich with user details
+        if sub.user:
+            sub_data["user"] = {
+                "id": sub.user.id,
+                "username": sub.user.username,
+                "email": sub.user.email,
+                "full_name": sub.user.full_name,
+                "phone_number": sub.user.phone_number,
+                "role": sub.user.role,
+                "is_active": sub.user.is_active,
+                "created_at": sub.user.created_at.isoformat() if sub.user.created_at else None
+            }
+
+        # Enrich with plan details
+        if sub.plan:
+            sub_data["plan"] = sub.plan.to_dict()
+
+        # Audit logs for this subscription
+        logs = (
+            session.query(SubscriptionAuditLog)
+            .filter_by(subscription_id=sub.id)
+            .order_by(SubscriptionAuditLog.id.desc())
+            .all()
+        )
+        sub_data["audit_logs"] = [l.to_dict() for l in logs]
+
+    return jsonify({
+        "status": "success",
+        "subscription": sub_data
+    }), 200
+
+
+@sub_admin_bp.route("/subscriptions/<int:sub_id>", methods=["PUT", "PATCH"])
+@admin_required
+def update_admin_subscription_notes(sub_id: int):
+    """
+    Updates permitted operational fields (admin_notes, cancellation_reason) under audit policy.
+    Protected fields (status, plan_id, user_id) cannot be tampered with here.
+    """
+    data = request.get_json(silent=True) or {}
+    current_admin = request.current_user
+    with get_db_session() as session:
+        sub = session.query(UserSubscription).filter_by(id=sub_id).first()
+        if not sub:
+            return jsonify({"status": "error", "message": "Subscription record not found."}), 404
+
+        updated = False
+        if "admin_notes" in data:
+            old_notes = sub.admin_notes
+            new_notes = str(data["admin_notes"]).strip()
+            sub.admin_notes = new_notes or None
+            updated = True
+
+            audit = SubscriptionAuditLog(
+                subscription_id=sub.id,
+                actor_id=current_admin.id,
+                action="NOTES_UPDATED",
+                previous_status=sub.status,
+                new_status=sub.status,
+                details=f"Admin '{current_admin.username}' updated notes: '{new_notes}'."
+            )
+            session.add(audit)
+
+        if "cancellation_reason" in data and sub.status in ("canceled", "rejected"):
+            sub.cancellation_reason = str(data["cancellation_reason"]).strip() or None
+            updated = True
+
+        if not updated:
+            return jsonify({"status": "error", "message": "No editable fields provided."}), 400
+
+        session.flush()
+        sub_dict = sub.to_dict(include_audit=True)
+
+    return jsonify({
+        "status": "success",
+        "message": f"Subscription #{sub_id} updated successfully.",
+        "subscription": sub_dict
+    }), 200
+
+
+@sub_admin_bp.route("/subscriptions/<int:sub_id>", methods=["DELETE"])
+@admin_required
+def delete_admin_subscription(sub_id: int):
+    """
+    Controlled deletion or removal of a subscription record.
+    - Pending requests: Can be safely discarded/deleted prior to approval.
+    - Rejected/Expired/Canceled records: Can be purged by administrator policy.
+    - Active subscriptions: If active, rejects direct deletion unless explicitly forced/canceled first.
+    """
+    force = request.args.get("force", "").lower() in ("true", "1")
+    current_admin = request.current_user
+    with get_db_session() as session:
+        sub = session.query(UserSubscription).filter_by(id=sub_id).first()
+        if not sub:
+            return jsonify({"status": "error", "message": "Subscription record not found."}), 404
+
+        if sub.status == "active" and not force:
+            return jsonify({
+                "status": "error",
+                "message": f"Subscription #{sub_id} is currently active. Active subscriptions cannot be deleted directly; please cancel the subscription first."
+            }), 400
+
+        user_label = sub.user.username if sub.user else f"User #{sub.user_id}"
+        plan_label = sub.plan.name if sub.plan else f"Plan #{sub.plan_id}"
+        prev_status = sub.status
+
+        session.delete(sub)
+        session.flush()
+
+    return jsonify({
+        "status": "success",
+        "action": "deleted",
+        "message": f"Subscription #{sub_id} ({user_label} - {plan_label}) with status '{prev_status}' has been permanently deleted.",
+        "subscription_id": sub_id
     }), 200
 
 

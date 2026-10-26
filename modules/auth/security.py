@@ -5,10 +5,14 @@ time-limited session token serialization via itsdangerous.
 """
 
 import os
+import re
 import time
 from typing import Dict, Any, Optional
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.security import generate_password_hash, check_password_hash
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
 
 # Default or environment secret key
 SECRET_KEY = os.environ.get("SCOUT_SECRET_KEY")
@@ -73,3 +77,51 @@ def verify_session_token(token: str, max_age: int = SESSION_MAX_AGE_SECONDS) -> 
         return None
     except (BadSignature, SignatureExpired, Exception):
         return None
+
+
+def is_valid_email(email: str) -> bool:
+    """Validates email format strictly."""
+    if not email or not isinstance(email, str):
+        return False
+    return bool(EMAIL_REGEX.match(email.strip()))
+
+
+def normalize_phone_number(raw_phone: str) -> Optional[str]:
+    """
+    Normalizes a phone number to an E.164-compatible standard format.
+    - Strips whitespace, dashes, dots, and parentheses.
+    - Converts leading '00' international prefix to '+'.
+    - Accepts optional leading '+'.
+    - Validates that the number contains between 7 and 15 digits (ITU-T E.164).
+    - Returns normalized string (e.g., '+15551234567' or '01001234567') or None if invalid.
+    """
+    if not raw_phone or not isinstance(raw_phone, str):
+        return None
+    cleaned = raw_phone.strip()
+    if not cleaned:
+        return None
+
+    if cleaned.startswith("00"):
+        cleaned = "+" + cleaned[2:]
+
+    has_plus = cleaned.startswith("+")
+    digits_part = cleaned[1:] if has_plus else cleaned
+
+    # Filter allowed formatting characters: spaces, dashes, dots, parentheses
+    filtered = re.sub(r"[\s\-\.\(\)]", "", digits_part)
+
+    # Must consist strictly of digits
+    if not filtered.isdigit():
+        return None
+
+    # E.164 standard: minimum 7 digits up to 15 digits
+    if len(filtered) < 7 or len(filtered) > 15:
+        return None
+
+    return f"+{filtered}" if has_plus else filtered
+
+
+def is_valid_phone_number(phone: str) -> bool:
+    """Checks whether a phone number can be normalized into a valid E.164 format."""
+    return normalize_phone_number(phone) is not None
+

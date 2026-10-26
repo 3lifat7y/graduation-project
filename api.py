@@ -1417,6 +1417,18 @@ def plans_page():
     return redirect("/?view=plans")
 
 
+@app.route('/login')
+def login_page():
+    """Standalone Login Page for SCOUT Platform."""
+    return render_template('login.html')
+
+
+@app.route('/register')
+def register_page():
+    """Standalone Create Account / Registration Page for SCOUT Platform."""
+    return render_template('register.html')
+
+
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static', 'images'),

@@ -25,8 +25,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String(50), unique=True, nullable=False, index=True)
+    username = Column(String(50), unique=True, nullable=True, index=True)
     email = Column(String(120), unique=True, nullable=False, index=True)
+    phone_number = Column(String(30), unique=True, nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="User")  # Exactly 'User' or 'Admin'
     full_name = Column(String(100), nullable=True)
@@ -36,7 +37,8 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
-        return f"<User id={self.id} username='{self.username}' role='{self.role}' active={self.is_active}>"
+        return f"<User id={self.id} email='{self.email}' phone='{self.phone_number}' role='{self.role}' active={self.is_active}>"
+
 
     def set_password(self, password: str) -> None:
         """Hashes password using scrypt (memory-hard, resistant to hardware brute-force)."""
@@ -58,14 +60,16 @@ class User(Base):
         """Returns a sanitized JSON-serializable dictionary representation."""
         data: Dict[str, Any] = {
             "id": self.id,
-            "username": self.username,
+            "username": self.username or "",
             "email": self.email,
+            "phone_number": self.phone_number or "",
             "role": self.role,
             "full_name": self.full_name or "",
             "is_active": bool(self.is_active),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
         }
+
         if include_sensitive:
             data["session_version"] = self.session_version
         return data

@@ -16,10 +16,12 @@ Validates:
 
 import sys
 import os
+import time
 import json
 import unittest
 import tempfile
 from pathlib import Path
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -298,12 +300,13 @@ class TestDashboardSeparationAndRouting(unittest.TestCase):
     def test_08_registration_redirects_to_plans(self):
         """Registering a new account returns redirect to /?view=plans."""
         res = self.client.post("/api/auth/register", json={
-            "username": "new_recruit",
-            "email": "recruit@scout.sec",
+            "email": f"recruit_{int(time.time())}@scout.sec",
+            "phone_number": f"+1555{int(time.time() * 1000) % 10000000:07d}",
             "full_name": "New Security Recruit",
             "password": "RecruitPassword#2026",
             "confirm_password": "RecruitPassword#2026"
         })
+
         self.assertEqual(res.status_code, 201)
         data = res.get_json()
         self.assertEqual(data["status"], "success")

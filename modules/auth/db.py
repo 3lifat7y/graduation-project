@@ -18,10 +18,16 @@ INSTANCE_DIR = PROJECT_ROOT / "instance"
 INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_DB_PATH = INSTANCE_DIR / "scout.db"
-SCOUT_DB_PATH = Path(os.environ.get("SCOUT_DB_PATH", str(DEFAULT_DB_PATH)))
+
+def get_db_path() -> Path:
+    """Returns the effective database path from environment or default."""
+    return Path(os.environ.get("SCOUT_DB_PATH", str(DEFAULT_DB_PATH)))
+
+SCOUT_DB_PATH = get_db_path()
 
 _engine: Engine = None
 _SessionFactory: sessionmaker = None
+_current_engine_path: Path = None
 
 
 @event.listens_for(Engine, "connect")
@@ -39,9 +45,9 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):
 
 def get_engine(db_path: Path = None, reset: bool = False) -> Engine:
     """Returns or creates the singleton SQLAlchemy SQLite engine."""
-    global _engine, _SessionFactory
-    if _engine is None or db_path is not None or reset:
-        target_path = Path(db_path) if db_path else SCOUT_DB_PATH
+    global _engine, _SessionFactory, _current_engine_path
+    target_path = Path(db_path) if db_path else get_db_path()
+    if _engine is None or db_path is not None or reset or _current_engine_path != target_path:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         db_uri = f"sqlite:///{target_path.as_posix()}"
         engine = create_engine(
@@ -53,6 +59,7 @@ def get_engine(db_path: Path = None, reset: bool = False) -> Engine:
         factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
         _engine = engine
         _SessionFactory = factory
+        _current_engine_path = target_path
         return engine
     return _engine
 
@@ -86,10 +93,25 @@ def get_db_session(engine: Engine = None) -> Generator[Session, None, None]:
 
 
 def init_db(engine_override: Engine = None) -> None:
-    """Creates all database tables registered with Base.metadata if they do not exist."""
+    """Creates all database tables registered with Base.metadata if they do not exist and runs safe migrations."""
     try:
         import modules.subscriptions.models  # Register subscription models with Base.metadata
     except ImportError:
         pass
     engine = engine_override or get_engine()
     Base.metadata.create_all(bind=engine)
+
+    # Safe automated schema migration: Ensure phone_number column and unique index exist without data loss
+    try:
+        with engine.connect() as conn:
+            result = conn.exec_driver_sql("PRAGMA table_info(users);").fetchall()
+            columns = [row[1] for row in result]
+            if columns and "phone_number" not in columns:
+                conn.exec_driver_sql("ALTER TABLE users ADD COLUMN phone_number VARCHAR(30);")
+                conn.commit()
+            if columns:
+                conn.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone_number ON users (phone_number);")
+                conn.commit()
+    except Exception:
+        pass
+

@@ -191,14 +191,14 @@
 
         <!-- Public Auth Action Buttons (Visible for Anonymous Visitors) -->
         <div class="public-auth-actions" id="publicAuthActions">
-          <button type="button" class="btn-auth-ghost" id="headerSignInBtn" title="Sign in to your SCOUT account">
+          <a href="/login" class="btn-auth-ghost" id="headerSignInBtn" title="Sign in to your SCOUT account">
             <i class="fas fa-arrow-right-to-bracket"></i>
             <span>Sign In</span>
-          </button>
-          <button type="button" class="btn-auth-cta" id="headerGetStartedBtn" title="Create a new SCOUT account">
+          </a>
+          <a href="/register" class="btn-auth-cta" id="headerGetStartedBtn" title="Create a new SCOUT account">
             <i class="fas fa-user-shield"></i>
             <span>Get Started</span>
-          </button>
+          </a>
         </div>
 
         <!-- Dynamic Go to Dashboard CTA (Visible on Public Homepage when Logged In) -->
@@ -2167,7 +2167,7 @@
                 <!-- Sub-form A: Profile Information -->
                 <form id="userDashProfileForm" class="user-dash-form" onsubmit="return false;">
                   <h5><i class="fas fa-id-card"></i> Personal Details</h5>
-                  <div class="dash-form-grid">
+                  <div class="dash-form-grid three-col">
                     <div class="dash-form-group">
                       <label for="userDashFullNameInput"><i class="fas fa-signature"></i> Full Name</label>
                       <input type="text" id="userDashFullNameInput" class="dash-input" placeholder="Display Full Name" />
@@ -2176,6 +2176,10 @@
                       <label for="userDashEmailInput"><i class="fas fa-envelope"></i> Email Address</label>
                       <input type="email" id="userDashEmailInput" class="dash-input" placeholder="operator@domain.com" />
                     </div>
+                    <div class="dash-form-group">
+                      <label for="userDashPhoneInput"><i class="fas fa-phone"></i> Phone Number</label>
+                      <input type="tel" id="userDashPhoneInput" class="dash-input" placeholder="+1 (555) 123-4567" />
+                    </div>
                   </div>
                   <div class="form-actions-inline">
                     <button type="button" class="btn-dash-action" id="userDashSaveProfileBtn">
@@ -2183,6 +2187,7 @@
                     </button>
                     <span id="userDashProfileMsg" class="dash-form-msg"></span>
                   </div>
+
                 </form>
 
                 <hr class="profile-divider" style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.08));" />
@@ -2723,12 +2728,16 @@
                   </div>
                   <div class="admin-info-list">
                     <div class="admin-info-row">
-                      <span class="info-label"><i class="fas fa-user"></i> Username</span>
-                      <span class="info-val" id="adminProfileDispUsername">—</span>
-                    </div>
-                    <div class="admin-info-row">
                       <span class="info-label"><i class="fas fa-envelope"></i> Email</span>
                       <span class="info-val" id="adminProfileDispEmail">—</span>
+                    </div>
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-phone"></i> Phone Number</span>
+                      <span class="info-val" id="adminProfileDispPhone">—</span>
+                    </div>
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-user"></i> Username (Internal)</span>
+                      <span class="info-val" id="adminProfileDispUsername">—</span>
                     </div>
                     <div class="admin-info-row">
                       <span class="info-label"><i class="fas fa-circle-check"></i> Account Status</span>
@@ -2756,7 +2765,7 @@
                   <div class="admin-profile-card form-card">
                     <div class="card-header-inner">
                       <h4><i class="fas fa-id-badge"></i> Edit Profile Details</h4>
-                      <p>Update administrator display name and contact email address.</p>
+                      <p>Update administrator display name, contact email address, and phone number.</p>
                     </div>
                     <div class="auth-alert" id="adminProfileAlert" style="display:none;"></div>
                     <form id="adminProfileForm" novalidate>
@@ -2769,7 +2778,12 @@
                           <label for="adminProfileEmailInput" class="auth-label">Email Address</label>
                           <input type="email" id="adminProfileEmailInput" class="auth-input" placeholder="admin@domain.com" required />
                         </div>
+                        <div class="auth-form-group">
+                          <label for="adminProfilePhoneInput" class="auth-label">Phone Number</label>
+                          <input type="tel" id="adminProfilePhoneInput" class="auth-input" placeholder="+1 (555) 123-4567" />
+                        </div>
                       </div>
+
                       <button type="submit" class="btn-auth-submit" id="adminProfileSubmitBtn" style="margin-top:12px;">
                         <span class="auth-btn-text">Save Profile Changes</span>
                         <i class="fas fa-floppy-disk auth-btn-icon"></i>
@@ -2882,130 +2896,6 @@
     <i class="fas fa-arrow-up"></i>
   </button>
 
-  <!-- Unified SCOUT Cyber Auth Modal -->
-  <div class="auth-modal-overlay" id="authModal" style="display:none;" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="auth-modal-backdrop" id="authModalBackdrop"></div>
-    <div class="auth-modal-card">
-      <div class="auth-modal-header">
-        <div class="auth-brand-badge">
-          <img src="/static/images/scout-icon.png" alt="SCOUT" class="auth-modal-icon scout-logo-light" />
-          <img src="/static/images/scout-icon-dark.png" alt="SCOUT" class="auth-modal-icon scout-logo-dark" />
-        </div>
-        <div class="auth-header-text">
-          <h2 class="auth-modal-title" id="authModalTitle">Access SCOUT SOC</h2>
-          <p class="auth-modal-subtitle">Autonomous Real-Time Threat Telemetry & Cybersecurity Defense</p>
-        </div>
-        <button type="button" class="auth-close-btn" id="authModalCloseBtn" aria-label="Close dialog" title="Close">
-          <i class="fas fa-xmark"></i>
-        </button>
-      </div>
-
-      <!-- Auth Tab Navigation -->
-      <div class="auth-tab-bar" role="tablist">
-        <button type="button" class="auth-tab-btn active" id="tabSignInBtn" role="tab" aria-selected="true">
-          <i class="fas fa-right-to-bracket"></i> Sign In
-        </button>
-        <button type="button" class="auth-tab-btn" id="tabRegisterBtn" role="tab" aria-selected="false">
-          <i class="fas fa-user-plus"></i> Create Account
-        </button>
-      </div>
-
-      <!-- Sign In Panel -->
-      <div class="auth-panel" id="signInPanel">
-        <div class="auth-alert error" id="signInAlert" style="display:none;"></div>
-        <form class="auth-form" id="signInForm" novalidate>
-          <div class="auth-form-group">
-            <label for="signInIdentifier" class="auth-label">Username or Email</label>
-            <div class="auth-input-wrap">
-              <i class="fas fa-user auth-input-icon"></i>
-              <input type="text" id="signInIdentifier" class="auth-input" placeholder="e.g. analyst_01 or name@domain.com" autocomplete="username" required />
-            </div>
-          </div>
-          <div class="auth-form-group">
-            <label for="signInPassword" class="auth-label">Password</label>
-            <div class="auth-input-wrap">
-              <i class="fas fa-lock auth-input-icon"></i>
-              <input type="password" id="signInPassword" class="auth-input" placeholder="Enter your password" autocomplete="current-password" required />
-              <button type="button" class="auth-toggle-pwd" id="toggleSignInPwd" title="Show/Hide Password">
-                <i class="fas fa-eye"></i>
-              </button>
-            </div>
-          </div>
-          <button type="submit" class="btn-auth-submit" id="signInSubmitBtn">
-            <span class="auth-btn-text">Sign In</span>
-            <i class="fas fa-arrow-right auth-btn-icon"></i>
-          </button>
-        </form>
-        <div class="auth-footer-prompt">
-          <span>Don't have an account?</span>
-          <button type="button" class="auth-switch-link" id="switchToRegisterBtn">Create an account</button>
-        </div>
-      </div>
-
-      <!-- Register Panel -->
-      <div class="auth-panel" id="registerPanel" style="display:none;">
-        <div class="auth-alert error" id="registerAlert" style="display:none;"></div>
-        <form class="auth-form" id="registerForm" novalidate>
-          <div class="auth-form-row">
-            <div class="auth-form-group">
-              <label for="regUsername" class="auth-label">Username</label>
-              <div class="auth-input-wrap">
-                <i class="fas fa-user auth-input-icon"></i>
-                <input type="text" id="regUsername" class="auth-input" placeholder="e.g. cyber_analyst" autocomplete="username" required />
-              </div>
-            </div>
-            <div class="auth-form-group">
-              <label for="regFullName" class="auth-label">Full Name <span class="auth-optional">(Optional)</span></label>
-              <div class="auth-input-wrap">
-                <i class="fas fa-id-card auth-input-icon"></i>
-                <input type="text" id="regFullName" class="auth-input" placeholder="e.g. Jane Doe" autocomplete="name" />
-              </div>
-            </div>
-          </div>
-          <div class="auth-form-group">
-            <label for="regEmail" class="auth-label">Email Address</label>
-            <div class="auth-input-wrap">
-              <i class="fas fa-envelope auth-input-icon"></i>
-              <input type="email" id="regEmail" class="auth-input" placeholder="analyst@domain.com" autocomplete="email" required />
-            </div>
-          </div>
-          <div class="auth-form-row">
-            <div class="auth-form-group">
-              <label for="regPassword" class="auth-label">Password</label>
-              <div class="auth-input-wrap">
-                <i class="fas fa-lock auth-input-icon"></i>
-                <input type="password" id="regPassword" class="auth-input" placeholder="Min 8 chars, 1 uppercase, 1 special" autocomplete="new-password" required />
-                <button type="button" class="auth-toggle-pwd" id="toggleRegPwd" title="Show/Hide Password">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="auth-form-group">
-              <label for="regConfirmPassword" class="auth-label">Confirm Password</label>
-              <div class="auth-input-wrap">
-                <i class="fas fa-shield auth-input-icon"></i>
-                <input type="password" id="regConfirmPassword" class="auth-input" placeholder="Re-enter password" autocomplete="new-password" required />
-              </div>
-            </div>
-          </div>
-          <div class="auth-pwd-guidance">
-            <div class="guidance-item" id="pwdRuleLength"><i class="fas fa-circle-dot"></i> Min 8 characters</div>
-            <div class="guidance-item" id="pwdRuleCase"><i class="fas fa-circle-dot"></i> Uppercase & lowercase</div>
-            <div class="guidance-item" id="pwdRuleNumSpecial"><i class="fas fa-circle-dot"></i> Number & special character</div>
-          </div>
-          <button type="submit" class="btn-auth-submit" id="registerSubmitBtn">
-            <span class="auth-btn-text">Create Account & Select Plan</span>
-            <i class="fas fa-shield-halved auth-btn-icon"></i>
-          </button>
-        </form>
-        <div class="auth-footer-prompt">
-          <span>Already registered?</span>
-          <button type="button" class="auth-switch-link" id="switchToSignInBtn">Sign In</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Modal: Admin User Details & History Drawer -->
   <div class="auth-modal" id="adminUserDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminUserDetailsModalTitle" style="display:none;">
     <div class="auth-modal-backdrop" id="adminUserDetailsModalBackdrop"></div>
@@ -3026,16 +2916,20 @@
             <span class="dossier-val" id="dossierUserId">—</span>
           </div>
           <div class="dossier-item">
-            <span class="dossier-label"><i class="fas fa-user"></i> Username</span>
-            <span class="dossier-val" id="dossierUsername">—</span>
+            <span class="dossier-label"><i class="fas fa-id-card"></i> Full Name</span>
+            <span class="dossier-val" id="dossierFullName">—</span>
           </div>
           <div class="dossier-item">
             <span class="dossier-label"><i class="fas fa-envelope"></i> Email</span>
             <span class="dossier-val" id="dossierEmail">—</span>
           </div>
           <div class="dossier-item">
-            <span class="dossier-label"><i class="fas fa-id-card"></i> Full Name</span>
-            <span class="dossier-val" id="dossierFullName">—</span>
+            <span class="dossier-label"><i class="fas fa-phone"></i> Phone Number</span>
+            <span class="dossier-val" id="dossierPhone">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-user"></i> Username (Internal)</span>
+            <span class="dossier-val" id="dossierUsername">—</span>
           </div>
           <div class="dossier-item">
             <span class="dossier-label"><i class="fas fa-shield"></i> Role</span>
@@ -3061,7 +2955,7 @@
             <h4 style="font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-user-pen text-primary"></i> Edit Operator Details</h4>
           </div>
           <form id="adminUserEditForm" class="dossier-edit-form" onsubmit="return false;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.75rem; align-items: flex-end;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 0.75rem; align-items: flex-end;">
               <div>
                 <label for="adminUserEditFullName" style="font-size: 0.8rem; font-weight: 500; display: block; margin-bottom: 0.25rem;"><i class="fas fa-id-card"></i> Full Name</label>
                 <input type="text" id="adminUserEditFullName" class="form-control" style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.85rem;" placeholder="Display Full Name" />
@@ -3071,12 +2965,17 @@
                 <input type="email" id="adminUserEditEmail" class="form-control" style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.85rem;" placeholder="operator@domain.com" />
               </div>
               <div>
+                <label for="adminUserEditPhone" style="font-size: 0.8rem; font-weight: 500; display: block; margin-bottom: 0.25rem;"><i class="fas fa-phone"></i> Phone Number</label>
+                <input type="tel" id="adminUserEditPhone" class="form-control" style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.85rem;" placeholder="+1 (555) 123-4567" />
+              </div>
+              <div>
                 <button type="button" class="btn-admin-action activate" id="adminUserEditSaveBtn" style="padding: 0.45rem 1rem; font-size: 0.85rem;">
                   <i class="fas fa-save"></i> Save Profile
                 </button>
               </div>
             </div>
             <div id="adminUserEditMsg" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 4px;"></div>
+
           </form>
         </div>
 
@@ -3359,6 +3258,244 @@
             <i class="fas fa-calendar-plus auth-btn-icon"></i>
           </button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Action Confirmation Dialog -->
+  <div class="auth-modal" id="adminConfirmActionModal" role="dialog" aria-modal="true" aria-labelledby="adminConfirmModalTitle" style="display:none; z-index: 10500;">
+    <div class="auth-modal-backdrop" id="adminConfirmModalBackdrop"></div>
+    <div class="auth-modal-dialog" style="max-width: 520px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge" id="adminConfirmModalBadge"><i class="fas fa-triangle-exclamation"></i> Security Confirmation</div>
+        <h3 class="auth-modal-title" id="adminConfirmModalTitle">Confirm Administrative Action</h3>
+        <p class="auth-modal-subtitle" id="adminConfirmModalSubtitle">Please review the target entity and consequences before proceeding.</p>
+        <button type="button" class="auth-modal-close" id="adminConfirmModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminConfirmModalAlert" style="display:none;"></div>
+        
+        <div class="confirm-target-box" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color, rgba(255,255,255,0.1)); margin-bottom: 14px;">
+          <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted, #A1A1AA); font-weight: 600; margin-bottom: 4px;" id="adminConfirmTargetLabel">Target Entity</div>
+          <div style="font-size: 1rem; font-weight: 700; color: var(--text-primary, #F4F4F5); display: flex; align-items: center; justify-content: space-between;" id="adminConfirmTargetDisplay">
+            <span id="adminConfirmTargetName">—</span>
+            <span class="plan-code-chip" id="adminConfirmTargetMeta">#—</span>
+          </div>
+        </div>
+
+        <div class="confirm-consequences-box" style="padding: 14px; border-radius: 8px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.5; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); color: var(--text-primary, #F4F4F5);" id="adminConfirmConsequencesBox">
+          <p id="adminConfirmConsequencesText" style="margin: 0;"></p>
+        </div>
+
+        <div id="adminConfirmPromptGroup" style="display:none; margin-bottom: 16px;">
+          <label for="adminConfirmReasonInput" class="auth-label" id="adminConfirmReasonLabel">Reason / Notes</label>
+          <input type="text" id="adminConfirmReasonInput" class="auth-input" placeholder="Enter reason for this action..." />
+        </div>
+
+        <div class="plan-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+          <button type="button" class="btn-admin-action cancel" id="adminConfirmCancelBtn">
+            <i class="fas fa-xmark"></i> Cancel
+          </button>
+          <button type="button" class="btn-auth-submit" id="adminConfirmSubmitBtn" style="padding: 8px 18px;">
+            <span class="auth-btn-text" id="adminConfirmSubmitText">Confirm Action</span>
+            <i class="fas fa-check auth-btn-icon" id="adminConfirmSubmitIcon"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Plan Details & Subscribers Drawer -->
+  <div class="auth-modal" id="adminPlanDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminPlanDetailsModalTitle" style="display:none; z-index: 10450;">
+    <div class="auth-modal-backdrop" id="adminPlanDetailsModalBackdrop"></div>
+    <div class="auth-modal-dialog modal-lg">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-gem"></i> Plan Specifications</div>
+        <h3 class="auth-modal-title" id="adminPlanDetailsModalTitle">Plan Tier Specifications</h3>
+        <p class="auth-modal-subtitle">Full tier terms, feature flags, pricing metrics, and active subscriber census.</p>
+        <button type="button" class="auth-modal-close" id="adminPlanDetailsModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminPlanDetailsAlert" style="display:none;"></div>
+        
+        <!-- Plan Overview Grid -->
+        <div class="user-dossier-grid" id="adminPlanDossierMeta">
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-hashtag"></i> Plan ID</span>
+            <span class="dossier-val" id="dossierPlanId">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-fingerprint"></i> Plan Code</span>
+            <span class="dossier-val" id="dossierPlanCode">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-coins"></i> Price & Currency</span>
+            <span class="dossier-val" id="dossierPlanPrice">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-clock"></i> Duration Term</span>
+            <span class="dossier-val" id="dossierPlanDuration">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-toggle-on"></i> Catalog Status</span>
+            <span class="dossier-val" id="dossierPlanStatus">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-users"></i> Total Subscribers</span>
+            <span class="dossier-val" id="dossierPlanTotalSubs">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-user-check"></i> Active Subscribers</span>
+            <span class="dossier-val" id="dossierPlanActiveSubs">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-calendar-plus"></i> Created At</span>
+            <span class="dossier-val" id="dossierPlanCreated">—</span>
+          </div>
+        </div>
+
+        <!-- Description Box -->
+        <div class="dossier-section-title">
+          <h4><i class="fas fa-align-left"></i> Description & Overview</h4>
+        </div>
+        <div style="padding: 12px 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color, rgba(255,255,255,0.1)); border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; color: var(--text-primary, #F4F4F5);" id="dossierPlanDescription">
+          —
+        </div>
+
+        <!-- Feature Entitlements Grid -->
+        <div class="dossier-section-title">
+          <h4><i class="fas fa-shield-halved"></i> Cyber Defense Entitlements</h4>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 20px;" id="dossierPlanFeaturesGrid">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Associated Subscribers List -->
+        <div class="dossier-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <h4><i class="fas fa-users-gear"></i> Recent Plan Subscribers</h4>
+          <span class="text-muted" style="font-size:0.8rem;" id="dossierPlanSubsCountText">Showing latest records</span>
+        </div>
+        <div class="admin-table-wrap" style="max-height: 250px; overflow-y:auto; margin-bottom: 20px;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Sub ID</th>
+                <th>Operator</th>
+                <th>Status</th>
+                <th>Start Date</th>
+                <th>Expiration</th>
+              </tr>
+            </thead>
+            <tbody id="dossierPlanSubsTbody">
+              <tr><td colspan="5" class="text-center py-3 text-muted">No subscribers found for this plan.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Plan Actions Toolbar in Details Modal -->
+        <div class="dossier-actions-toolbar" id="adminPlanDetailsActions">
+          <!-- Dynamic actions: Edit, Archive, Delete -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Subscription & Request Details Drawer -->
+  <div class="auth-modal" id="adminSubDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminSubDetailsModalTitle" style="display:none; z-index: 10450;">
+    <div class="auth-modal-backdrop" id="adminSubDetailsModalBackdrop"></div>
+    <div class="auth-modal-dialog modal-lg">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge" id="adminSubDetailsBadge"><i class="fas fa-id-card"></i> Subscription Dossier</div>
+        <h3 class="auth-modal-title" id="adminSubDetailsModalTitle">Subscription Record & Telemetry</h3>
+        <p class="auth-modal-subtitle">Full operator license assignment, terms, notes, and chronological audit trail.</p>
+        <button type="button" class="auth-modal-close" id="adminSubDetailsModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminSubDetailsAlert" style="display:none;"></div>
+
+        <!-- Subscription Overview Grid -->
+        <div class="user-dossier-grid" id="adminSubDossierMeta">
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-hashtag"></i> Subscription ID</span>
+            <span class="dossier-val" id="dossierSubId">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-user"></i> Operator</span>
+            <span class="dossier-val" id="dossierSubUsername">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-envelope"></i> Operator Email</span>
+            <span class="dossier-val" id="dossierSubEmail">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-shield"></i> Plan Tier</span>
+            <span class="dossier-val" id="dossierSubPlan">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-toggle-on"></i> Status</span>
+            <span class="dossier-val" id="dossierSubStatus">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-calendar-day"></i> Start Date</span>
+            <span class="dossier-val" id="dossierSubStart">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-hourglass-end"></i> Expiration Date</span>
+            <span class="dossier-val" id="dossierSubEnd">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-stopwatch"></i> Validity</span>
+            <span class="dossier-val" id="dossierSubRemaining">—</span>
+          </div>
+        </div>
+
+        <!-- Admin Notes / Cancellation Reason Inline Editor -->
+        <div class="dossier-edit-section" style="margin-top: 1rem; margin-bottom: 1.25rem; padding: 1rem; border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+          <div class="dossier-section-title" style="margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-pen-to-square text-primary"></i> Administrative Notes & Reason</h4>
+          </div>
+          <form id="adminSubNotesForm" onsubmit="return false;">
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: flex-end;">
+              <div>
+                <label for="adminSubNotesInput" style="font-size: 0.8rem; font-weight: 500; display: block; margin-bottom: 0.25rem;">Operational Notes / Administrative Log</label>
+                <input type="text" id="adminSubNotesInput" class="form-control" style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.85rem;" placeholder="e.g. VIP client approved under SLA policy" />
+              </div>
+              <div>
+                <button type="button" class="btn-admin-action activate" id="adminSubNotesSaveBtn" style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+                  <i class="fas fa-save"></i> Save Notes
+                </button>
+              </div>
+            </div>
+            <div id="adminSubNotesMsg" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 4px;"></div>
+          </form>
+        </div>
+
+        <!-- Quick Lifecycle Actions Toolbar in Details Modal -->
+        <div class="dossier-actions-toolbar" id="adminSubDetailsActions">
+          <!-- Populated dynamically based on status (Approve, Reject, Extend, Cancel, Renew, Delete) -->
+        </div>
+
+        <!-- Chronological Audit Trail for this Subscription -->
+        <div class="dossier-section-title">
+          <h4><i class="fas fa-clipboard-list"></i> Chronological Subscription Audit Trail</h4>
+        </div>
+        <div class="admin-table-wrap" style="max-height: 250px; overflow-y:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Timestamp (UTC)</th>
+                <th>Action</th>
+                <th>Previous Status</th>
+                <th>New Status</th>
+                <th>Actor</th>
+                <th>Audit Details</th>
+              </tr>
+            </thead>
+            <tbody id="adminSubAuditTbody">
+              <tr><td colspan="6" class="text-center py-3 text-muted">No audit records logged for this subscription.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

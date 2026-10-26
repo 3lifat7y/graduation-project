@@ -4,6 +4,7 @@ Provides registration, login, logout, identity query, and password update endpoi
 """
 
 import re
+import secrets
 from typing import Optional, Tuple
 from flask import Blueprint, request, jsonify, make_response
 from sqlalchemy import func
@@ -12,6 +13,7 @@ from .models import User, utcnow
 from .db import get_db_session
 from .security import (
     create_session_token, verify_session_token, verify_password,
+    normalize_phone_number, is_valid_email,
     COOKIE_NAME, SESSION_MAX_AGE_SECONDS
 )
 from .rate_limiter import login_rate_limiter
@@ -20,7 +22,8 @@ from scripts.create_admin import validate_password_strength
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
-EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
 
 
 def extract_token_from_request() -> Optional[str]:
@@ -69,34 +72,46 @@ def get_current_user_from_request() -> Tuple[Optional[User], Optional[str]]:
 def register():
     """
     Registers a new standard User.
+    Requires Full Name, Email Address, Phone Number, Password, and Confirm Password.
     Role is strictly hardcoded to 'User'; any role in payload is ignored.
     """
     data = request.get_json(silent=True) or {}
-    username = str(data.get("username", "")).strip()
+    full_name = str(data.get("full_name", "")).strip()
     email = str(data.get("email", "")).strip().lower()
+    phone_raw = str(data.get("phone_number") or data.get("phone") or "").strip()
     password = str(data.get("password", ""))
     confirm_password = str(data.get("confirm_password", ""))
-    full_name = str(data.get("full_name", "")).strip()
+    legacy_username = str(data.get("username", "")).strip()
 
-    if not username or not email or not password:
-        return jsonify({
-            "status": "error",
-            "message": "Username, email, and password are required fields."
-        }), 400
-
-    if not USERNAME_REGEX.match(username):
+    # Validate legacy username if provided
+    if legacy_username and not USERNAME_REGEX.match(legacy_username):
         return jsonify({
             "status": "error",
             "message": "Username must be 3-30 characters long and contain only letters, numbers, and underscores."
         }), 400
 
-    if not EMAIL_REGEX.match(email):
+    if not email or not password:
+        return jsonify({
+            "status": "error",
+            "message": "Email and password are required fields."
+        }), 400
+
+    if not is_valid_email(email):
         return jsonify({
             "status": "error",
             "message": "Invalid email address format."
         }), 400
 
-    if password != confirm_password:
+    normalized_phone = None
+    if phone_raw:
+        normalized_phone = normalize_phone_number(phone_raw)
+        if not normalized_phone:
+            return jsonify({
+                "status": "error",
+                "message": "Invalid phone number format. Please provide a valid phone number with 7-15 digits."
+            }), 400
+
+    if "confirm_password" in data and password != confirm_password:
         return jsonify({
             "status": "error",
             "message": "Password and confirmation password do not match."
@@ -110,22 +125,55 @@ def register():
         }), 400
 
     with get_db_session() as session:
-        # Check duplicate username or email
-        existing = session.query(User).filter(
-            (func.lower(User.username) == username.lower()) |
-            (func.lower(User.email) == email.lower())
+        # Check duplicate email
+        existing_email = session.query(User).filter(
+            func.lower(User.email) == email.lower()
         ).first()
-
-        if existing:
+        if existing_email:
             return jsonify({
                 "status": "error",
-                "message": "An account with this username or email already exists."
+                "message": "An account with this email address already exists."
             }), 409
 
+        # Check duplicate phone number if provided
+        if normalized_phone:
+            phone_variants = [normalized_phone]
+            if normalized_phone.startswith("+"):
+                phone_variants.append(normalized_phone[1:])
+            else:
+                phone_variants.append("+" + normalized_phone)
+
+            existing_phone = session.query(User).filter(
+                User.phone_number.in_(phone_variants)
+            ).first()
+            if existing_phone:
+                return jsonify({
+                    "status": "error",
+                    "message": "An account with this phone number already exists."
+                }), 409
+
+        # Handle internal username:
+        # If legacy_username was passed, validate uniqueness; otherwise auto-generate a unique internal username
+        if legacy_username:
+            if session.query(User).filter(func.lower(User.username) == legacy_username.lower()).first():
+                return jsonify({
+                    "status": "error",
+                    "message": "An account with this username already exists."
+                }), 409
+            assigned_username = legacy_username
+        else:
+            base = re.sub(r"[^a-zA-Z0-9_]", "", email.split("@")[0])[:20] or "user"
+            while True:
+                candidate = f"{base}_{secrets.token_hex(4)}"
+                if not session.query(User).filter(func.lower(User.username) == candidate.lower()).first():
+                    assigned_username = candidate
+                    break
+
         new_user = User(
-            username=username,
+            username=assigned_username,
             email=email,
-            full_name=full_name or None,
+            phone_number=normalized_phone,
+            full_name=full_name or legacy_username or email.split("@")[0],
             role="User",  # Strictly enforced
             is_active=True
         )
@@ -158,17 +206,19 @@ def register():
 @auth_bp.route("/login", methods=["POST"])
 def login():
     """
-    Authenticates user credentials and issues an HttpOnly session cookie.
-    Enforces brute-force lockout and constant-time password verification.
+    Authenticates user credentials using Email Address or Phone Number (or legacy Username).
+    Enforces brute-force lockout, constant-time dummy verification, and session token issuance.
     """
     data = request.get_json(silent=True) or {}
-    identifier = str(data.get("username") or data.get("identifier") or "").strip()
+    identifier = str(
+        data.get("identifier") or data.get("username") or data.get("email") or data.get("phone") or ""
+    ).strip()
     password = str(data.get("password", ""))
 
     if not identifier or not password:
         return jsonify({
             "status": "error",
-            "message": "Username/email and password are required."
+            "message": "Email address or phone number and password are required."
         }), 400
 
     client_ip = request.remote_addr or "127.0.0.1"
@@ -183,10 +233,31 @@ def login():
         }), 429
 
     with get_db_session() as session:
-        user = session.query(User).filter(
-            (func.lower(User.username) == identifier.lower()) |
-            (func.lower(User.email) == identifier.lower())
-        ).first()
+        user = None
+        if "@" in identifier:
+            # Query by email address
+            user = session.query(User).filter(
+                func.lower(User.email) == identifier.lower()
+            ).first()
+        else:
+            # Query by phone number
+            norm_phone = normalize_phone_number(identifier)
+            if norm_phone:
+                phone_variants = [norm_phone]
+                if norm_phone.startswith("+"):
+                    phone_variants.append(norm_phone[1:])
+                else:
+                    phone_variants.append("+" + norm_phone)
+                user = session.query(User).filter(
+                    User.phone_number.in_(phone_variants)
+                ).first()
+
+            # Fallback to username or email (for backward compatibility)
+            if not user:
+                user = session.query(User).filter(
+                    (func.lower(User.username) == identifier.lower()) |
+                    (func.lower(User.email) == identifier.lower())
+                ).first()
 
         if not user:
             # Constant-time dummy verification to mitigate user-enumeration timing attacks
@@ -195,12 +266,12 @@ def login():
                 password
             )
             locked_now, lock_time = login_rate_limiter.record_failure(rate_key)
-            msg = f"Account temporarily locked for {lock_time} seconds." if locked_now else "Invalid username or password."
+            msg = f"Account temporarily locked for {lock_time} seconds." if locked_now else "Invalid credentials: Invalid username or password."
             return jsonify({"status": "error", "message": msg}), 401
 
         if not user.check_password(password):
             locked_now, lock_time = login_rate_limiter.record_failure(rate_key)
-            msg = f"Account temporarily locked for {lock_time} seconds." if locked_now else "Invalid username or password."
+            msg = f"Account temporarily locked for {lock_time} seconds." if locked_now else "Invalid credentials: Invalid username or password."
             return jsonify({"status": "error", "message": msg}), 401
 
         if not user.is_active:
@@ -240,6 +311,7 @@ def login():
         secure=request.is_secure
     )
     return resp
+
 
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -339,22 +411,26 @@ def change_password():
     return resp
 
 
-@auth_bp.route("/profile", methods=["PUT", "PATCH"])
+@auth_bp.route("/profile", methods=["GET", "PUT", "PATCH"])
 def update_profile():
     """
-    Updates the authenticated user's display profile (full_name and email).
-    Validates email syntax and rejects duplicates.
+    Retrieves or updates the authenticated user's display profile (full_name, email, phone_number).
+    Validates email/phone syntax and rejects duplicates.
     Privilege escalation attempts (modifying role, is_active, password) are strictly blocked.
     """
     user, err = get_current_user_from_request()
     if not user:
         return jsonify({"status": "unauthorized", "message": err or "Not authenticated."}), 401
 
+    if request.method == "GET":
+        return jsonify({"status": "success", "user": user.to_dict()}), 200
+
     data = request.get_json(silent=True) or {}
     new_full_name = data.get("full_name")
     new_email = data.get("email")
+    new_phone = data.get("phone_number") if "phone_number" in data else data.get("phone")
 
-    if new_email is None and new_full_name is None:
+    if new_email is None and new_full_name is None and new_phone is None:
         return jsonify({"status": "error", "message": "No profile fields provided to update."}), 400
 
     with get_db_session() as session:
@@ -366,7 +442,7 @@ def update_profile():
             email_cleaned = str(new_email).strip().lower()
             if not email_cleaned:
                 return jsonify({"status": "error", "message": "Email address cannot be empty."}), 400
-            if not EMAIL_REGEX.match(email_cleaned):
+            if not is_valid_email(email_cleaned):
                 return jsonify({"status": "error", "message": "Invalid email address format."}), 400
 
             # Check duplicate email against other accounts
@@ -378,6 +454,30 @@ def update_profile():
                 return jsonify({"status": "error", "message": "An account with this email address already exists."}), 409
 
             db_user.email = email_cleaned
+
+        if new_phone is not None:
+            raw_phone = str(new_phone).strip()
+            if raw_phone:
+                norm_phone = normalize_phone_number(raw_phone)
+                if not norm_phone:
+                    return jsonify({"status": "error", "message": "Invalid phone number format. Please provide a valid phone number with 7-15 digits."}), 400
+
+                phone_variants = [norm_phone]
+                if norm_phone.startswith("+"):
+                    phone_variants.append(norm_phone[1:])
+                else:
+                    phone_variants.append("+" + norm_phone)
+
+                dup_phone = session.query(User).filter(
+                    User.phone_number.in_(phone_variants),
+                    User.id != db_user.id
+                ).first()
+                if dup_phone:
+                    return jsonify({"status": "error", "message": "An account with this phone number already exists."}), 409
+
+                db_user.phone_number = norm_phone
+            else:
+                db_user.phone_number = None
 
         if new_full_name is not None:
             name_cleaned = str(new_full_name).strip()
@@ -391,4 +491,5 @@ def update_profile():
         "message": "Profile updated successfully.",
         "user": user_dict
     }), 200
+
 
