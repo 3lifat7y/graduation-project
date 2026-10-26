@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory, redirect
 from flask_cors import CORS
 import pickle
 import json
@@ -97,6 +97,13 @@ def log_request_end(response):
     if request.path.startswith("/api"):
         duration_ms = (time.time() - getattr(request, "_start_time", time.time())) * 1000
         log_diag("HTTP_RES", f"<-- {request.method} {request.path} {response.status_code} ({duration_ms:.1f}ms)")
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    elif request.args.get("view") in ("admin", "dashboard", "monitoring", "port-scanner", "plans", "admin-users", "admin-plans", "admin-subs", "admin-audit", "admin-profile") or request.path in ("/admin", "/dashboard"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 
@@ -1367,7 +1374,47 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
 # ==============================================================================
 @app.route('/')
 def home():
+    """
+    Public entry point for anonymous visitors.
+    If client has an active session and no explicit view parameter is requested,
+    automatically route them to their designated authenticated landing destination.
+    """
+    view_param = request.args.get("view")
+    public_param = request.args.get("public")
+    if not view_param and not public_param:
+        from modules.auth.routes import get_current_user_from_request
+        from modules.subscriptions.services import determine_user_landing_view
+        user, _ = get_current_user_from_request()
+        if user and user.is_active:
+            _, redirect_url = determine_user_landing_view(user)
+            return redirect(redirect_url)
+
     return render_template('ddos.html')
+
+
+@app.route('/dashboard')
+@login_required
+def user_dashboard_page():
+    """Direct URL access to the authenticated user dashboard."""
+    user = request.current_user
+    if user.role == "Admin":
+        return redirect("/?view=admin")
+    from modules.subscriptions.services import determine_user_landing_view
+    _, redirect_url = determine_user_landing_view(user)
+    return redirect(redirect_url)
+
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard_page():
+    """Direct URL access to the administrative management console."""
+    return redirect("/?view=admin")
+
+
+@app.route('/plans')
+def plans_page():
+    """Direct URL access to the subscription plans catalog."""
+    return redirect("/?view=plans")
 
 
 @app.route('/favicon.ico')
@@ -2168,6 +2215,7 @@ def rescan_active_session():
 
 
 @app.route('/api/scan-stop', methods=['GET', 'POST'])
+@login_required
 def stop_scan():
     """Stops the active monitoring session cleanly and releases resources."""
     global current_scan_session, is_monitoring
@@ -2198,12 +2246,14 @@ def stop_scan():
 
 
 @app.route('/api/start')
+@subscription_required(feature="can_live_monitoring")
 def start_monitoring():
     """Backward compatibility alias for /api/scan."""
     return start_scan()
 
 
 @app.route('/api/stop')
+@login_required
 def stop_monitoring():
     """Backward compatibility alias for /api/scan-stop."""
     return stop_scan()

@@ -24,14 +24,14 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def extract_token_from_request() -> Optional[str]:
-    """Extracts session token from HttpOnly cookie or Authorization Bearer header."""
-    cookie_token = request.cookies.get(COOKIE_NAME)
-    if cookie_token:
-        return cookie_token.strip()
-
+    """Extracts session token from Authorization Bearer header or HttpOnly cookie."""
     auth_header = request.headers.get("Authorization", "")
     if auth_header.lower().startswith("bearer "):
         return auth_header[7:].strip()
+
+    cookie_token = request.cookies.get(COOKIE_NAME)
+    if cookie_token:
+        return cookie_token.strip()
 
     return None
 
@@ -162,7 +162,7 @@ def login():
     Enforces brute-force lockout and constant-time password verification.
     """
     data = request.get_json(silent=True) or {}
-    identifier = str(data.get("username", "")).strip()
+    identifier = str(data.get("username") or data.get("identifier") or "").strip()
     password = str(data.get("password", ""))
 
     if not identifier or not password:
@@ -218,11 +218,17 @@ def login():
         user_dict = user.to_dict()
         token = create_session_token(user.id, user.role, user.session_version)
 
+        # Determine dynamic post-login destination URL
+        from modules.subscriptions.services import determine_user_landing_view
+        view_key, redirect_url = determine_user_landing_view(user)
+
     resp = make_response(jsonify({
         "status": "success",
         "message": "Authentication successful.",
         "user": user_dict,
-        "token": token
+        "token": token,
+        "redirect": redirect_url,
+        "view": view_key
     }), 200)
 
     resp.set_cookie(
@@ -238,13 +244,29 @@ def login():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    """Logs out the active session by clearing the HttpOnly cookie."""
+    """
+    Logs out the active session:
+    1. Increments user's session_version in database to invalidate issued tokens server-side.
+    2. Deletes the HttpOnly session cookie.
+    3. Adds anti-cache headers so browser history navigation cannot expose protected data.
+    """
+    user, _ = get_current_user_from_request()
+    if user:
+        with get_db_session() as session:
+            db_user = session.query(User).filter_by(id=user.id).first()
+            if db_user:
+                db_user.revoke_sessions()
+                session.flush()
+
     resp = make_response(jsonify({
         "status": "success",
         "message": "Logged out successfully."
     }), 200)
 
     resp.delete_cookie(COOKIE_NAME, httponly=True, samesite="Lax")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
     return resp
 
 
@@ -315,3 +337,58 @@ def change_password():
         secure=request.is_secure
     )
     return resp
+
+
+@auth_bp.route("/profile", methods=["PUT", "PATCH"])
+def update_profile():
+    """
+    Updates the authenticated user's display profile (full_name and email).
+    Validates email syntax and rejects duplicates.
+    Privilege escalation attempts (modifying role, is_active, password) are strictly blocked.
+    """
+    user, err = get_current_user_from_request()
+    if not user:
+        return jsonify({"status": "unauthorized", "message": err or "Not authenticated."}), 401
+
+    data = request.get_json(silent=True) or {}
+    new_full_name = data.get("full_name")
+    new_email = data.get("email")
+
+    if new_email is None and new_full_name is None:
+        return jsonify({"status": "error", "message": "No profile fields provided to update."}), 400
+
+    with get_db_session() as session:
+        db_user = session.query(User).filter_by(id=user.id).first()
+        if not db_user:
+            return jsonify({"status": "error", "message": "User not found."}), 404
+
+        if new_email is not None:
+            email_cleaned = str(new_email).strip().lower()
+            if not email_cleaned:
+                return jsonify({"status": "error", "message": "Email address cannot be empty."}), 400
+            if not EMAIL_REGEX.match(email_cleaned):
+                return jsonify({"status": "error", "message": "Invalid email address format."}), 400
+
+            # Check duplicate email against other accounts
+            duplicate = session.query(User).filter(
+                func.lower(User.email) == email_cleaned,
+                User.id != db_user.id
+            ).first()
+            if duplicate:
+                return jsonify({"status": "error", "message": "An account with this email address already exists."}), 409
+
+            db_user.email = email_cleaned
+
+        if new_full_name is not None:
+            name_cleaned = str(new_full_name).strip()
+            db_user.full_name = name_cleaned or None
+
+        session.flush()
+        user_dict = db_user.to_dict()
+
+    return jsonify({
+        "status": "success",
+        "message": "Profile updated successfully.",
+        "user": user_dict
+    }), 200
+

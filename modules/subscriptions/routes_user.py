@@ -14,6 +14,7 @@ sub_user_bp = Blueprint("sub_user", __name__, url_prefix="/api")
 
 
 @sub_user_bp.route("/plans", methods=["GET"])
+@sub_user_bp.route("/subscriptions/plans", methods=["GET"])
 def get_public_plans():
     """Returns all currently active subscription plans available for user selection."""
     with get_db_session() as session:
@@ -46,7 +47,7 @@ def get_my_subscription():
             .first()
         )
         if active_sub:
-            sub_dict = active_sub.to_dict()
+            sub_dict = active_sub.to_dict(include_admin_notes=False)
             return jsonify({
                 "status": "success",
                 "has_subscription": True,
@@ -61,7 +62,7 @@ def get_my_subscription():
             .first()
         )
         if latest_sub:
-            sub_dict = latest_sub.to_dict()
+            sub_dict = latest_sub.to_dict(include_admin_notes=False)
             return jsonify({
                 "status": "success",
                 "has_subscription": False,
@@ -87,14 +88,21 @@ def submit_subscription_request():
     if not plan_id:
         return jsonify({"status": "error", "message": "Field 'plan_id' is required."}), 400
 
+    resolved_plan_id = None
     try:
-        plan_id = int(plan_id)
+        resolved_plan_id = int(plan_id)
     except (ValueError, TypeError):
-        return jsonify({"status": "error", "message": "Invalid 'plan_id'."}), 400
+        with get_db_session() as session:
+            p = session.query(SubscriptionPlan).filter_by(plan_code=str(plan_id)).first()
+            if p:
+                resolved_plan_id = p.id
+
+    if not resolved_plan_id:
+        return jsonify({"status": "error", "message": f"Subscription plan '{plan_id}' not found."}), 400
 
     success, message, sub_dict = request_subscription(
         user_id=user.id,
-        plan_id=plan_id,
+        plan_id=resolved_plan_id,
         notes=notes
     )
 

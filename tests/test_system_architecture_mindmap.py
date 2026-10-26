@@ -130,5 +130,57 @@ class TestSystemArchitectureMindMap(unittest.TestCase):
         self.assertIn('function selectNode(', self.js)
         self.assertIn('function toggleBranch(', self.js)
 
+    def test_09_mindmap_strictly_hidden_in_non_homepage_views_css(self):
+        """Verify static/style.css explicitly hides #system-architecture on all non-homepage view modes."""
+        self.assertIn('body.dedicated-mode-monitoring #system-architecture', self.css)
+        self.assertIn('body.dedicated-mode-port-scanner #system-architecture', self.css)
+        self.assertIn('body.plans-view #system-architecture', self.css)
+        self.assertIn('body.admin-view #system-architecture', self.css)
+        self.assertIn('body.dashboard-view #system-architecture', self.css)
+        self.assertIn('.network-discovery-page #system-architecture', self.css)
+
+    def test_10_mindmap_lifecycle_in_main_js_switch_view(self):
+        """Verify static/main.js explicitly manages #system-architecture display state in switchView()."""
+        main_js_path = os.path.join(BASE_DIR, "static", "main.js")
+        with open(main_js_path, "r", encoding="utf-8") as f:
+            main_js = f.read()
+
+        # Cached element
+        self.assertIn('const mindMapSection = document.getElementById("system-architecture");', main_js)
+
+        # Extracted switchView function body
+        switch_view_match = re.search(r'function switchView\(targetView[^{]*\{([\s\S]*?)\n  \}', main_js)
+        self.assertIsNotNone(switch_view_match, "switchView function should exist in main.js")
+        body = switch_view_match.group(1)
+
+        # Verify mindMapSection is hidden in non-homepage views
+        self.assertIn('if (mindMapSection) mindMapSection.style.display = "none";', body)
+
+        # Count occurrences: must be hidden in dashboard, monitoring, port-scanner, plans, and admin (at least 5 times)
+        none_count = body.count('if (mindMapSection) mindMapSection.style.display = "none";')
+        self.assertGreaterEqual(none_count, 5, "mindMapSection must be hidden across all 5 non-homepage views")
+
+        # Verify mindMapSection is displayed in homepage (landing) view
+        self.assertIn('if (mindMapSection) mindMapSection.style.display = "block";', body)
+        self.assertIn('window.renderMindMapConnectors', body)
+
+    def test_11_mindmap_js_visibility_guard_and_reinitialization_safety(self):
+        """Verify mindmap.js checks section visibility and prevents duplicate listener bindings."""
+        self.assertIn('let isMindMapListenersBound = false;', self.js)
+        self.assertIn('function renderConnectorsSafely()', self.js)
+        self.assertIn('window.renderMindMapConnectors = renderConnectorsSafely;', self.js)
+        self.assertIn('if (section.style.display === "none")', self.js)
+
+    def test_12_network_discovery_page_has_no_mindmap(self):
+        """Verify network_discovery.html has zero Mind Map markup or scripts."""
+        nd_html_path = os.path.join(BASE_DIR, "templates", "network_discovery.html")
+        with open(nd_html_path, "r", encoding="utf-8") as f:
+            nd_html = f.read()
+
+        self.assertNotIn('id="system-architecture"', nd_html)
+        self.assertNotIn('class="system-architecture-section"', nd_html)
+        self.assertNotIn('mindmap.js', nd_html)
+        self.assertNotIn('mindmapWrapper', nd_html)
+
 if __name__ == "__main__":
     unittest.main()

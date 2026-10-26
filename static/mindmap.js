@@ -265,7 +265,33 @@
     { from: "branch-discovery", to: "inventory-views", branch: "blue", dir: "right", group: "discovery" }
   ];
 
+  let isMindMapListenersBound = false;
+  let renderConnectorsFn = null;
+
+  function renderConnectorsSafely() {
+    const section = document.getElementById("system-architecture");
+    if (!section) return;
+    if (section.style.display === "none") return;
+    try {
+      const comp = window.getComputedStyle(section);
+      if (comp.display === "none") return;
+    } catch (_) {}
+
+    if (typeof renderConnectorsFn === "function") {
+      renderConnectorsFn();
+    }
+  }
+
   function initMindMap() {
+    const section = document.getElementById("system-architecture");
+    if (section) {
+      if (section.style.display === "none") return;
+      try {
+        const comp = window.getComputedStyle(section);
+        if (comp.display === "none") return;
+      } catch (_) {}
+    }
+
     const wrapper = document.getElementById("mindmapWrapper");
     if (!wrapper) return;
 
@@ -313,6 +339,9 @@
     // Draw Dynamic SVG Bezier Connector Paths (Responsive 1:1 Coordinate Mapping)
     function renderSvgConnectors() {
       if (!svg || !canvas) return;
+
+      const sec = document.getElementById("system-architecture");
+      if (sec && sec.style.display === "none") return;
 
       // On narrow mobile devices (<768px), connectors are handled via clean CSS tree layout
       if (window.innerWidth < 768) {
@@ -390,6 +419,8 @@
       });
     }
 
+    renderConnectorsFn = renderSvgConnectors;
+
     // Select and inspect node details
     function selectNode(id) {
       activeNodeId = id;
@@ -459,87 +490,91 @@
       renderSvgConnectors();
     }
 
-    // Event Bindings
-    // 1. Node Click / Enter key
-    document.querySelectorAll(".mm-node").forEach(node => {
-      const id = node.getAttribute("data-id");
+    // Event Bindings - only bind once to avoid duplicate listeners on re-entry
+    if (!isMindMapListenersBound) {
+      isMindMapListenersBound = true;
 
-      node.addEventListener("click", (e) => {
-        if (e.target.closest(".mm-branch-toggle")) return;
-        selectNode(id);
-      });
+      // 1. Node Click / Enter key
+      document.querySelectorAll(".mm-node").forEach(node => {
+        const id = node.getAttribute("data-id");
 
-      node.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
+        node.addEventListener("click", (e) => {
+          if (e.target.closest(".mm-branch-toggle")) return;
           selectNode(id);
-        }
-      });
-
-      node.addEventListener("mouseenter", () => {
-        document.querySelectorAll(`.mm-connector-path[data-from="${id}"], .mm-connector-path[data-to="${id}"]`).forEach(p => {
-          p.classList.add("active");
         });
-      });
 
-      node.addEventListener("mouseleave", () => {
-        document.querySelectorAll(`.mm-connector-path[data-from="${id}"], .mm-connector-path[data-to="${id}"]`).forEach(p => {
-          if (activeNodeId !== id && activeNodeId !== p.getAttribute("data-from") && activeNodeId !== p.getAttribute("data-to")) {
-            p.classList.remove("active");
+        node.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selectNode(id);
           }
         });
-      });
-    });
 
-    // 2. Branch Collapse Buttons
-    document.querySelectorAll(".mm-branch-toggle").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const branch = btn.getAttribute("data-branch");
-        toggleBranch(branch);
-      });
-    });
+        node.addEventListener("mouseenter", () => {
+          document.querySelectorAll(`.mm-connector-path[data-from="${id}"], .mm-connector-path[data-to="${id}"]`).forEach(p => {
+            p.classList.add("active");
+          });
+        });
 
-    // 3. Toolbar Controls
-    if (zoomInBtn) zoomInBtn.addEventListener("click", () => {});
-    if (zoomOutBtn) zoomOutBtn.addEventListener("click", () => {});
-    if (fitBtn) fitBtn.addEventListener("click", fitToScreen);
-    if (resetBtn) resetBtn.addEventListener("click", resetView);
-    if (toggleAllBranchesBtn) toggleAllBranchesBtn.addEventListener("click", toggleAllBranches);
-
-    if (drawerCloseBtn) {
-      drawerCloseBtn.addEventListener("click", () => {
-        if (drawer) drawer.style.display = "none";
+        node.addEventListener("mouseleave", () => {
+          document.querySelectorAll(`.mm-connector-path[data-from="${id}"], .mm-connector-path[data-to="${id}"]`).forEach(p => {
+            if (activeNodeId !== id && activeNodeId !== p.getAttribute("data-from") && activeNodeId !== p.getAttribute("data-to")) {
+              p.classList.remove("active");
+            }
+          });
+        });
       });
+
+      // 2. Branch Collapse Buttons
+      document.querySelectorAll(".mm-branch-toggle").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const branch = btn.getAttribute("data-branch");
+          toggleBranch(branch);
+        });
+      });
+
+      // 3. Toolbar Controls
+      if (zoomInBtn) zoomInBtn.addEventListener("click", () => {});
+      if (zoomOutBtn) zoomOutBtn.addEventListener("click", () => {});
+      if (fitBtn) fitBtn.addEventListener("click", fitToScreen);
+      if (resetBtn) resetBtn.addEventListener("click", resetView);
+      if (toggleAllBranchesBtn) toggleAllBranchesBtn.addEventListener("click", toggleAllBranches);
+
+      if (drawerCloseBtn) {
+        drawerCloseBtn.addEventListener("click", () => {
+          if (drawer) drawer.style.display = "none";
+        });
+      }
+
+      // Recompute connectors on window resize or theme switch
+      window.addEventListener("resize", () => {
+        fitToScreen();
+        renderSvgConnectors();
+      });
+
+      const themeToggleBtn = document.getElementById("themeToggleBtn");
+      if (themeToggleBtn) {
+        themeToggleBtn.addEventListener("click", () => {
+          setTimeout(renderSvgConnectors, 50);
+        });
+      }
+
+      // Observe Mind Map container resize
+      if ("ResizeObserver" in window) {
+        const ro = new ResizeObserver(() => {
+          renderSvgConnectors();
+        });
+        ro.observe(canvas);
+        ro.observe(viewport);
+      }
     }
 
-    // 5. Initial Sizing and Rendering
+    // Initial Sizing and Rendering
     fitToScreen();
     selectNode("branch-core");
     setTimeout(renderSvgConnectors, 50);
     setTimeout(renderSvgConnectors, 250);
-
-    // Recompute connectors on window resize or theme switch
-    window.addEventListener("resize", () => {
-      fitToScreen();
-      renderSvgConnectors();
-    });
-
-    const themeToggleBtn = document.getElementById("themeToggleBtn");
-    if (themeToggleBtn) {
-      themeToggleBtn.addEventListener("click", () => {
-        setTimeout(renderSvgConnectors, 50);
-      });
-    }
-
-    // Observe Mind Map container resize
-    if ("ResizeObserver" in window) {
-      const ro = new ResizeObserver(() => {
-        renderSvgConnectors();
-      });
-      ro.observe(canvas);
-      ro.observe(viewport);
-    }
   }
 
   // Auto-initialize when DOM is ready
@@ -550,4 +585,5 @@
   }
 
   window.initMindMap = initMindMap;
+  window.renderMindMapConnectors = renderConnectorsSafely;
 })();

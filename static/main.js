@@ -2230,8 +2230,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const dedicatedToolBar = document.getElementById("dedicatedToolBar");
   const dedicatedToolTitle = document.getElementById("dedicatedToolTitle");
-  const dedicatedViewToggleBtn = document.getElementById("dedicatedViewToggleBtn");
-  const breadcrumbHomeLink = document.getElementById("breadcrumbHomeLink");
+  const breadcrumbDashboardLink = document.getElementById("breadcrumbDashboardLink");
+  const publicDashboardCtaWrap = document.getElementById("publicDashboardCtaWrap");
+  const publicDashboardCta = document.getElementById("publicDashboardCta");
+  const publicDashboardCtaText = document.getElementById("publicDashboardCtaText");
+  const heroDynamicDashboardBtn = document.getElementById("heroDynamicDashboardBtn");
+  const heroDynamicDashboardBtnText = document.getElementById("heroDynamicDashboardBtnText");
   const launchDedicatedMonitorBtn = document.getElementById("launchDedicatedMonitorBtn");
   const launchDedicatedPortScannerBtn = document.getElementById("launchDedicatedPortScannerBtn");
 
@@ -2240,10 +2244,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const portScannerSection = document.getElementById("port-scanner");
   const subPlansSection = document.getElementById("subscription-plans");
   const adminConsoleSection = document.getElementById("admin-console");
+  const userDashboardSection = document.getElementById("user-dashboard");
   const ndLandingSection = document.getElementById("network-discovery-section");
   const threatSection = document.getElementById("threat-intelligence");
   const preventionSection = document.getElementById("prevention");
+  const publicPricingSection = document.getElementById("public-pricing");
   const teamSection = document.getElementById("team");
+  const mindMapSection = document.getElementById("system-architecture");
   const footerEl = document.querySelector(".site-footer");
 
   const sidebarMobileCloseBtn = document.getElementById("sidebarMobileCloseBtn");
@@ -2318,11 +2325,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Update Active Link in Sidebar
   function setSidebarActive(navName) {
+    let normalized = navName || "";
+    if (normalized === "admin-overview" || normalized === "admin-console") {
+      normalized = "admin";
+    } else if (normalized === "admin-operators") {
+      normalized = "admin-users";
+    } else if (normalized === "admin-subscriptions") {
+      normalized = "admin-subs";
+    }
+
     sidebarNavItems.forEach(item => {
-      if (item.getAttribute("data-nav") === navName) {
-        item.classList.add("active");
+      const isMatch = item.getAttribute("data-nav") === normalized;
+      item.classList.toggle("active", isMatch);
+      if (isMatch) {
+        item.setAttribute("aria-current", "page");
       } else {
-        item.classList.remove("active");
+        item.removeAttribute("aria-current");
       }
     });
   }
@@ -2405,16 +2423,24 @@ document.addEventListener("DOMContentLoaded", () => {
   function getQueryView() {
     const params = new URLSearchParams(window.location.search);
     const view = params.get("view");
+    if (view === "dashboard" || view === "user-dashboard") return "dashboard";
     if (view === "monitoring" || view === "live-monitoring") return "monitoring";
     if (view === "port-scanner" || view === "scanner") return "port-scanner";
     if (view === "plans" || view === "subscriptions" || view === "subscription-plans") return "plans";
-    if (view === "admin" || view === "admin-console") return "admin";
+    if (view === "admin" || view === "admin-console" || view === "admin-overview") return "admin";
+    if (view === "admin-operators") return "admin-users";
+    if (view === "admin-subscriptions") return "admin-subs";
+    if (view && (view.startsWith("admin-") || view.startsWith("admin_"))) return view;
 
     const hash = window.location.hash;
+    if (hash === "#dashboard" || hash === "#user-dashboard") return "dashboard";
     if (hash === "#live-monitoring" || hash === "#monitoring") return "monitoring";
     if (hash === "#port-scanner-page") return "port-scanner";
     if (hash === "#subscription-plans" || hash === "#plans") return "plans";
-    if (hash === "#admin-console" || hash === "#admin") return "admin";
+    if (hash === "#admin-console" || hash === "#admin" || hash === "#admin-overview") return "admin";
+    if (hash === "#admin-operators") return "admin-users";
+    if (hash === "#admin-subscriptions") return "admin-subs";
+    if (hash && (hash.startsWith("#admin-") || hash.startsWith("#admin_"))) return hash.replace("#", "");
 
     return "landing";
   }
@@ -2446,9 +2472,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const navUserRoleBadge = document.getElementById("navUserRoleBadge");
   const dropdownUserTitle = document.getElementById("dropdownUserTitle");
   const dropdownUserEmail = document.getElementById("dropdownUserEmail");
+  const dropdownDashboardLink = document.getElementById("dropdownDashboardLink");
+  const dropdownPublicLink = document.getElementById("dropdownPublicLink");
   const dropdownAdminLink = document.getElementById("dropdownAdminLink");
-  const sidebarAdminSectionLabel = document.getElementById("sidebarAdminSectionLabel");
-  const sidebarAdminNavItem = document.getElementById("sidebarAdminNavItem");
+  const sidebarAdminNavGroup = document.getElementById("sidebarAdminNavGroup");
+  const sidebarUserNavGroup = document.getElementById("sidebarUserNavGroup");
+  const sidebarToolsNavGroup = document.getElementById("sidebarToolsNavGroup");
+  const sidebarPublicNavGroup = document.getElementById("sidebarPublicNavGroup");
+  const publicTopNavLinks = document.getElementById("publicTopNavLinks");
+  const sidebarPendingBadge = document.getElementById("sidebarPendingBadge");
   const signOutBtn = document.getElementById("signOutBtn");
   const switchToRegisterBtn = document.getElementById("switchToRegisterBtn");
   const switchToSignInBtn = document.getElementById("switchToSignInBtn");
@@ -2512,19 +2544,78 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateAuthUI(user) {
     currentUser = user;
     if (user) {
-      document.body.classList.remove("auth-anonymous");
+      document.body.classList.remove("auth-anonymous", "anonymous-landing");
       document.body.classList.add("auth-authenticated");
+
       if (user.role === "Admin") {
         document.body.classList.add("auth-admin");
-        if (sidebarAdminSectionLabel) sidebarAdminSectionLabel.style.display = "block";
-        if (sidebarAdminNavItem) sidebarAdminNavItem.style.display = "flex";
+        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "block";
+        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
         if (dropdownAdminLink) dropdownAdminLink.style.display = "flex";
+        if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
+
+        // Dynamic Admin Dashboard CTA for Public Homepage
+        if (publicDashboardCtaWrap) publicDashboardCtaWrap.style.display = "flex";
+        if (publicDashboardCta) publicDashboardCta.setAttribute("href", "/?view=admin");
+        if (publicDashboardCtaText) publicDashboardCtaText.textContent = "Go to Admin Dashboard";
+
+        if (heroDynamicDashboardBtn) {
+          heroDynamicDashboardBtn.style.display = "inline-flex";
+          heroDynamicDashboardBtn.setAttribute("href", "/?view=admin");
+        }
+        if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "Go to Admin Dashboard";
+
+        if (breadcrumbDashboardLink) {
+          breadcrumbDashboardLink.setAttribute("href", "/?view=admin");
+          breadcrumbDashboardLink.innerHTML = '<i class="fas fa-shield-halved"></i> Admin Console';
+        }
       } else {
         document.body.classList.remove("auth-admin");
-        if (sidebarAdminSectionLabel) sidebarAdminSectionLabel.style.display = "none";
-        if (sidebarAdminNavItem) sidebarAdminNavItem.style.display = "none";
+        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "block";
         if (dropdownAdminLink) dropdownAdminLink.style.display = "none";
+
+        // Dynamic User Dashboard CTA for Public Homepage
+        const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+        if (publicDashboardCtaWrap) publicDashboardCtaWrap.style.display = "flex";
+
+        if (hasActiveSub) {
+          if (publicDashboardCta) publicDashboardCta.setAttribute("href", "/?view=dashboard");
+          if (publicDashboardCtaText) publicDashboardCtaText.textContent = "Go to Dashboard";
+
+          if (heroDynamicDashboardBtn) {
+            heroDynamicDashboardBtn.style.display = "inline-flex";
+            heroDynamicDashboardBtn.setAttribute("href", "/?view=dashboard");
+          }
+          if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "Go to Dashboard";
+
+          if (breadcrumbDashboardLink) {
+            breadcrumbDashboardLink.setAttribute("href", "/?view=dashboard");
+            breadcrumbDashboardLink.innerHTML = '<i class="fas fa-gauge-high"></i> Dashboard';
+          }
+          if (dropdownDashboardLink) dropdownDashboardLink.style.display = "flex";
+        } else {
+          if (publicDashboardCta) publicDashboardCta.setAttribute("href", "/?view=plans");
+          if (publicDashboardCtaText) publicDashboardCtaText.textContent = "View Subscription Plans";
+
+          if (heroDynamicDashboardBtn) {
+            heroDynamicDashboardBtn.style.display = "inline-flex";
+            heroDynamicDashboardBtn.setAttribute("href", "/?view=plans");
+          }
+          if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "View Subscription Plans";
+
+          if (breadcrumbDashboardLink) {
+            breadcrumbDashboardLink.setAttribute("href", "/?view=plans");
+            breadcrumbDashboardLink.innerHTML = '<i class="fas fa-gem"></i> Plans';
+          }
+          if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
+        }
       }
+
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
+      if (dropdownPublicLink) dropdownPublicLink.style.display = "flex";
+      const dropdownPlans = document.getElementById("dropdownPlansLink");
+      if (dropdownPlans) dropdownPlans.style.display = "flex";
       if (publicAuthActions) publicAuthActions.style.display = "none";
       if (userProfileMenu) userProfileMenu.style.display = "block";
       if (navUserName) navUserName.textContent = user.full_name || user.username;
@@ -2534,12 +2625,19 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       document.body.classList.remove("auth-authenticated", "auth-admin");
       document.body.classList.add("auth-anonymous");
+      if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+      if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+      if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
+      if (dropdownPublicLink) dropdownPublicLink.style.display = "none";
+      const dropdownPlans = document.getElementById("dropdownPlansLink");
+      if (dropdownPlans) dropdownPlans.style.display = "none";
+      if (dropdownAdminLink) dropdownAdminLink.style.display = "none";
+      if (publicDashboardCtaWrap) publicDashboardCtaWrap.style.display = "none";
+      if (heroDynamicDashboardBtn) heroDynamicDashboardBtn.style.display = "none";
       if (publicAuthActions) publicAuthActions.style.display = "flex";
       if (userProfileMenu) userProfileMenu.style.display = "none";
       if (userDropdownCard) userDropdownCard.style.display = "none";
-      if (sidebarAdminSectionLabel) sidebarAdminSectionLabel.style.display = "none";
-      if (sidebarAdminNavItem) sidebarAdminNavItem.style.display = "none";
-      if (dropdownAdminLink) dropdownAdminLink.style.display = "none";
     }
   }
 
@@ -2548,17 +2646,20 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/auth/me", { credentials: "same-origin" });
       if (res.ok) {
         const data = await res.json();
-        updateAuthUI(data.user);
+        currentUser = data.user;
         await fetchCurrentUserSubscription();
+        updateAuthUI(data.user);
         return data.user;
       } else {
-        updateAuthUI(null);
+        currentUser = null;
         currentUserSubscription = null;
+        updateAuthUI(null);
         return null;
       }
     } catch (_) {
-      updateAuthUI(null);
+      currentUser = null;
       currentUserSubscription = null;
+      updateAuthUI(null);
       return null;
     }
   }
@@ -2569,10 +2670,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res.ok) {
         const data = await res.json();
         currentUserSubscription = data.subscription;
+        if (currentUser) updateAuthUI(currentUser);
         return data.subscription;
       }
     } catch (_) {}
     currentUserSubscription = null;
+    if (currentUser) updateAuthUI(currentUser);
     return null;
   }
 
@@ -2659,7 +2762,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (res.ok && data.status === "success") {
           updateAuthUI(data.user);
+          await fetchCurrentUserSubscription();
           closeAuthModal();
+          if (data.view) {
+            switchView(data.view);
+          } else if (data.redirect) {
+            window.location.href = data.redirect;
+          } else if (data.user && data.user.role === "Admin") {
+            switchView("admin");
+          } else {
+            switchView("dashboard");
+          }
         } else {
           if (signInAlert) {
             signInAlert.className = "auth-alert error";
@@ -2735,10 +2848,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (res.ok && data.status === "success") {
           updateAuthUI(data.user);
+          await fetchCurrentUserSubscription();
           closeAuthModal();
-          if (data.redirect) {
-            history.pushState({ view: "plans" }, "", data.redirect);
-          }
+          switchView("plans");
         } else {
           if (registerAlert) {
             registerAlert.className = "auth-alert error";
@@ -2762,25 +2874,32 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  async function performLogout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+    } catch (_) {}
+    currentUser = null;
+    currentUserSubscription = null;
+    updateAuthUI(null);
+    window.location.replace("/?public=1");
+  }
+
   // Sign Out Handler
   if (signOutBtn) {
-    signOutBtn.addEventListener("click", async () => {
-      try {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          credentials: "same-origin"
-        });
-      } catch (_) {}
-      updateAuthUI(null);
-      switchView("landing");
+    signOutBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      performLogout();
     });
   }
 
   // Switch View: Dedicated Workspace vs Full Landing Page
   function switchView(targetView, updateHistory = true) {
-    // Intercept operational tools for anonymous visitors
-    if ((targetView === "monitoring" || targetView === "port-scanner") && !currentUser) {
-      openAuthModal("signin", "Authentication required to access SCOUT Operational Tools.");
+    // Intercept operational tools and dashboard for anonymous visitors
+    if ((targetView === "monitoring" || targetView === "port-scanner" || targetView === "dashboard") && !currentUser) {
+      openAuthModal("signin", "Authentication required to access SCOUT Operational Tools and Dashboard.");
       if (updateHistory) {
         history.replaceState({ view: "landing" }, "", window.location.pathname);
       }
@@ -2803,6 +2922,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // Intercept User Dashboard for authenticated users without active subscription
+    if (targetView === "dashboard" && currentUser && currentUser.role !== "Admin") {
+      const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+      if (!hasActiveSub) {
+        targetView = "plans";
+      }
+    }
+
     // Close mobile drawer on navigation
     document.body.classList.remove("mobile-sidebar-open");
     if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
@@ -2817,10 +2944,40 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     document.body.style.overflow = "";
 
-    if (targetView === "monitoring") {
+    if (targetView === "dashboard") {
+      document.title = "SCOUT — Operator Dashboard & Mission Control";
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "plans-view", "admin-view", "anonymous-landing");
+      document.body.classList.add("dashboard-view");
+
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
+      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Operator Dashboard & Mission Control";
+
+      if (heroSection) heroSection.style.display = "none";
+      if (monitorSection) monitorSection.style.display = "none";
+      if (portScannerSection) portScannerSection.style.display = "none";
+      if (subPlansSection) subPlansSection.style.display = "none";
+      if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (ndLandingSection) ndLandingSection.style.display = "none";
+      if (threatSection) threatSection.style.display = "none";
+      if (preventionSection) preventionSection.style.display = "none";
+      if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
+      if (footerEl) footerEl.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "block";
+
+      setSidebarActive("dashboard");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      loadUserDashboard();
+
+      if (updateHistory) {
+        history.pushState({ view: "dashboard" }, "", "?view=dashboard");
+      }
+    } else if (targetView === "monitoring") {
       document.title = "SCOUT — Live Network Monitoring & Intrusion Detection";
       document.body.classList.add("dedicated-mode-monitoring");
-      document.body.classList.remove("dedicated-mode-port-scanner", "home-view", "plans-view", "admin-view");
+      document.body.classList.remove("dedicated-mode-port-scanner", "home-view", "plans-view", "admin-view", "dashboard-view", "anonymous-landing");
 
       if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
       if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Live Network Monitoring & Intrusion Detection";
@@ -2830,10 +2987,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (portScannerSection) portScannerSection.style.display = "none";
       if (subPlansSection) subPlansSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
       if (ndLandingSection) ndLandingSection.style.display = "none";
       if (threatSection) threatSection.style.display = "none";
       if (preventionSection) preventionSection.style.display = "none";
       if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
       if (footerEl) footerEl.style.display = "none";
 
       setSidebarActive("monitoring");
@@ -2848,7 +3008,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (targetView === "port-scanner") {
       document.title = "SCOUT — Port Scanning & Service Analysis";
       document.body.classList.add("dedicated-mode-port-scanner");
-      document.body.classList.remove("dedicated-mode-monitoring", "home-view", "plans-view", "admin-view");
+      document.body.classList.remove("dedicated-mode-monitoring", "home-view", "plans-view", "admin-view", "dashboard-view", "anonymous-landing");
 
       if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
       if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Port Scanning & Service Analysis";
@@ -2858,10 +3018,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (portScannerSection) portScannerSection.style.display = "block";
       if (subPlansSection) subPlansSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
       if (ndLandingSection) ndLandingSection.style.display = "none";
       if (threatSection) threatSection.style.display = "none";
       if (preventionSection) preventionSection.style.display = "none";
       if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
       if (footerEl) footerEl.style.display = "none";
 
       setSidebarActive("port-scanner");
@@ -2881,7 +3044,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } else if (targetView === "plans") {
       document.title = "SCOUT — Subscription Plans & Access Tiers";
-      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "admin-view");
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "admin-view", "dashboard-view", "anonymous-landing");
       document.body.classList.add("plans-view");
 
       if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
@@ -2894,8 +3057,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (threatSection) threatSection.style.display = "none";
       if (preventionSection) preventionSection.style.display = "none";
       if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
       if (footerEl) footerEl.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
       if (subPlansSection) subPlansSection.style.display = "block";
 
       setSidebarActive("plans");
@@ -2907,18 +3073,32 @@ document.addEventListener("DOMContentLoaded", () => {
       if (updateHistory) {
         history.pushState({ view: "plans" }, "", "?view=plans");
       }
-    } else if (targetView === "admin") {
+    } else if (targetView === "admin" || (targetView && targetView.startsWith("admin-"))) {
       if (!currentUser || currentUser.role !== "Admin") {
         switchView("landing", updateHistory);
         return;
       }
 
-      document.title = "SCOUT — Administrative Management Console";
-      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "plans-view");
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "plans-view", "dashboard-view", "anonymous-landing");
       document.body.classList.add("admin-view");
 
-      if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
-      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Administrative Security Console";
+      let subTab = "overview";
+      if (targetView === "admin-users" || targetView === "admin-operators") {
+        subTab = "users";
+      } else if (targetView === "admin-plans") {
+        subTab = "plans";
+      } else if (targetView === "admin-subs" || targetView === "admin-subscriptions") {
+        subTab = "subscriptions";
+      } else if (targetView === "admin-requests") {
+        subTab = "requests";
+      } else if (targetView === "admin-audit") {
+        subTab = "audit";
+      } else if (targetView === "admin-profile") {
+        subTab = "profile";
+      }
+
+      // Hide dedicated tool bar so it does not render a redundant top breadcrumb above admin console
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "none";
 
       if (heroSection) heroSection.style.display = "none";
       if (monitorSection) monitorSection.style.display = "none";
@@ -2927,23 +3107,34 @@ document.addEventListener("DOMContentLoaded", () => {
       if (threatSection) threatSection.style.display = "none";
       if (preventionSection) preventionSection.style.display = "none";
       if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
       if (footerEl) footerEl.style.display = "none";
       if (subPlansSection) subPlansSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "block";
 
-      setSidebarActive("admin");
+      setSidebarActive(targetView);
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      loadAdminDashboard();
+      if (typeof activateAdminTab === "function") {
+        activateAdminTab(subTab, false);
+      }
 
       if (updateHistory) {
-        history.pushState({ view: "admin" }, "", "?view=admin");
+        history.pushState({ view: targetView }, "", "?view=" + targetView);
       }
     } else {
       document.title = "SCOUT — Autonomous Cyber Threat Defense & Telemetry";
       // Home Page Mode: Live Monitoring, Port Scanner, Plans & Admin Console are NEVER displayed on Home!
-      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "plans-view", "admin-view");
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "plans-view", "admin-view", "dashboard-view");
       document.body.classList.add("home-view");
+
+      if (!currentUser) {
+        document.body.classList.add("anonymous-landing");
+      } else {
+        document.body.classList.remove("anonymous-landing");
+      }
 
       if (dedicatedToolBar) dedicatedToolBar.style.display = "none";
 
@@ -2952,14 +3143,25 @@ document.addEventListener("DOMContentLoaded", () => {
       if (portScannerSection) portScannerSection.style.display = "none"; // NEVER on Home
       if (subPlansSection) subPlansSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
       if (ndLandingSection) ndLandingSection.style.display = "block";
       if (threatSection) threatSection.style.display = "block";
       if (preventionSection) preventionSection.style.display = "block";
+      if (publicPricingSection) publicPricingSection.style.display = "block";
       if (teamSection) teamSection.style.display = "block";
+      if (mindMapSection) mindMapSection.style.display = "block";
       if (footerEl) footerEl.style.display = "block";
 
       setSidebarActive("home");
       setTopNavActive("home");
+
+      loadPublicHomepagePlans();
+
+      if (typeof window.renderMindMapConnectors === "function") {
+        setTimeout(window.renderMindMapConnectors, 50);
+      } else if (typeof window.initMindMap === "function") {
+        setTimeout(window.initMindMap, 50);
+      }
 
       if (updateHistory && window.location.search) {
         history.pushState({ view: "landing" }, "", window.location.pathname + (window.location.hash || ""));
@@ -3005,7 +3207,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const navTarget = item.getAttribute("data-nav");
       const href = item.getAttribute("href") || "";
 
-      if (navTarget === "monitoring") {
+      if (navTarget === "dashboard") {
+        e.preventDefault();
+        switchView("dashboard");
+        autoCloseSidebarAfterNav();
+      } else if (navTarget === "monitoring") {
         e.preventDefault();
         switchView("monitoring");
         autoCloseSidebarAfterNav();
@@ -3017,9 +3223,13 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
         switchView("plans");
         autoCloseSidebarAfterNav();
-      } else if (navTarget === "admin") {
+      } else if (navTarget === "admin" || (navTarget && navTarget.startsWith("admin-"))) {
         e.preventDefault();
-        switchView("admin");
+        switchView(navTarget);
+        autoCloseSidebarAfterNav();
+      } else if (navTarget === "public-site") {
+        e.preventDefault();
+        switchView("landing");
         autoCloseSidebarAfterNav();
       } else if (navTarget === "home") {
         if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner") || document.body.classList.contains("plans-view") || document.body.classList.contains("admin-view")) {
@@ -3068,16 +3278,104 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (breadcrumbHomeLink) {
-    breadcrumbHomeLink.addEventListener("click", (e) => {
+  if (breadcrumbDashboardLink) {
+    breadcrumbDashboardLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (currentUser && currentUser.role === "Admin") {
+        switchView("admin");
+      } else if (currentUser && currentUserSubscription && currentUserSubscription.status === "active") {
+        switchView("dashboard");
+      } else if (currentUser) {
+        switchView("plans");
+      } else {
+        switchView("landing");
+      }
+    });
+  }
+
+  if (publicDashboardCta) {
+    publicDashboardCta.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (!currentUser) {
+        openAuthModal("signin");
+        return;
+      }
+      if (currentUser.role === "Admin") {
+        switchView("admin");
+      } else {
+        const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+        if (hasActiveSub) {
+          switchView("dashboard");
+        } else {
+          switchView("plans");
+        }
+      }
+    });
+  }
+
+  if (heroDynamicDashboardBtn) {
+    heroDynamicDashboardBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (!currentUser) {
+        openAuthModal("signin");
+        return;
+      }
+      if (currentUser.role === "Admin") {
+        switchView("admin");
+      } else {
+        const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+        if (hasActiveSub) {
+          switchView("dashboard");
+        } else {
+          switchView("plans");
+        }
+      }
+    });
+  }
+
+  const topNavBrandLink = document.querySelector(".top-nav-brand");
+  if (topNavBrandLink) {
+    topNavBrandLink.addEventListener("click", (e) => {
       e.preventDefault();
       switchView("landing");
     });
   }
 
-  if (dedicatedViewToggleBtn) {
-    dedicatedViewToggleBtn.addEventListener("click", () => {
+  if (dropdownPublicLink) {
+    dropdownPublicLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (userDropdownCard) userDropdownCard.style.display = "none";
       switchView("landing");
+    });
+  }
+
+  if (dropdownDashboardLink) {
+    dropdownDashboardLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (userDropdownCard) userDropdownCard.style.display = "none";
+      const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+      if (hasActiveSub) {
+        switchView("dashboard");
+      } else {
+        switchView("plans");
+      }
+    });
+  }
+
+  const dropdownPlans = document.getElementById("dropdownPlansLink");
+  if (dropdownPlans) {
+    dropdownPlans.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (userDropdownCard) userDropdownCard.style.display = "none";
+      switchView("plans");
+    });
+  }
+
+  if (dropdownAdminLink) {
+    dropdownAdminLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (userDropdownCard) userDropdownCard.style.display = "none";
+      switchView("admin");
     });
   }
 
@@ -3134,7 +3432,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const navSections = document.querySelectorAll("section[id]");
 
   function highlightNavOnScroll() {
-    if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner")) {
+    // Strictly restrict landing-page scrollspy to home-view to prevent
+    // clearing or disrupting active navigation state in admin, dashboard, or dedicated views.
+    if (!document.body.classList.contains("home-view")) {
       return;
     }
     setSidebarActive("home");
@@ -4891,6 +5191,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
 
   // User Profile Dropdown Navigation Links
+  if (dropdownDashboardLink) {
+    dropdownDashboardLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (userDropdownCard) userDropdownCard.style.display = "none";
+      switchView("dashboard");
+    });
+  }
+  if (dropdownPublicLink) {
+    dropdownPublicLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (userDropdownCard) userDropdownCard.style.display = "none";
+      switchView("landing");
+    });
+  }
   const dropdownPlansLink = document.getElementById("dropdownPlansLink");
   if (dropdownPlansLink) {
     dropdownPlansLink.addEventListener("click", (e) => {
@@ -4904,6 +5218,29 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       if (userDropdownCard) userDropdownCard.style.display = "none";
       switchView("admin");
+    });
+  }
+
+  // User Dashboard Tool Launch Listeners
+  const dashLaunchMonitorBtn = document.getElementById("dashLaunchMonitorBtn");
+  if (dashLaunchMonitorBtn) {
+    dashLaunchMonitorBtn.addEventListener("click", () => switchView("monitoring"));
+  }
+  const dashLaunchPortBtn = document.getElementById("dashLaunchPortBtn");
+  if (dashLaunchPortBtn) {
+    dashLaunchPortBtn.addEventListener("click", () => switchView("port-scanner"));
+  }
+  const dashLaunchNdBtn = document.getElementById("dashLaunchNdBtn");
+  if (dashLaunchNdBtn) {
+    dashLaunchNdBtn.addEventListener("click", () => {
+      window.location.href = "/network-discovery";
+    });
+  }
+  const dashViewMonitorThreats = document.getElementById("dashViewMonitorThreats");
+  if (dashViewMonitorThreats) {
+    dashViewMonitorThreats.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchView("monitoring");
     });
   }
 
@@ -4929,6 +5266,323 @@ document.addEventListener("DOMContentLoaded", () => {
       return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
     } catch (_) {
       return dateStr;
+    }
+  }
+
+  // ============================================================================
+  // User Dashboard Mission Control Controller
+  // ============================================================================
+  async function loadUserDashboard() {
+    if (!currentUser) {
+      switchView("landing");
+      return;
+    }
+
+    const opName = document.getElementById("dashOperatorName");
+    const avatar = document.getElementById("dashUserAvatar");
+    const email = document.getElementById("dashUserEmail");
+    const role = document.getElementById("dashUserRole");
+    const statusPill = document.getElementById("dashStatusPill");
+    const planName = document.getElementById("dashPlanName");
+    const countdown = document.getElementById("dashExpirationCountdown");
+
+    const displayName = currentUser.full_name || currentUser.username || "Operator";
+    if (opName) opName.textContent = displayName;
+    if (avatar) avatar.textContent = displayName.charAt(0).toUpperCase();
+    if (email) email.textContent = currentUser.email || "";
+    if (role) role.textContent = currentUser.role || "Operator";
+
+    const sub = currentUserSubscription;
+    const isAdmin = currentUser.role === "Admin";
+
+    if (isAdmin) {
+      if (statusPill) {
+        statusPill.className = "dash-status-pill active";
+        statusPill.innerHTML = '<span class="status-pulse-dot"></span> System Root Clearance';
+      }
+      if (planName) planName.textContent = "Enterprise Root (Unlimited)";
+      if (countdown) countdown.textContent = "Perpetual Administrator Access";
+    } else if (sub && sub.status === "active") {
+      if (statusPill) {
+        statusPill.className = "dash-status-pill active";
+        statusPill.innerHTML = '<span class="status-pulse-dot"></span> Active Clearance';
+      }
+      if (planName) planName.textContent = (sub.plan && sub.plan.name) || sub.plan_id || "Active Plan";
+
+      let remainingText = "Active";
+      if (sub.end_date) {
+        try {
+          const end = new Date(sub.end_date);
+          const now = new Date();
+          const diffDays = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+          remainingText = diffDays > 0 ? `${diffDays} Days Remaining` : "Expiring Today";
+        } catch (_) {}
+      }
+      if (countdown) countdown.textContent = remainingText;
+    } else if (sub && sub.status === "pending") {
+      if (statusPill) {
+        statusPill.className = "dash-status-pill pending";
+        statusPill.innerHTML = '<span class="status-pulse-dot"></span> Verification Pending';
+      }
+      if (planName) planName.textContent = (sub.plan && sub.plan.name) || sub.plan_id || "Requested Plan";
+      if (countdown) countdown.textContent = "Awaiting Administrator Approval";
+    } else {
+      if (statusPill) {
+        statusPill.className = "dash-status-pill expired";
+        statusPill.innerHTML = '<span class="status-pulse-dot"></span> Inactive';
+      }
+      if (planName) planName.textContent = "No Active Subscription";
+      if (countdown) countdown.textContent = "Subscription Required";
+    }
+
+    // Entitlement checks for tool launchpad cards
+    const features = isAdmin ? {
+      can_live_monitoring: true,
+      can_port_scan: true,
+      can_network_discovery: true
+    } : ((sub && sub.status === "active" && sub.plan && sub.plan.features) || {});
+
+    // Tool 1: Live Monitoring
+    const canMonitor = isAdmin || Boolean(features.can_live_monitoring);
+    const monitorCard = document.getElementById("dashToolMonitorCard");
+    const monitorBadge = document.getElementById("dashMonitoringEntitlementBadge");
+    const launchMonitorBtn = document.getElementById("dashLaunchMonitorBtn");
+    if (monitorCard) {
+      if (canMonitor) {
+        monitorCard.classList.remove("locked");
+        if (monitorBadge) {
+          monitorBadge.className = "tool-entitlement-badge";
+          monitorBadge.innerHTML = '<i class="fas fa-circle-check"></i> Unlocked';
+        }
+        if (launchMonitorBtn) {
+          launchMonitorBtn.disabled = false;
+          launchMonitorBtn.innerHTML = '<span>Launch Telemetry</span> <i class="fas fa-arrow-right"></i>';
+        }
+      } else {
+        monitorCard.classList.add("locked");
+        if (monitorBadge) {
+          monitorBadge.className = "tool-entitlement-badge locked";
+          monitorBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
+        }
+        if (launchMonitorBtn) {
+          launchMonitorBtn.disabled = true;
+          launchMonitorBtn.innerHTML = '<span>Plan Upgrade Required</span> <i class="fas fa-lock"></i>';
+        }
+      }
+    }
+
+    // Tool 2: Port Scanner
+    const canPort = isAdmin || Boolean(features.can_port_scan);
+    const portCard = document.getElementById("dashToolPortCard");
+    const portBadge = document.getElementById("dashPortEntitlementBadge");
+    const launchPortBtn = document.getElementById("dashLaunchPortBtn");
+    if (portCard) {
+      if (canPort) {
+        portCard.classList.remove("locked");
+        if (portBadge) {
+          portBadge.className = "tool-entitlement-badge";
+          portBadge.innerHTML = '<i class="fas fa-circle-check"></i> Unlocked';
+        }
+        if (launchPortBtn) {
+          launchPortBtn.disabled = false;
+          launchPortBtn.innerHTML = '<span>Launch Scanner</span> <i class="fas fa-arrow-right"></i>';
+        }
+      } else {
+        portCard.classList.add("locked");
+        if (portBadge) {
+          portBadge.className = "tool-entitlement-badge locked";
+          portBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
+        }
+        if (launchPortBtn) {
+          launchPortBtn.disabled = true;
+          launchPortBtn.innerHTML = '<span>Plan Upgrade Required</span> <i class="fas fa-lock"></i>';
+        }
+      }
+    }
+
+    // Tool 3: Network Discovery
+    const canNd = isAdmin || Boolean(features.can_network_discovery);
+    const ndCard = document.getElementById("dashToolNdCard");
+    const ndBadge = document.getElementById("dashNdEntitlementBadge");
+    const launchNdBtn = document.getElementById("dashLaunchNdBtn");
+    if (ndCard) {
+      if (canNd) {
+        ndCard.classList.remove("locked");
+        if (ndBadge) {
+          ndBadge.className = "tool-entitlement-badge";
+          ndBadge.innerHTML = '<i class="fas fa-circle-check"></i> Unlocked';
+        }
+        if (launchNdBtn) {
+          launchNdBtn.disabled = false;
+          launchNdBtn.innerHTML = '<span>Launch Discovery</span> <i class="fas fa-arrow-right"></i>';
+        }
+      } else {
+        ndCard.classList.add("locked");
+        if (ndBadge) {
+          ndBadge.className = "tool-entitlement-badge locked";
+          ndBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
+        }
+        if (launchNdBtn) {
+          launchNdBtn.disabled = true;
+          launchNdBtn.innerHTML = '<span>Plan Upgrade Required</span> <i class="fas fa-lock"></i>';
+        }
+      }
+    }
+
+    // Secondary Row Details
+    const detailTier = document.getElementById("userDashDetailTier");
+    const detailStatus = document.getElementById("userDashDetailStatus");
+    const detailStart = document.getElementById("userDashDetailStartDate");
+    const detailEnd = document.getElementById("userDashDetailEndDate");
+    const detailRemaining = document.getElementById("userDashDetailRemaining");
+
+    if (isAdmin) {
+      if (detailTier) detailTier.textContent = "Root Enterprise";
+      if (detailStatus) detailStatus.textContent = "Active Clearance";
+      if (detailStart) detailStart.textContent = "System Root";
+      if (detailEnd) detailEnd.textContent = "Perpetual";
+      if (detailRemaining) detailRemaining.textContent = "Unlimited Access";
+    } else if (sub) {
+      if (detailTier) detailTier.textContent = (sub.plan && sub.plan.name) || sub.plan_id;
+      if (detailStatus) detailStatus.textContent = sub.status ? sub.status.toUpperCase() : "—";
+      if (detailStart) detailStart.textContent = formatUtcDate(sub.start_date || sub.created_at);
+      if (detailEnd) detailEnd.textContent = formatUtcDate(sub.end_date);
+
+      let remStr = "—";
+      if (sub.status === "active" && sub.end_date) {
+        try {
+          const diffDays = Math.ceil((new Date(sub.end_date) - new Date()) / (1000 * 60 * 60 * 24));
+          remStr = diffDays > 0 ? `${diffDays} days` : "Expires today";
+        } catch (_) {}
+      } else if (sub.status === "pending") {
+        remStr = "Awaiting Approval";
+      } else if (sub.status === "expired") {
+        remStr = "Expired";
+      }
+      if (detailRemaining) detailRemaining.textContent = remStr;
+    } else {
+      if (detailTier) detailTier.textContent = "None";
+      if (detailStatus) detailStatus.textContent = "Unsubscribed";
+      if (detailStart) detailStart.textContent = "—";
+      if (detailEnd) detailEnd.textContent = "—";
+      if (detailRemaining) detailRemaining.textContent = "No Active Period";
+    }
+
+    // Telemetry Snapshot count
+    const threatCount = document.getElementById("userDashThreatCount");
+    if (threatCount) {
+      threatCount.textContent = detectedAttacksRegistry ? detectedAttacksRegistry.size : 0;
+    }
+
+    // Operator Profile & Password Management forms
+    const userFullNameInput = document.getElementById("userDashFullNameInput");
+    const userEmailInput = document.getElementById("userDashEmailInput");
+    const userSaveProfileBtn = document.getElementById("userDashSaveProfileBtn");
+    const userProfileMsg = document.getElementById("userDashProfileMsg");
+
+    if (userFullNameInput) userFullNameInput.value = currentUser.full_name || "";
+    if (userEmailInput) userEmailInput.value = currentUser.email || "";
+
+    if (userSaveProfileBtn) {
+      userSaveProfileBtn.onclick = async () => {
+        const fn = userFullNameInput ? userFullNameInput.value.trim() : "";
+        const em = userEmailInput ? userEmailInput.value.trim() : "";
+        userSaveProfileBtn.disabled = true;
+        userSaveProfileBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Updating...';
+        try {
+          const resp = await fetch("/api/auth/profile", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ full_name: fn, email: em })
+          });
+          const rData = await resp.json();
+          if (resp.ok && rData.status === "success") {
+            if (userProfileMsg) {
+              userProfileMsg.style.color = "#10B981";
+              userProfileMsg.textContent = rData.message || "Profile updated!";
+            }
+            if (rData.user) {
+              currentUser = rData.user;
+              loadUserDashboard();
+            }
+          } else {
+            if (userProfileMsg) {
+              userProfileMsg.style.color = "#EF4444";
+              userProfileMsg.textContent = rData.message || "Update failed.";
+            }
+          }
+        } catch (_) {
+          if (userProfileMsg) {
+            userProfileMsg.style.color = "#EF4444";
+            userProfileMsg.textContent = "Network error updating profile.";
+          }
+        } finally {
+          userSaveProfileBtn.disabled = false;
+          userSaveProfileBtn.innerHTML = '<i class="fas fa-save"></i> <span>Update Profile</span>';
+        }
+      };
+    }
+
+    const curPwInput = document.getElementById("userDashCurrentPassword");
+    const newPwInput = document.getElementById("userDashNewPassword");
+    const confirmPwInput = document.getElementById("userDashConfirmPassword");
+    const userChangePwBtn = document.getElementById("userDashChangePasswordBtn");
+    const userPwMsg = document.getElementById("userDashPasswordMsg");
+
+    if (userChangePwBtn) {
+      userChangePwBtn.onclick = async () => {
+        const curPw = curPwInput ? curPwInput.value : "";
+        const newPw = newPwInput ? newPwInput.value : "";
+        const confPw = confirmPwInput ? confirmPwInput.value : "";
+        if (!curPw || !newPw || !confPw) {
+          if (userPwMsg) {
+            userPwMsg.style.color = "#EF4444";
+            userPwMsg.textContent = "All password fields are required.";
+          }
+          return;
+        }
+        if (newPw !== confPw) {
+          if (userPwMsg) {
+            userPwMsg.style.color = "#EF4444";
+            userPwMsg.textContent = "New passwords do not match.";
+          }
+          return;
+        }
+        userChangePwBtn.disabled = true;
+        userChangePwBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Changing...';
+        try {
+          const resp = await fetch("/api/auth/change-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ current_password: curPw, new_password: newPw, confirm_new_password: confPw })
+          });
+          const rData = await resp.json();
+          if (resp.ok && rData.status === "success") {
+            if (userPwMsg) {
+              userPwMsg.style.color = "#10B981";
+              userPwMsg.textContent = rData.message || "Password changed successfully!";
+            }
+            if (curPwInput) curPwInput.value = "";
+            if (newPwInput) newPwInput.value = "";
+            if (confirmPwInput) confirmPwInput.value = "";
+          } else {
+            if (userPwMsg) {
+              userPwMsg.style.color = "#EF4444";
+              userPwMsg.textContent = rData.message || "Password change failed.";
+            }
+          }
+        } catch (_) {
+          if (userPwMsg) {
+            userPwMsg.style.color = "#EF4444";
+            userPwMsg.textContent = "Network error changing password.";
+          }
+        } finally {
+          userChangePwBtn.disabled = false;
+          userChangePwBtn.innerHTML = '<i class="fas fa-lock-rotate"></i> <span>Change Password</span>';
+        }
+      };
     }
   }
 
@@ -5181,54 +5835,333 @@ document.addEventListener("DOMContentLoaded", () => {
   // ============================================================================
   const adminTabBtns = document.querySelectorAll(".admin-tab-btn");
   const adminPanels = {
+    overview: document.getElementById("adminPanelOverview"),
     requests: document.getElementById("adminPanelRequests"),
     subscriptions: document.getElementById("adminPanelSubscriptions"),
     users: document.getElementById("adminPanelUsers"),
     plans: document.getElementById("adminPanelPlans"),
-    audit: document.getElementById("adminPanelAudit")
+    audit: document.getElementById("adminPanelAudit"),
+    profile: document.getElementById("adminPanelProfile")
   };
+
+  function activateAdminTab(tabKey, updateUrl = true) {
+    if (!tabKey) tabKey = "overview";
+    adminTabBtns.forEach(b => {
+      if (b.getAttribute("data-admin-tab") === tabKey) {
+        b.classList.add("active");
+      } else {
+        b.classList.remove("active");
+      }
+    });
+
+    Object.keys(adminPanels).forEach(key => {
+      if (adminPanels[key]) {
+        adminPanels[key].style.display = key === tabKey ? "block" : "none";
+      }
+    });
+
+    if (tabKey === "overview") loadAdminMetrics();
+    else if (tabKey === "requests") loadAdminRequests();
+    else if (tabKey === "subscriptions") loadAdminSubscriptions();
+    else if (tabKey === "users") loadAdminUsers();
+    else if (tabKey === "plans") loadAdminPlans();
+    else if (tabKey === "audit") loadAdminAuditLogs();
+    else if (tabKey === "profile") loadAdminProfile();
+
+    const titleMap = {
+      overview: "SCOUT Administrative Console — Platform Overview",
+      users: "SCOUT Admin — Operator & User Accounts",
+      plans: "SCOUT Admin — Subscription Plans Catalog",
+      subscriptions: "SCOUT Admin — Global Subscription Registry",
+      requests: "SCOUT Admin — Pending Subscription Requests",
+      audit: "SCOUT Admin — Security Audit Logs",
+      profile: "SCOUT Admin — Profile & Security"
+    };
+    if (titleMap[tabKey]) {
+      document.title = titleMap[tabKey];
+    }
+    if (dedicatedToolTitle && titleMap[tabKey]) {
+      dedicatedToolTitle.textContent = titleMap[tabKey];
+    }
+
+    let viewKey = "admin";
+    if (tabKey === "users") viewKey = "admin-users";
+    else if (tabKey === "plans") viewKey = "admin-plans";
+    else if (tabKey === "subscriptions") viewKey = "admin-subs";
+    else if (tabKey === "requests") viewKey = "admin-requests";
+    else if (tabKey === "audit") viewKey = "admin-audit";
+    else if (tabKey === "profile") viewKey = "admin-profile";
+
+    // Keep active sidebar navigation item persistently synchronized on all tab switches
+    setSidebarActive(viewKey);
+
+    if (updateUrl) {
+      const targetQuery = "?view=" + viewKey;
+      if (window.location.search !== targetQuery) {
+        history.pushState({ view: viewKey }, "", targetQuery);
+      } else {
+        history.replaceState({ view: viewKey }, "", targetQuery);
+      }
+    }
+  }
 
   adminTabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       const tabKey = btn.getAttribute("data-admin-tab");
-      adminTabBtns.forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      Object.keys(adminPanels).forEach(key => {
-        if (adminPanels[key]) {
-          adminPanels[key].style.display = key === tabKey ? "block" : "none";
-        }
-      });
-
-      if (tabKey === "requests") loadAdminRequests();
-      else if (tabKey === "subscriptions") loadAdminSubscriptions();
-      else if (tabKey === "users") loadAdminUsers();
-      else if (tabKey === "plans") loadAdminPlans();
-      else if (tabKey === "audit") loadAdminAuditLogs();
+      activateAdminTab(tabKey, true);
     });
   });
 
+  // Admin Quick Action Shortcut Buttons
+  const adminShortcutBtns = document.querySelectorAll(".admin-shortcut-btn[data-jump-tab]");
+  adminShortcutBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const jumpTarget = btn.getAttribute("data-jump-tab");
+      const targetTab = document.querySelector(`.admin-tab-btn[data-admin-tab="${jumpTarget}"]`);
+      if (targetTab) targetTab.click();
+    });
+  });
+
+  const adminRefreshAllBtn = document.getElementById("adminRefreshAllBtn");
+  if (adminRefreshAllBtn) {
+    adminRefreshAllBtn.addEventListener("click", () => {
+      loadAdminDashboard();
+    });
+  }
+
   async function loadAdminDashboard() {
+    loadAdminMetrics();
     loadAdminRequests();
     loadAdminSubscriptions();
     loadAdminUsers();
     loadAdminPlans();
+    loadAdminAuditLogs();
+    loadAdminProfile();
   }
 
-  // Load Pending Requests & Approvals
+  // Load Database Platform Activity Metrics for Admin (Zero Mock Data)
+  async function loadAdminMetrics() {
+    const totalUsersEl = document.getElementById("adminMetricTotalUsers");
+    const activeUsersEl = document.getElementById("adminMetricActiveUsers");
+    const inactiveUsersEl = document.getElementById("adminMetricInactiveUsers");
+    const totalSubsEl = document.getElementById("adminMetricTotalSubscribers");
+    const pendingSubsEl = document.getElementById("adminMetricPendingSubs");
+    const activeSubsEl = document.getElementById("adminMetricActiveSubs");
+    const expiredSubsEl = document.getElementById("adminMetricExpiredSubs");
+    const canceledSubsEl = document.getElementById("adminMetricCanceledSubs");
+    const plansEl = document.getElementById("adminMetricPlans");
+    const inactivePlansEl = document.getElementById("adminMetricInactivePlans");
+
+    try {
+      const res = await fetch("/api/admin/metrics", { credentials: "same-origin" });
+      const data = await res.json();
+      if (res.ok && data.status === "success" && data.metrics) {
+        const m = data.metrics;
+        if (totalUsersEl) totalUsersEl.textContent = m.total_users ?? 0;
+        if (activeUsersEl) activeUsersEl.textContent = m.active_users ?? 0;
+        if (inactiveUsersEl) inactiveUsersEl.textContent = m.inactive_users ?? 0;
+        if (totalSubsEl) totalSubsEl.textContent = m.total_subscribers ?? 0;
+        if (pendingSubsEl) pendingSubsEl.textContent = m.pending_subscriptions ?? 0;
+        if (activeSubsEl) activeSubsEl.textContent = m.active_subscriptions ?? 0;
+        if (expiredSubsEl) expiredSubsEl.textContent = m.expired_subscriptions ?? 0;
+        if (canceledSubsEl) canceledSubsEl.textContent = m.canceled_subscriptions ?? 0;
+        if (plansEl) plansEl.textContent = m.available_plans ?? 0;
+        if (inactivePlansEl) inactivePlansEl.textContent = m.inactive_plans ?? 0;
+
+        const countBadge = document.getElementById("adminPendingCountBadge");
+        if (countBadge) {
+          countBadge.textContent = m.pending_subscriptions;
+          countBadge.style.display = m.pending_subscriptions > 0 ? "inline-block" : "none";
+        }
+        if (sidebarPendingBadge) {
+          sidebarPendingBadge.textContent = m.pending_subscriptions;
+          sidebarPendingBadge.style.display = m.pending_subscriptions > 0 ? "inline-block" : "none";
+        }
+        const sidebarRequestsBadge = document.getElementById("sidebarRequestsBadge");
+        if (sidebarRequestsBadge) {
+          sidebarRequestsBadge.textContent = m.pending_subscriptions;
+          sidebarRequestsBadge.style.display = m.pending_subscriptions > 0 ? "inline-block" : "none";
+        }
+      }
+    } catch (_) {}
+  }
+
+
+  // Admin Profile & Security Loader
+  async function loadAdminProfile() {
+    const dispName = document.getElementById("adminProfileDispName");
+    const dispUser = document.getElementById("adminProfileDispUsername");
+    const dispEmail = document.getElementById("adminProfileDispEmail");
+    const dispStatus = document.getElementById("adminProfileDispStatus");
+    const dispJoined = document.getElementById("adminProfileDispJoined");
+    const dispLastLogin = document.getElementById("adminProfileDispLastLogin");
+    const fullNameInput = document.getElementById("adminProfileFullNameInput");
+    const emailInput = document.getElementById("adminProfileEmailInput");
+
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+      const data = await res.json();
+      if (res.ok && data.status === "success" && data.user) {
+        const u = data.user;
+        if (dispName) dispName.textContent = u.full_name || u.username;
+        if (dispUser) dispUser.textContent = u.username;
+        if (dispEmail) dispEmail.textContent = u.email;
+        if (dispStatus) {
+          dispStatus.textContent = u.is_active ? "Active" : "Disabled";
+          dispStatus.className = u.is_active ? "info-val text-success" : "info-val text-danger";
+        }
+        if (dispJoined) dispJoined.textContent = formatUtcDate(u.created_at);
+        if (dispLastLogin) dispLastLogin.textContent = u.last_login_at ? formatUtcDate(u.last_login_at) : "Current Session";
+        if (fullNameInput) fullNameInput.value = u.full_name || "";
+        if (emailInput) emailInput.value = u.email || "";
+      }
+    } catch (_) {}
+  }
+
+  // Subscription Administrative Lifecycle Actions
+  async function activateSubscription(subId, btn) {
+    if (!subId) return;
+    if (!confirm(`Approve and activate subscription #${subId}?\n\nThis will provision immediate cybersecurity access and initialize billing terms.`)) {
+      return;
+    }
+
+    const originalContent = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Approving...';
+    }
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ notes: "Approved by administrator via SCOUT Admin Console" })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        loadAdminRequests();
+        loadAdminSubscriptions();
+        loadAdminMetrics();
+      } else {
+        alert(data.message || "Failed to approve subscription.");
+      }
+    } catch (_) {
+      alert("Network error approving subscription.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+      }
+    }
+  }
+
+  async function rejectSubscription(subId, btn) {
+    if (!subId) return;
+    const reason = prompt(`Enter rejection reason for subscription #${subId} (optional):`, "Request rejected by administrator.");
+    if (reason === null) return; // User cancelled
+
+    const originalContent = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Rejecting...';
+    }
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ reason: reason.trim() || "Request rejected by administrator." })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        loadAdminRequests();
+        loadAdminSubscriptions();
+        loadAdminMetrics();
+      } else {
+        alert(data.message || "Failed to reject subscription.");
+      }
+    } catch (_) {
+      alert("Network error rejecting subscription.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+      }
+    }
+  }
+
+  async function cancelSubscription(subId, btn) {
+    if (!subId) return;
+    const reason = prompt(`Are you sure you want to terminate subscription #${subId}?\n\nEnter cancellation reason (optional):`, "Canceled by administrator.");
+    if (reason === null) return; // User cancelled
+
+    const originalContent = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Canceling...';
+    }
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ reason: reason.trim() || "Canceled by administrator." })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        loadAdminSubscriptions();
+        loadAdminMetrics();
+      } else {
+        alert(data.message || "Failed to cancel subscription.");
+      }
+    } catch (_) {
+      alert("Network error canceling subscription.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+      }
+    }
+  }
+
+  // Load Pending Requests & Approvals with Card-Based Layout and Fallback Table Sync
   async function loadAdminRequests() {
+    const cardsGrid = document.getElementById("adminRequestsCardsGrid");
     const tbody = document.getElementById("adminRequestsTbody");
     const countBadge = document.getElementById("adminPendingCountBadge");
     const pendingMetric = document.getElementById("adminMetricPendingSubs");
-    if (!tbody) return;
+    if (!cardsGrid && !tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading requests...</td></tr>`;
+    if (cardsGrid) {
+      cardsGrid.innerHTML = `
+        <div class="admin-cards-state loading-state">
+          <div class="state-icon-wrap"><i class="fas fa-circle-notch fa-spin"></i></div>
+          <h4>Loading Pending Requests...</h4>
+          <p>Fetching operator subscription approval queue.</p>
+        </div>
+      `;
+    }
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading requests...</td></tr>`;
+    }
 
     try {
       const res = await fetch("/api/admin/subscriptions?status=pending", { credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok || data.status !== "success") {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Unable to load requests.</td></tr>`;
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state error-state">
+              <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+              <h4>Unable to Load Requests</h4>
+              <p>${escapeHtml(data.message || "Failed to retrieve pending subscriptions.")}</p>
+            </div>
+          `;
+        }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Unable to load requests.</td></tr>`;
         return;
       }
 
@@ -5238,24 +6171,91 @@ document.addEventListener("DOMContentLoaded", () => {
         countBadge.textContent = requests.length;
         countBadge.style.display = requests.length > 0 ? "inline-block" : "none";
       }
+      const sbBadge = document.getElementById("sidebarPendingBadge");
+      if (sbBadge) {
+        sbBadge.textContent = requests.length;
+        sbBadge.style.display = requests.length > 0 ? "inline-block" : "none";
+      }
+      const srBadge = document.getElementById("sidebarRequestsBadge");
+      if (srBadge) {
+        srBadge.textContent = requests.length;
+        srBadge.style.display = requests.length > 0 ? "inline-block" : "none";
+      }
 
       if (requests.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-circle-check"></i> No pending subscription requests. All accounts are up to date.</td></tr>`;
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state empty-state">
+              <div class="state-icon-wrap"><i class="fas fa-clipboard-check"></i></div>
+              <h4>All Clear — No Pending Requests</h4>
+              <p>All operator subscription requests have been reviewed and approved or rejected.</p>
+            </div>
+          `;
+        }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-circle-check"></i> No pending subscription requests. All accounts are up to date.</td></tr>`;
         return;
       }
 
-      let html = "";
+      let cardsHtml = "";
+      let rowsHtml = "";
       for (const r of requests) {
-        const opName = (r.user && (r.user.username || r.user.email)) || `User #${r.user_id}`;
-        const planName = (r.plan && r.plan.name) || r.plan_id;
-        const priceStr = r.plan ? `$${r.plan.price.toFixed(2)} / ${r.plan.duration_days}d` : "—";
+        const opName = r.username || (r.user && (r.user.username || r.user.email)) || `User #${r.user_id}`;
+        const opSub = r.user_email || (r.user && r.user.email) || "";
+        const initials = opName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "OP";
+        const planName = r.plan_name || (r.plan && r.plan.name) || r.plan_code || `Plan #${r.plan_id}`;
+        const priceStr = (r.plan_price !== undefined && r.plan_price !== null) ? `$${r.plan_price.toFixed(2)}${r.plan_duration ? ' / ' + r.plan_duration : ''}` : (r.plan ? `$${r.plan.price.toFixed(2)}` : "—");
         const dateStr = formatUtcDate(r.created_at || r.start_date);
 
-        html += `
+        cardsHtml += `
+          <div class="admin-request-card" data-card-request-id="${r.id}">
+            <div class="request-card-header">
+              <div class="request-user-info">
+                <div class="admin-user-avatar">${escapeHtml(initials)}</div>
+                <div class="request-user-details">
+                  <span class="request-username">${escapeHtml(opName)}</span>
+                  ${opSub ? `<span class="request-email text-muted">${escapeHtml(opSub)}</span>` : ''}
+                </div>
+              </div>
+              <div class="request-badge-wrap">
+                <span class="sub-badge pending"><i class="fas fa-clock"></i> Pending Approval</span>
+              </div>
+            </div>
+            <div class="request-card-body">
+              <div class="request-data-grid">
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-shield-halved"></i> Requested Plan</span>
+                  <span class="request-data-val font-semibold">${escapeHtml(planName)}</span>
+                </div>
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-receipt"></i> Plan Pricing</span>
+                  <span class="request-data-val">${escapeHtml(priceStr)}</span>
+                </div>
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-calendar-alt"></i> Request Date</span>
+                  <span class="request-data-val">${dateStr}</span>
+                </div>
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-fingerprint"></i> Subscription ID</span>
+                  <span class="request-data-val"><code>#${r.id}</code></span>
+                </div>
+              </div>
+            </div>
+            <div class="request-card-footer">
+              <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
+                <i class="fas fa-check"></i> Approve Request
+              </button>
+              <button type="button" class="btn-admin-action reject" data-rej-id="${r.id}" title="Reject request">
+                <i class="fas fa-xmark"></i> Reject
+              </button>
+            </div>
+          </div>
+        `;
+
+        rowsHtml += `
           <tr>
             <td>
               <strong>${escapeHtml(opName)}</strong>
-              ${r.user && r.user.full_name ? `<br><small class="text-muted">${escapeHtml(r.user.full_name)}</small>` : ''}
+              ${opSub ? `<br><small class="text-muted">${escapeHtml(opSub)}</small>` : ''}
             </td>
             <td><span class="sub-badge active">${escapeHtml(planName)}</span></td>
             <td>${priceStr}</td>
@@ -5275,52 +6275,109 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
       }
 
-      tbody.innerHTML = html;
+      if (cardsGrid) cardsGrid.innerHTML = cardsHtml;
+      if (tbody) tbody.innerHTML = rowsHtml;
 
-      tbody.querySelectorAll("[data-act-id]").forEach(btn => {
-        btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
-      });
-      tbody.querySelectorAll("[data-rej-id]").forEach(btn => {
-        btn.addEventListener("click", () => rejectSubscription(btn.getAttribute("data-rej-id"), btn));
-      });
+      const bindActions = (container) => {
+        if (!container) return;
+        container.querySelectorAll("[data-act-id]").forEach(btn => {
+          btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
+        });
+        container.querySelectorAll("[data-rej-id]").forEach(btn => {
+          btn.addEventListener("click", () => rejectSubscription(btn.getAttribute("data-rej-id"), btn));
+        });
+      };
+
+      bindActions(cardsGrid);
+      bindActions(tbody);
     } catch (_) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Network error loading requests.</td></tr>`;
+      if (cardsGrid) {
+        cardsGrid.innerHTML = `
+          <div class="admin-cards-state error-state">
+            <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+            <h4>Network Error Loading Requests</h4>
+            <p>Unable to connect to the backend subscription service.</p>
+          </div>
+        `;
+      }
+      if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Network error loading requests.</td></tr>`;
     }
   }
 
-  // Load All Subscriptions
+  // Load All Subscriptions with Responsive Card-Based Layout, Search & Status Filtering
   async function loadAdminSubscriptions() {
+    const cardsGrid = document.getElementById("adminSubsCardsGrid");
     const tbody = document.getElementById("adminSubsTbody");
     const activeMetric = document.getElementById("adminMetricActiveSubs");
     const filterSelect = document.getElementById("adminSubStatusFilter");
-    if (!tbody) return;
+    const searchInput = document.getElementById("adminSubSearchInput");
+    if (!cardsGrid && !tbody) return;
 
     const filterStatus = filterSelect ? filterSelect.value : "all";
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading subscriptions...</td></tr>`;
+    const searchVal = searchInput ? searchInput.value.trim() : "";
+
+    if (cardsGrid) {
+      cardsGrid.innerHTML = `
+        <div class="admin-cards-state loading-state">
+          <div class="state-icon-wrap"><i class="fas fa-circle-notch fa-spin"></i></div>
+          <h4>Loading Subscriptions...</h4>
+          <p>Fetching operator subscriptions and active licenses.</p>
+        </div>
+      `;
+    }
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading subscriptions...</td></tr>`;
+    }
 
     try {
-      const url = filterStatus !== "all" ? `/api/admin/subscriptions?status=${filterStatus}` : `/api/admin/subscriptions`;
+      const params = new URLSearchParams();
+      if (filterStatus !== "all") params.set("status", filterStatus);
+      if (searchVal) params.set("search", searchVal);
+      const url = params.toString() ? `/api/admin/subscriptions?${params.toString()}` : `/api/admin/subscriptions`;
+
       const res = await fetch(url, { credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok || data.status !== "success") {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Unable to load subscriptions.</td></tr>`;
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state error-state">
+              <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+              <h4>Unable to Load Subscriptions</h4>
+              <p>${escapeHtml(data.message || "Failed to retrieve subscription records.")}</p>
+            </div>
+          `;
+        }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Unable to load subscriptions.</td></tr>`;
         return;
       }
 
       const subs = data.subscriptions || [];
       const activeCount = subs.filter(s => s.status === "active").length;
-      if (activeMetric && filterStatus === "all") activeMetric.textContent = activeCount;
+      if (activeMetric && filterStatus === "all" && !searchVal) activeMetric.textContent = activeCount;
 
       if (subs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">No subscriptions found for the selected filter.</td></tr>`;
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state empty-state">
+              <div class="state-icon-wrap"><i class="fas fa-box-archive"></i></div>
+              <h4>No Subscriptions Found</h4>
+              <p>No operator subscription records match the selected status filter or search query.</p>
+            </div>
+          `;
+        }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">No subscriptions found matching query or filter.</td></tr>`;
         return;
       }
 
-      let html = "";
+      let cardsHtml = "";
+      let rowsHtml = "";
       for (const s of subs) {
-        const opName = (s.user && (s.user.username || s.user.email)) || `User #${s.user_id}`;
-        const planName = (s.plan && s.plan.name) || s.plan_id;
+        const opName = s.username || (s.user && (s.user.username || s.user.email)) || `User #${s.user_id}`;
+        const opEmail = s.user_email || (s.user && s.user.email) || "";
+        const initials = opName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "OP";
+        const planName = s.plan_name || (s.plan && s.plan.name) || s.plan_code || s.plan_id;
         const statusClass = s.status === "active" ? "active" : (s.status === "pending" ? "pending" : (s.status === "expired" ? "expired" : "canceled"));
+        const statusIcon = s.status === "active" ? "fa-circle-check" : (s.status === "pending" ? "fa-clock" : (s.status === "expired" ? "fa-circle-exclamation" : "fa-ban"));
 
         let actionBtns = `
           <button type="button" class="btn-admin-action dates" data-dates-id="${s.id}" data-start="${s.start_date || ''}" data-end="${s.end_date || ''}" title="Adjust subscription dates">
@@ -5329,20 +6386,81 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
         if (s.status === "pending") {
           actionBtns += `
-            <button type="button" class="btn-admin-action activate" data-act-id="${s.id}" title="Approve and activate">
-              <i class="fas fa-check"></i>
+            <button type="button" class="btn-admin-action activate" data-act-id="${s.id}" title="Approve and activate subscription">
+              <i class="fas fa-check"></i> Approve
+            </button>
+            <button type="button" class="btn-admin-action reject" data-rej-id="${s.id}" title="Reject request">
+              <i class="fas fa-xmark"></i> Reject
             </button>
           `;
         } else if (s.status === "active") {
           actionBtns += `
+            <button type="button" class="btn-admin-action activate" data-extend-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Extend active subscription">
+              <i class="fas fa-calendar-plus"></i> Extend
+            </button>
             <button type="button" class="btn-admin-action cancel" data-canc-id="${s.id}" title="Cancel subscription">
               <i class="fas fa-ban"></i> Cancel
             </button>
           `;
+        } else if (s.status === "expired") {
+          actionBtns += `
+            <button type="button" class="btn-admin-action activate" data-renew-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Renew expired subscription">
+              <i class="fas fa-rotate"></i> Renew
+            </button>
+          `;
+        } else if (s.status === "canceled") {
+          actionBtns += `
+            <button type="button" class="btn-admin-action activate" data-renew-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Re-activate canceled subscription">
+              <i class="fas fa-rotate"></i> Re-activate
+            </button>
+          `;
         }
 
-        html += `
+        cardsHtml += `
+          <div class="admin-sub-card status-${statusClass}" data-card-sub-id="${s.id}">
+            <div class="sub-card-header">
+              <div class="sub-user-info">
+                <div class="admin-user-avatar">${escapeHtml(initials)}</div>
+                <div class="sub-user-details">
+                  <span class="sub-username">${escapeHtml(opName)}</span>
+                  ${opEmail ? `<span class="sub-email text-muted">${escapeHtml(opEmail)}</span>` : ''}
+                </div>
+              </div>
+              <div class="sub-badge-wrap">
+                <span class="sub-badge ${statusClass}"><i class="fas ${statusIcon}"></i> ${escapeHtml(s.status.toUpperCase())}</span>
+              </div>
+            </div>
+            <div class="sub-card-body">
+              <div class="sub-data-grid">
+                <div class="sub-data-item">
+                  <span class="sub-data-label"><i class="fas fa-shield-halved"></i> Plan</span>
+                  <span class="sub-data-val font-semibold">${escapeHtml(planName)}</span>
+                </div>
+                <div class="sub-data-item">
+                  <span class="sub-data-label"><i class="fas fa-fingerprint"></i> Subscription ID</span>
+                  <span class="sub-data-val"><code>#${s.id}</code></span>
+                </div>
+                <div class="sub-data-item">
+                  <span class="sub-data-label"><i class="fas fa-calendar-day"></i> Start Date</span>
+                  <span class="sub-data-val">${formatUtcDate(s.start_date)}</span>
+                </div>
+                <div class="sub-data-item">
+                  <span class="sub-data-label"><i class="fas fa-hourglass-end"></i> Expiration Date</span>
+                  <span class="sub-data-val">${formatUtcDate(s.end_date)}</span>
+                </div>
+              </div>
+            </div>
+            <div class="sub-card-footer">
+              <div class="admin-action-btn-group">
+                ${actionBtns}
+              </div>
+            </div>
+          </div>
+        `;
+
+        rowsHtml += `
           <tr>
+            <td><code>#${s.id}</code></td>
             <td><strong>${escapeHtml(opName)}</strong></td>
             <td>${escapeHtml(planName)}</td>
             <td><span class="sub-badge ${statusClass}">${escapeHtml(s.status)}</span></td>
@@ -5357,129 +6475,768 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
       }
 
-      tbody.innerHTML = html;
+      if (cardsGrid) cardsGrid.innerHTML = cardsHtml;
+      if (tbody) tbody.innerHTML = rowsHtml;
 
-      tbody.querySelectorAll("[data-act-id]").forEach(btn => {
-        btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
-      });
-      tbody.querySelectorAll("[data-canc-id]").forEach(btn => {
-        btn.addEventListener("click", () => cancelSubscription(btn.getAttribute("data-canc-id"), btn));
-      });
-      tbody.querySelectorAll("[data-dates-id]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          openAdminDateModal(btn.getAttribute("data-dates-id"), btn.getAttribute("data-start"), btn.getAttribute("data-end"));
+      const bindActions = (container) => {
+        if (!container) return;
+        container.querySelectorAll("[data-act-id]").forEach(btn => {
+          btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
         });
-      });
+        container.querySelectorAll("[data-rej-id]").forEach(btn => {
+          btn.addEventListener("click", () => rejectSubscription(btn.getAttribute("data-rej-id"), btn));
+        });
+        container.querySelectorAll("[data-canc-id]").forEach(btn => {
+          btn.addEventListener("click", () => cancelSubscription(btn.getAttribute("data-canc-id"), btn));
+        });
+        container.querySelectorAll("[data-dates-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            openAdminDateModal(btn.getAttribute("data-dates-id"), btn.getAttribute("data-start"), btn.getAttribute("data-end"));
+          });
+        });
+        container.querySelectorAll("[data-renew-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            openAdminRenewModal({
+              id: btn.getAttribute("data-renew-id"),
+              user: btn.getAttribute("data-user"),
+              plan: btn.getAttribute("data-plan")
+            });
+          });
+        });
+        container.querySelectorAll("[data-extend-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            openAdminExtendModal({
+              id: btn.getAttribute("data-extend-id"),
+              user: btn.getAttribute("data-user"),
+              plan: btn.getAttribute("data-plan")
+            });
+          });
+        });
+      };
+
+      bindActions(cardsGrid);
+      bindActions(tbody);
     } catch (_) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Network error loading subscriptions.</td></tr>`;
+      if (cardsGrid) {
+        cardsGrid.innerHTML = `
+          <div class="admin-cards-state error-state">
+            <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+            <h4>Network Error Loading Subscriptions</h4>
+            <p>Unable to connect to the backend subscription service.</p>
+          </div>
+        `;
+      }
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Network error loading subscriptions.</td></tr>`;
     }
   }
 
-  // Load Operators / Users
+  // Load Operators / Users with Search and Filtering
+  // Load Operators / Users with Search, Role, Status, and Subscription Filtering
+  // Load Operators / Users with Responsive Card-Based Layout, Search, and Multi-Filtering
   async function loadAdminUsers() {
+    const cardsGrid = document.getElementById("adminUsersCardsGrid");
     const targetTbody = document.getElementById("adminUsersTbody");
-    const usersMetric = document.getElementById("adminMetricUsers");
-    if (!targetTbody) return;
+    const searchInput = document.getElementById("adminUserSearchInput");
+    const roleFilter = document.getElementById("adminUserRoleFilter");
+    const statusFilter = document.getElementById("adminUserStatusFilter");
+    const subStatusFilter = document.getElementById("adminUserSubStatusFilter");
+    if (!cardsGrid && !targetTbody) return;
 
-    targetTbody.innerHTML = `<tr><td colspan="7" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading operators...</td></tr>`;
+    if (cardsGrid) {
+      cardsGrid.innerHTML = `
+        <div class="admin-cards-state loading-state">
+          <div class="state-icon-wrap"><i class="fas fa-circle-notch fa-spin"></i></div>
+          <h4>Loading Operator Accounts...</h4>
+          <p>Fetching real-time user records and subscription statuses.</p>
+        </div>
+      `;
+    }
+    if (targetTbody) {
+      targetTbody.innerHTML = `<tr><td colspan="9" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading operators...</td></tr>`;
+    }
+
+    const searchVal = searchInput ? searchInput.value.trim() : "";
+    const roleVal = roleFilter ? roleFilter.value : "";
+    const statusVal = statusFilter ? statusFilter.value : "";
+    const subStatusVal = subStatusFilter ? subStatusFilter.value : "";
+
+    const params = new URLSearchParams();
+    if (searchVal) params.set("search", searchVal);
+    if (roleVal) params.set("role", roleVal);
+    if (statusVal) params.set("status", statusVal);
+    if (subStatusVal) params.set("sub_status", subStatusVal);
 
     try {
-      const res = await fetch("/api/admin/users", { credentials: "same-origin" });
+      const url = params.toString() ? `/api/admin/users?${params.toString()}` : `/api/admin/users`;
+      const res = await fetch(url, { credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok || data.status !== "success") {
-        targetTbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Unable to load operators.</td></tr>`;
+        const errorMsg = data.message || "Unable to load operators.";
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state error-state">
+              <div class="state-icon-wrap text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+              <h4>Unable to Load Operators</h4>
+              <p>${escapeHtml(errorMsg)}</p>
+              <button type="button" class="btn-admin-action activate" id="retryLoadUsersBtn"><i class="fas fa-rotate"></i> Try Again</button>
+            </div>
+          `;
+          const retryBtn = document.getElementById("retryLoadUsersBtn");
+          if (retryBtn) retryBtn.addEventListener("click", loadAdminUsers);
+        }
+        if (targetTbody) targetTbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">${escapeHtml(errorMsg)}</td></tr>`;
         return;
       }
 
       const users = data.users || [];
-      if (usersMetric) usersMetric.textContent = users.length;
+      if (users.length === 0) {
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state empty-state">
+              <div class="state-icon-wrap"><i class="fas fa-users-slash"></i></div>
+              <h4>No Operators Found</h4>
+              <p>No operator accounts match the active search query or filter criteria.</p>
+            </div>
+          `;
+        }
+        if (targetTbody) targetTbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fas fa-users-slash"></i> No operators match the query or filter criteria.</td></tr>`;
+        return;
+      }
 
-      let html = "";
+      let cardsHtml = "";
+      let rowsHtml = "";
+
       for (const u of users) {
         const isSelf = currentUser && currentUser.id === u.id;
-        const sub = u.active_subscription;
-        const subDisplay = sub ? `${sub.plan_id} (${sub.status})` : '<span class="text-muted">None</span>';
+        const sub = u.current_subscription;
+        const nameToUse = u.full_name || u.username || "Operator";
+        const initials = nameToUse.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "OP";
 
-        let modBtn = "";
-        if (!isSelf && u.role !== "Admin") {
-          if (u.is_active) {
-            modBtn = `<button type="button" class="btn-admin-action reject" data-user-toggle="${u.id}" data-action="suspend"><i class="fas fa-lock"></i> Suspend</button>`;
+        // Role Info
+        const isAdmin = u.role === "Admin";
+        const roleClass = isAdmin ? "admin" : "user";
+        const roleIcon = isAdmin ? "fa-shield-halved" : "fa-user";
+
+        // Account Status Info
+        const isActive = !!u.is_active;
+        const statusClass = isActive ? "active" : "suspended";
+        const statusIcon = isActive ? "fa-circle-check" : "fa-user-lock";
+        const statusLabel = isActive ? "Active" : "Suspended";
+
+        // Subscription Tier Info
+        let subStatusClass = "none";
+        let subStatusDisplay = "None";
+        let subPlanTitle = "No Active Subscription";
+        let subTimingText = "No active license assigned";
+
+        if (sub) {
+          subStatusClass = (sub.status || "active").toLowerCase();
+          subStatusDisplay = sub.status ? sub.status.charAt(0).toUpperCase() + sub.status.slice(1) : "Active";
+          subPlanTitle = sub.plan_name || (sub.status === "pending" ? "Pending Approval" : "Subscription Plan");
+          if (sub.end_date) {
+            subTimingText = `Expires ${formatUtcDate(sub.end_date)}`;
+          } else if (sub.status === "pending") {
+            subTimingText = "Awaiting admin provisioning";
           } else {
-            modBtn = `<button type="button" class="btn-admin-action activate" data-user-toggle="${u.id}" data-action="activate"><i class="fas fa-unlock"></i> Activate</button>`;
+            subTimingText = "Active ongoing license";
           }
-        } else {
-          modBtn = `<span class="text-muted">—</span>`;
         }
 
-        html += `
+        // Action Buttons for Card
+        let cardActionsHtml = `
+          <button type="button" class="btn-card-action btn-card-details" data-view-user="${u.id}" title="View operator dossier, credentials, and full subscription lifecycle">
+            <i class="fas fa-folder-open"></i> Details
+          </button>
+        `;
+
+        if (!isSelf) {
+          if (isActive) {
+            cardActionsHtml += `
+              <button type="button" class="btn-card-action btn-card-suspend" data-user-toggle="${u.id}" data-action="suspend" title="Suspend operator account and terminate active sessions">
+                <i class="fas fa-user-lock"></i> Suspend
+              </button>
+            `;
+          } else {
+            cardActionsHtml += `
+              <button type="button" class="btn-card-action btn-card-activate" data-user-toggle="${u.id}" data-action="activate" title="Reactivate operator account and permit login access">
+                <i class="fas fa-user-check"></i> Restore
+              </button>
+            `;
+          }
+
+          if (isAdmin) {
+            cardActionsHtml += `
+              <button type="button" class="btn-card-action btn-card-role-demote" data-user-role="${u.id}" data-new-role="User" title="Demote administrator to standard user">
+                <i class="fas fa-arrow-down"></i> Demote
+              </button>
+            `;
+          } else {
+            cardActionsHtml += `
+              <button type="button" class="btn-card-action btn-card-role-promote" data-user-role="${u.id}" data-new-role="Admin" title="Promote operator to Administrator">
+                <i class="fas fa-arrow-up"></i> Make Admin
+              </button>
+            `;
+          }
+
+          cardActionsHtml += `
+            <button type="button" class="btn-card-action btn-card-delete" data-delete-user="${u.id}" data-username="${escapeHtml(u.username)}" title="Delete or safely archive operator account">
+              <i class="fas fa-trash-can"></i>
+            </button>
+          `;
+        } else {
+          cardActionsHtml += `
+            <div class="user-card-self-badge">
+              <i class="fas fa-user-shield"></i> You (Current Account)
+            </div>
+          `;
+        }
+
+        // Card Template
+        cardsHtml += `
+          <div class="admin-user-card role-${roleClass} status-${statusClass}" id="adminUserCard_${u.id}">
+            <!-- Card Header: Identity & Badges -->
+            <div class="user-card-header">
+              <div class="user-card-identity">
+                <div class="user-card-avatar avatar-${roleClass}">
+                  <span class="avatar-initials">${initials}</span>
+                  <span class="avatar-status-pip pip-${statusClass}" title="Status: ${statusLabel}"></span>
+                </div>
+                <div class="user-card-names">
+                  <div class="user-card-title-row">
+                    <h4 class="user-card-username" title="${escapeHtml(u.username)}">${escapeHtml(u.username)}</h4>
+                    <span class="user-id-chip">#${u.id}</span>
+                  </div>
+                  <div class="user-card-fullname">${escapeHtml(u.full_name || 'No display name configured')}</div>
+                </div>
+              </div>
+              <div class="user-card-badge-col">
+                <span class="user-role-badge role-${roleClass}">
+                  <i class="fas ${roleIcon}"></i> ${escapeHtml(u.role)}
+                </span>
+                <span class="user-status-pill status-${statusClass}">
+                  <i class="fas ${statusIcon}"></i> ${statusLabel}
+                </span>
+              </div>
+            </div>
+
+            <!-- Card Body: Contact & Activity Meta -->
+            <div class="user-card-body">
+              <div class="user-card-meta-list">
+                <div class="user-card-meta-item" title="${escapeHtml(u.email)}">
+                  <i class="fas fa-envelope meta-icon"></i>
+                  <span class="meta-text text-truncate">${escapeHtml(u.email)}</span>
+                </div>
+                <div class="user-card-meta-row">
+                  <div class="user-card-meta-item" title="Registration Date">
+                    <i class="fas fa-calendar-plus meta-icon"></i>
+                    <span class="meta-text"><small class="text-muted">Joined:</small> ${formatUtcDate(u.created_at)}</span>
+                  </div>
+                  <div class="user-card-meta-item" title="Last Login Timestamp">
+                    <i class="fas fa-clock meta-icon"></i>
+                    <span class="meta-text"><small class="text-muted">Last Login:</small> ${u.last_login_at ? formatUtcDate(u.last_login_at) : 'Never'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subscription Tier Box -->
+              <div class="user-card-sub-box sub-box-${subStatusClass}">
+                <div class="user-card-sub-top">
+                  <span class="sub-tier-label" title="${escapeHtml(subPlanTitle)}">
+                    <i class="fas fa-id-card"></i> ${escapeHtml(subPlanTitle)}
+                  </span>
+                  <span class="card-sub-badge sub-${subStatusClass}">${escapeHtml(subStatusDisplay)}</span>
+                </div>
+                <div class="user-card-sub-bottom">
+                  <span class="sub-timing-text"><i class="fas fa-hourglass-half"></i> ${subTimingText}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dedicated Actions Area -->
+            <div class="user-card-actions">
+              ${cardActionsHtml}
+            </div>
+          </div>
+        `;
+
+        // Synchronize fallback table row for backward compatibility
+        rowsHtml += `
           <tr>
+            <td><code>#${u.id}</code></td>
             <td><strong>${escapeHtml(u.username)}</strong>${u.full_name ? `<br><small class="text-muted">${escapeHtml(u.full_name)}</small>` : ''}</td>
             <td>${escapeHtml(u.email)}</td>
-            <td><span class="user-role-badge ${u.role === 'Admin' ? 'admin-badge' : ''}">${escapeHtml(u.role)}</span></td>
-            <td><span class="sub-badge ${u.is_active ? 'active' : 'expired'}">${u.is_active ? 'Active' : 'Suspended'}</span></td>
+            <td><span class="user-role-badge ${isAdmin ? 'admin-badge' : ''}">${escapeHtml(u.role)}</span></td>
+            <td><span class="sub-badge ${isActive ? 'active' : 'expired'}">${statusLabel}</span></td>
+            <td>${u.last_login_at ? formatUtcDate(u.last_login_at) : 'Never'}</td>
             <td>${formatUtcDate(u.created_at)}</td>
-            <td>${subDisplay}</td>
-            <td>${modBtn}</td>
+            <td>${escapeHtml(subPlanTitle)}</td>
+            <td>${cardActionsHtml}</td>
           </tr>
         `;
       }
 
-      targetTbody.innerHTML = html;
+      if (cardsGrid) cardsGrid.innerHTML = cardsHtml;
+      if (targetTbody) targetTbody.innerHTML = rowsHtml;
 
-      targetTbody.querySelectorAll("[data-user-toggle]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const uid = btn.getAttribute("data-user-toggle");
-          const action = btn.getAttribute("data-action");
-          toggleUserActive(uid, action === "activate", btn);
+      // Bind Event Listeners across Cards Grid and Table
+      const containers = [cardsGrid, targetTbody].filter(Boolean);
+      containers.forEach(container => {
+        container.querySelectorAll("[data-view-user]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            openAdminUserDetails(btn.getAttribute("data-view-user"));
+          });
+        });
+
+        container.querySelectorAll("[data-user-toggle]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const uid = btn.getAttribute("data-user-toggle");
+            const action = btn.getAttribute("data-action");
+            toggleUserActive(uid, action === "activate", btn);
+          });
+        });
+
+        container.querySelectorAll("[data-user-role]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const uid = btn.getAttribute("data-user-role");
+            const newRole = btn.getAttribute("data-new-role");
+            toggleUserRole(uid, newRole, btn);
+          });
+        });
+
+        container.querySelectorAll("[data-delete-user]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const uid = btn.getAttribute("data-delete-user");
+            const username = btn.getAttribute("data-username");
+            deleteAdminUser(uid, username, btn);
+          });
         });
       });
-    } catch (_) {
-      targetTbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Network error loading operators.</td></tr>`;
+
+    } catch (err) {
+      if (cardsGrid) {
+        cardsGrid.innerHTML = `
+          <div class="admin-cards-state error-state">
+            <div class="state-icon-wrap text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+            <h4>Network Error Loading Operators</h4>
+            <p>Could not connect to server. Please verify network connectivity and try again.</p>
+            <button type="button" class="btn-admin-action activate" id="retryLoadUsersBtn"><i class="fas fa-rotate"></i> Try Again</button>
+          </div>
+        `;
+        const retryBtn = document.getElementById("retryLoadUsersBtn");
+        if (retryBtn) retryBtn.addEventListener("click", loadAdminUsers);
+      }
+      if (targetTbody) targetTbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">Network error loading operators.</td></tr>`;
     }
   }
 
-  // Load Plan Catalog for Admin
+  // Operator Moderation Handlers: Toggle Active Status
+  async function toggleUserActive(userId, targetActive, btn) {
+    if (!userId) return;
+    const actionText = targetActive ? "reactivate" : "suspend";
+    if (!targetActive) {
+      if (!confirm("Are you sure you want to suspend this operator account? Active sessions will be terminated and login access will be blocked.")) return;
+    }
+    const origHtml = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ is_active: targetActive })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || `Failed to ${actionText} operator.`);
+      } else {
+        if (typeof showToast === "function") showToast(data.message || `Account ${actionText}d successfully.`, "success");
+      }
+      await loadAdminUsers();
+      if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+    } catch (_) {
+      alert(`Network error attempting to ${actionText} account.`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+    }
+  }
+
+  // Operator Moderation Handlers: Delete / Archive Account
+  async function deleteAdminUser(userId, username, btn) {
+    if (!userId) return;
+    const confirmed = confirm(`Are you sure you want to delete or archive operator '${username || '#' + userId}'?\n\nIf the operator has historical subscriptions, the account will be safely archived to preserve audit integrity. Otherwise, it will be permanently deleted.`);
+    if (!confirmed) return;
+    const origHtml = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+        credentials: "same-origin"
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || "Failed to delete/archive user.");
+      } else {
+        if (typeof showToast === "function") showToast(data.message || "User account successfully processed.", "success");
+        await loadAdminUsers();
+        if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+      }
+    } catch (_) {
+      alert("Network error processing user deletion.");
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+    }
+  }
+
+  // Operator Dossier Modal Controller
+  const adminUserDetailsModal = document.getElementById("adminUserDetailsModal");
+  const adminUserDetailsModalCloseBtn = document.getElementById("adminUserDetailsModalCloseBtn");
+  const adminUserDetailsModalBackdrop = document.getElementById("adminUserDetailsModalBackdrop");
+  const adminUserDetailsAlert = document.getElementById("adminUserDetailsAlert");
+
+  async function openAdminUserDetails(userId) {
+    if (!adminUserDetailsModal || !userId) return;
+    if (adminUserDetailsAlert) adminUserDetailsAlert.style.display = "none";
+    adminUserDetailsModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+
+    const dId = document.getElementById("dossierUserId");
+    const dUser = document.getElementById("dossierUsername");
+    const dEmail = document.getElementById("dossierEmail");
+    const dName = document.getElementById("dossierFullName");
+    const dRole = document.getElementById("dossierRole");
+    const dStatus = document.getElementById("dossierStatus");
+    const dCreated = document.getElementById("dossierCreated");
+    const dLogin = document.getElementById("dossierLastLogin");
+    const actionsToolbar = document.getElementById("adminDossierActions");
+    const historyTbody = document.getElementById("adminUserSubsHistoryTbody");
+
+    if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading subscription history...</td></tr>`;
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.user) {
+        if (adminUserDetailsAlert) {
+          adminUserDetailsAlert.className = "auth-alert error";
+          adminUserDetailsAlert.textContent = data.message || "Failed to load operator record.";
+          adminUserDetailsAlert.style.display = "block";
+        }
+        return;
+      }
+
+      const u = data.user;
+      if (dId) dId.textContent = `#${u.id}`;
+      if (dUser) dUser.textContent = u.username;
+      if (dEmail) dEmail.textContent = u.email;
+      if (dName) dName.textContent = u.full_name || "—";
+      if (dRole) dRole.textContent = u.role;
+      if (dStatus) {
+        dStatus.textContent = u.is_active ? "Active" : "Suspended";
+        dStatus.className = u.is_active ? "dossier-val text-success" : "dossier-val text-danger";
+      }
+      if (dCreated) dCreated.textContent = formatUtcDate(u.created_at);
+      if (dLogin) dLogin.textContent = u.last_login_at ? formatUtcDate(u.last_login_at) : "Never Logged In";
+
+      // Populate Admin Edit Inputs
+      const editNameInput = document.getElementById("adminUserEditFullName");
+      const editEmailInput = document.getElementById("adminUserEditEmail");
+      const editSaveBtn = document.getElementById("adminUserEditSaveBtn");
+      const editMsg = document.getElementById("adminUserEditMsg");
+      if (editNameInput) editNameInput.value = u.full_name || "";
+      if (editEmailInput) editEmailInput.value = u.email || "";
+      if (editMsg) editMsg.style.display = "none";
+      if (editSaveBtn) {
+        editSaveBtn.onclick = async () => {
+          const fn = editNameInput ? editNameInput.value.trim() : "";
+          const em = editEmailInput ? editEmailInput.value.trim() : "";
+          editSaveBtn.disabled = true;
+          editSaveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+          try {
+            const resp = await fetch(`/api/admin/users/${u.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({ full_name: fn, email: em })
+            });
+            const rData = await resp.json();
+            if (resp.ok && rData.status === "success") {
+              if (editMsg) {
+                editMsg.style.display = "block";
+                editMsg.style.background = "rgba(16, 185, 129, 0.15)";
+                editMsg.style.color = "#10B981";
+                editMsg.textContent = rData.message || "Profile updated successfully.";
+              }
+              openAdminUserDetails(u.id);
+              if (typeof loadAdminUsers === "function") loadAdminUsers();
+            } else {
+              if (editMsg) {
+                editMsg.style.display = "block";
+                editMsg.style.background = "rgba(239, 68, 68, 0.15)";
+                editMsg.style.color = "#EF4444";
+                editMsg.textContent = rData.message || "Update failed.";
+              }
+            }
+          } catch (err) {
+            if (editMsg) {
+              editMsg.style.display = "block";
+              editMsg.style.background = "rgba(239, 68, 68, 0.15)";
+              editMsg.style.color = "#EF4444";
+              editMsg.textContent = "Network error updating profile.";
+            }
+          } finally {
+            editSaveBtn.disabled = false;
+            editSaveBtn.innerHTML = '<i class="fas fa-save"></i> Save Profile';
+          }
+        };
+      }
+
+      // Render Modal Actions
+      const isSelf = currentUser && currentUser.id === u.id;
+      if (actionsToolbar) {
+        if (isSelf) {
+          actionsToolbar.innerHTML = `<span class="text-muted"><i class="fas fa-info-circle"></i> This is your currently authenticated Administrator account.</span>`;
+        } else {
+          actionsToolbar.innerHTML = `
+            <button type="button" class="btn-admin-action ${u.is_active ? 'reject' : 'activate'}" id="dossierToggleStatusBtn">
+              <i class="fas ${u.is_active ? 'fa-user-lock' : 'fa-user-check'}"></i> ${u.is_active ? 'Suspend Account' : 'Reactivate Account'}
+            </button>
+            <button type="button" class="btn-admin-action cancel" id="dossierToggleRoleBtn">
+              <i class="fas ${u.role === 'Admin' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i> ${u.role === 'Admin' ? 'Demote to User' : 'Promote to Admin'}
+            </button>
+            <button type="button" class="btn-admin-action" id="dossierDeleteBtn" style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);">
+              <i class="fas fa-trash-can"></i> Delete / Archive Account
+            </button>
+          `;
+          const toggleStatusBtn = document.getElementById("dossierToggleStatusBtn");
+          if (toggleStatusBtn) {
+            toggleStatusBtn.addEventListener("click", () => {
+              toggleUserActive(u.id, !u.is_active, toggleStatusBtn).then(() => openAdminUserDetails(u.id));
+            });
+          }
+          const toggleRoleBtn = document.getElementById("dossierToggleRoleBtn");
+          if (toggleRoleBtn) {
+            toggleRoleBtn.addEventListener("click", () => {
+              const targetRole = u.role === "Admin" ? "User" : "Admin";
+              toggleUserRole(u.id, targetRole, toggleRoleBtn).then(() => openAdminUserDetails(u.id));
+            });
+          }
+          const deleteBtn = document.getElementById("dossierDeleteBtn");
+          if (deleteBtn) {
+            deleteBtn.addEventListener("click", async () => {
+              if (!confirm(`Are you sure you want to remove or archive operator '${u.username}'? Subscriptions will be preserved.`)) return;
+              deleteBtn.disabled = true;
+              try {
+                const dRes = await fetch(`/api/admin/users/${u.id}`, {
+                  method: "DELETE",
+                  credentials: "same-origin"
+                });
+                const dData = await dRes.json();
+                if (dRes.ok && dData.status === "success") {
+                  if (typeof showToast === "function") showToast(dData.message, "success");
+                  if (adminUserDetailsModal) adminUserDetailsModal.style.display = "none";
+                  document.body.style.overflow = "";
+                  if (typeof loadAdminUsers === "function") loadAdminUsers();
+                  if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+                } else {
+                  alert(dData.message || "Failed to delete/archive user.");
+                }
+              } catch (err) {
+                alert("Network error processing user deletion.");
+              } finally {
+                deleteBtn.disabled = false;
+              }
+            });
+          }
+        }
+      }
+
+      // Render Subscriptions History
+      const subs = u.subscriptions || [];
+      if (historyTbody) {
+        if (subs.length === 0) {
+          historyTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted">No historical subscription records found.</td></tr>`;
+        } else {
+          let hHtml = "";
+          for (const s of subs) {
+            const bClass = s.status === "active" ? "active" : (s.status === "pending" ? "pending" : (s.status === "expired" ? "expired" : "canceled"));
+            hHtml += `
+              <tr>
+                <td><strong>#${s.id}</strong></td>
+                <td>${escapeHtml(s.plan_name || s.plan_code || 'Plan')}</td>
+                <td><span class="sub-badge ${bClass}">${escapeHtml(s.status)}</span></td>
+                <td>${formatUtcDate(s.start_date)}</td>
+                <td>${formatUtcDate(s.end_date)}</td>
+                <td><small class="text-muted">${escapeHtml(s.admin_notes || s.cancellation_reason || '—')}</small></td>
+              </tr>
+            `;
+          }
+          historyTbody.innerHTML = hHtml;
+        }
+      }
+    } catch (_) {
+      if (adminUserDetailsAlert) {
+        adminUserDetailsAlert.className = "auth-alert error";
+        adminUserDetailsAlert.textContent = "Network error loading dossier.";
+        adminUserDetailsAlert.style.display = "block";
+      }
+    }
+  }
+
+  if (adminUserDetailsModalCloseBtn) {
+    adminUserDetailsModalCloseBtn.addEventListener("click", () => {
+      if (adminUserDetailsModal) adminUserDetailsModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+  if (adminUserDetailsModalBackdrop) {
+    adminUserDetailsModalBackdrop.addEventListener("click", () => {
+      if (adminUserDetailsModal) adminUserDetailsModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+
+
+
+  // Load Plan Catalog for Admin with Responsive Card-Based Layout and Fallback Table Sync
+  let adminPlansCache = [];
   async function loadAdminPlans() {
+    const cardsGrid = document.getElementById("adminPlansCardsGrid");
     const tbody = document.getElementById("adminPlansTbody");
     const plansMetric = document.getElementById("adminMetricPlans");
-    if (!tbody) return;
+    if (!cardsGrid && !tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading plans...</td></tr>`;
+    if (cardsGrid) {
+      cardsGrid.innerHTML = `
+        <div class="admin-cards-state loading-state">
+          <div class="state-icon-wrap"><i class="fas fa-circle-notch fa-spin"></i></div>
+          <h4>Loading Subscription Plans...</h4>
+          <p>Fetching active and archived plan specifications.</p>
+        </div>
+      `;
+    }
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading plans...</td></tr>`;
+    }
 
     try {
       const res = await fetch("/api/admin/plans", { credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok || data.status !== "success") {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Unable to load plans.</td></tr>`;
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state error-state">
+              <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+              <h4>Unable to Load Plans</h4>
+              <p>${escapeHtml(data.message || "Failed to retrieve subscription plan catalog.")}</p>
+            </div>
+          `;
+        }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">Unable to load plans.</td></tr>`;
         return;
       }
 
       const plans = data.plans || [];
+      adminPlansCache = plans;
       if (plansMetric) plansMetric.textContent = plans.filter(p => p.is_active).length;
 
-      let html = "";
+      if (plans.length === 0) {
+        if (cardsGrid) {
+          cardsGrid.innerHTML = `
+            <div class="admin-cards-state empty-state">
+              <div class="state-icon-wrap"><i class="fas fa-layer-group"></i></div>
+              <h4>No Subscription Plans Configured</h4>
+              <p>No plans have been created yet. Click "Create New Plan" to configure your first subscription tier.</p>
+            </div>
+          `;
+        }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">No plans configured yet. Click "Create New Plan" to add one.</td></tr>`;
+        return;
+      }
+
+      let cardsHtml = "";
+      let rowsHtml = "";
       for (const p of plans) {
-        const priceStr = `$${p.price.toFixed(2)}`;
-        const durationStr = `${p.duration_days} Days`;
+        const codeDisplay = p.plan_code || p.id;
+        const priceStr = `${escapeHtml(p.currency || 'USD')} ${p.price === 0 ? 'Free' : '$' + p.price.toFixed(2)}`;
+        const durationStr = `${p.duration_value} ${p.duration_unit || 'days'}`;
         const f = p.features || {};
         const feats = [];
         if (f.can_live_monitoring) feats.push("Live Telemetry");
         if (f.can_port_scan) feats.push("Port Scanner");
         if (f.can_network_discovery) feats.push("Network Discovery");
         const featsStr = feats.join(", ") || "None";
+        const subsCount = p.total_subscribers ?? p.subscribers_count ?? 0;
+        const activeSubsCount = p.active_subscribers ?? 0;
 
-        html += `
+        cardsHtml += `
+          <div class="admin-plan-card ${p.is_active ? 'plan-active' : 'plan-archived'}" data-card-plan-id="${p.id}">
+            <div class="plan-card-header">
+              <div class="plan-code-wrap">
+                <span class="plan-code-chip">${escapeHtml(codeDisplay)}</span>
+                <span class="sub-badge ${p.is_active ? 'active' : 'expired'}">
+                  <i class="fas ${p.is_active ? 'fa-circle-check' : 'fa-archive'}"></i>
+                  ${p.is_active ? 'Active' : 'Archived'}
+                </span>
+              </div>
+              <h3 class="plan-card-name">${escapeHtml(p.name)}</h3>
+              ${p.description ? `<p class="plan-card-desc">${escapeHtml(p.description)}</p>` : '<p class="plan-card-desc text-muted italic">No public description provided.</p>'}
+            </div>
+            <div class="plan-card-pricing">
+              <div class="plan-price-wrap">
+                <span class="plan-price-val">${p.price === 0 ? 'Free' : '$' + p.price.toFixed(2)}</span>
+                <span class="plan-price-term">${p.price === 0 ? '' : escapeHtml(p.currency || 'USD')} / ${escapeHtml(durationStr)}</span>
+              </div>
+              <div class="plan-sub-badge" title="${activeSubsCount} active subscriber(s) out of ${subsCount} total">
+                <i class="fas fa-users"></i> ${subsCount} subscribers <span class="active-count">(${activeSubsCount} active)</span>
+              </div>
+            </div>
+            <div class="plan-card-features">
+              <span class="plan-features-title"><i class="fas fa-shield-halved"></i> Entitlements & Features:</span>
+              <ul class="plan-features-list">
+                <li class="${f.can_live_monitoring ? 'enabled' : 'disabled'}">
+                  <i class="fas ${f.can_live_monitoring ? 'fa-check' : 'fa-xmark'}"></i> Live Telemetry & Monitoring
+                </li>
+                <li class="${f.can_port_scan ? 'enabled' : 'disabled'}">
+                  <i class="fas ${f.can_port_scan ? 'fa-check' : 'fa-xmark'}"></i> Port Vulnerability Scanner
+                </li>
+                <li class="${f.can_network_discovery ? 'enabled' : 'disabled'}">
+                  <i class="fas ${f.can_network_discovery ? 'fa-check' : 'fa-xmark'}"></i> Network Discovery & Mapping
+                </li>
+              </ul>
+            </div>
+            <div class="plan-card-footer">
+              <button type="button" class="btn-admin-action dates" data-plan-edit-id="${p.id}" title="Edit plan parameters">
+                <i class="fas fa-pen-to-square"></i> Edit
+              </button>
+              <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}" title="${p.is_active ? 'Deactivate and archive plan' : 'Restore and activate plan'}">
+                ${p.is_active ? '<i class="fas fa-power-off"></i> Archive' : '<i class="fas fa-check"></i> Restore'}
+              </button>
+              <button type="button" class="btn-admin-action cancel" data-plan-delete-id="${p.id}" data-plan-name="${escapeHtml(p.name)}" data-plan-subs="${subsCount}" title="Delete or Archive Plan">
+                <i class="fas fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+        `;
+
+        rowsHtml += `
           <tr>
-            <td><code>${escapeHtml(p.id)}</code></td>
+            <td><code>${escapeHtml(codeDisplay)}</code></td>
             <td><strong>${escapeHtml(p.name)}</strong></td>
             <td>${priceStr}</td>
             <td>${durationStr}</td>
             <td><small>${escapeHtml(featsStr)}</small></td>
-            <td><span class="sub-badge ${p.is_active ? 'active' : 'expired'}">${p.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td><span class="sub-badge ${subsCount > 0 ? 'active' : 'expired'}" title="${activeSubsCount} currently active"><i class="fas fa-users"></i> ${subsCount} (${activeSubsCount} active)</span></td>
+            <td><span class="sub-badge ${p.is_active ? 'active' : 'expired'}">${p.is_active ? 'Active' : 'Archived'}</span></td>
             <td>
               <div class="admin-action-btn-group">
-                <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}">
-                  ${p.is_active ? '<i class="fas fa-power-off"></i> Deactivate' : '<i class="fas fa-check"></i> Activate'}
+                <button type="button" class="btn-admin-action dates" data-plan-edit-id="${p.id}" title="Edit plan parameters">
+                  <i class="fas fa-pen-to-square"></i> Edit
+                </button>
+                <button type="button" class="btn-admin-action ${p.is_active ? 'reject' : 'activate'}" data-plan-status-id="${p.id}" data-new-status="${!p.is_active}" title="${p.is_active ? 'Deactivate' : 'Activate'} plan">
+                  ${p.is_active ? '<i class="fas fa-power-off"></i> Archive' : '<i class="fas fa-check"></i> Restore'}
+                </button>
+                <button type="button" class="btn-admin-action cancel" data-plan-delete-id="${p.id}" data-plan-name="${escapeHtml(p.name)}" data-plan-subs="${subsCount}" title="Delete or Archive Plan">
+                  <i class="fas fa-trash-can"></i>
                 </button>
               </div>
             </td>
@@ -5487,144 +7244,196 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
       }
 
-      tbody.innerHTML = html;
+      if (cardsGrid) cardsGrid.innerHTML = cardsHtml;
+      if (tbody) tbody.innerHTML = rowsHtml;
 
-      tbody.querySelectorAll("[data-plan-status-id]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const pid = btn.getAttribute("data-plan-status-id");
-          const nst = btn.getAttribute("data-new-status") === "true";
-          togglePlanActive(pid, nst, btn);
+      const bindActions = (container) => {
+        if (!container) return;
+        container.querySelectorAll("[data-plan-edit-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const pid = parseInt(btn.getAttribute("data-plan-edit-id"), 10);
+            const targetPlan = adminPlansCache.find(x => x.id === pid);
+            if (targetPlan) openEditPlanModal(targetPlan);
+          });
         });
-      });
+
+        container.querySelectorAll("[data-plan-status-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const pid = btn.getAttribute("data-plan-status-id");
+            const nst = btn.getAttribute("data-new-status") === "true";
+            togglePlanActive(pid, nst, btn);
+          });
+        });
+
+        container.querySelectorAll("[data-plan-delete-id]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const pid = btn.getAttribute("data-plan-delete-id");
+            const name = btn.getAttribute("data-plan-name");
+            const subs = parseInt(btn.getAttribute("data-plan-subs") || "0", 10);
+            deletePlan(pid, name, subs);
+          });
+        });
+      };
+
+      bindActions(cardsGrid);
+      bindActions(tbody);
     } catch (_) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Network error loading plans.</td></tr>`;
-    }
-  }
-
-  // Load Audit Logs
-  async function loadAdminAuditLogs() {
-    const tbody = document.getElementById("adminAuditTbody");
-    if (!tbody) return;
-
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading audit logs...</td></tr>`;
-
-    try {
-      const res = await fetch("/api/admin/audit-logs", { credentials: "same-origin" });
-      const data = await res.json();
-      if (!res.ok || data.status !== "success") {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Unable to load audit logs.</td></tr>`;
-        return;
-      }
-
-      const logs = data.audit_logs || [];
-      if (logs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">No audit events recorded yet.</td></tr>`;
-        return;
-      }
-
-      let html = "";
-      for (const l of logs) {
-        const actorName = l.actor ? l.actor.username : (l.actor_id ? `User #${l.actor_id}` : "System / Self");
-        const detailsStr = l.details ? JSON.stringify(l.details) : "—";
-
-        html += `
-          <tr>
-            <td><code>${formatUtcDate(l.timestamp)}</code></td>
-            <td><span class="sub-badge active">${escapeHtml(l.action)}</span></td>
-            <td>User #${l.user_id}</td>
-            <td>${l.subscription_id ? `Sub #${l.subscription_id}` : '—'}</td>
-            <td>${escapeHtml(actorName)}</td>
-            <td><small class="text-muted" style="max-width:240px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(detailsStr)}</small></td>
-          </tr>
+      if (cardsGrid) {
+        cardsGrid.innerHTML = `
+          <div class="admin-cards-state error-state">
+            <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+            <h4>Network Error Loading Plans</h4>
+            <p>Unable to connect to the backend plan catalog service.</p>
+          </div>
         `;
       }
-
-      tbody.innerHTML = html;
-    } catch (_) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Network error loading audit logs.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">Network error loading plans.</td></tr>`;
     }
   }
 
-  // Admin Action Handlers
-  async function activateSubscription(subId, btn) {
-    if (!subId) return;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
-    try {
-      const res = await fetch(`/api/admin/subscriptions/${subId}/activate`, {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (res.ok) {
-        loadAdminRequests();
-        loadAdminSubscriptions();
-      }
-    } catch (_) {}
+  function openCreatePlanModal() {
+    if (!adminPlanModal) return;
+    const modalTitle = document.getElementById("adminPlanModalTitle");
+    const modeInput = document.getElementById("planFormMode");
+    const dbIdInput = document.getElementById("planFormDbId");
+    const codeInput = document.getElementById("planFormCode");
+    const nameInput = document.getElementById("planFormName");
+    const descInput = document.getElementById("planFormDescription");
+    const priceInput = document.getElementById("planFormPrice");
+    const currInput = document.getElementById("planFormCurrency");
+    const durValInput = document.getElementById("planFormDurationValue");
+    const durUnitInput = document.getElementById("planFormDurationUnit");
+    const monCheck = document.getElementById("planFormCanLiveMonitoring");
+    const portCheck = document.getElementById("planFormCanPortScan");
+    const ndCheck = document.getElementById("planFormCanNetworkDiscovery");
+    const activeCheck = document.getElementById("planFormIsActive");
+
+    if (modalTitle) modalTitle.textContent = "Create Subscription Plan";
+    if (modeInput) modeInput.value = "create";
+    if (dbIdInput) dbIdInput.value = "";
+    if (codeInput) { codeInput.value = ""; codeInput.disabled = false; }
+    if (nameInput) nameInput.value = "";
+    if (descInput) descInput.value = "";
+    if (priceInput) priceInput.value = "49.00";
+    if (currInput) currInput.value = "USD";
+    if (durValInput) durValInput.value = "30";
+    if (durUnitInput) durUnitInput.value = "days";
+    if (monCheck) monCheck.checked = true;
+    if (portCheck) portCheck.checked = true;
+    if (ndCheck) ndCheck.checked = false;
+    if (activeCheck) activeCheck.checked = true;
+
+    if (adminPlanAlert) adminPlanAlert.style.display = "none";
+    adminPlanModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
   }
 
-  async function rejectSubscription(subId, btn) {
-    if (!subId) return;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
-    try {
-      const res = await fetch(`/api/admin/subscriptions/${subId}/reject`, {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (res.ok) {
-        loadAdminRequests();
-        loadAdminSubscriptions();
-      }
-    } catch (_) {}
+  function openEditPlanModal(plan) {
+    if (!adminPlanModal || !plan) return;
+    const modalTitle = document.getElementById("adminPlanModalTitle");
+    const modeInput = document.getElementById("planFormMode");
+    const dbIdInput = document.getElementById("planFormDbId");
+    const codeInput = document.getElementById("planFormCode");
+    const nameInput = document.getElementById("planFormName");
+    const descInput = document.getElementById("planFormDescription");
+    const priceInput = document.getElementById("planFormPrice");
+    const currInput = document.getElementById("planFormCurrency");
+    const durValInput = document.getElementById("planFormDurationValue");
+    const durUnitInput = document.getElementById("planFormDurationUnit");
+    const monCheck = document.getElementById("planFormCanLiveMonitoring");
+    const portCheck = document.getElementById("planFormCanPortScan");
+    const ndCheck = document.getElementById("planFormCanNetworkDiscovery");
+    const activeCheck = document.getElementById("planFormIsActive");
+
+    if (modalTitle) modalTitle.textContent = `Edit Plan: ${plan.name}`;
+    if (modeInput) modeInput.value = "edit";
+    if (dbIdInput) dbIdInput.value = plan.id;
+    if (codeInput) { codeInput.value = plan.plan_code || plan.id; codeInput.disabled = true; }
+    if (nameInput) nameInput.value = plan.name || "";
+    if (descInput) descInput.value = plan.description || "";
+    if (priceInput) priceInput.value = plan.price !== undefined ? plan.price : "0";
+    if (currInput) currInput.value = plan.currency || "USD";
+    if (durValInput) durValInput.value = plan.duration_value || 30;
+    if (durUnitInput) durUnitInput.value = plan.duration_unit || "days";
+
+    const f = plan.features || {};
+    if (monCheck) monCheck.checked = Boolean(f.can_live_monitoring);
+    if (portCheck) portCheck.checked = Boolean(f.can_port_scan);
+    if (ndCheck) ndCheck.checked = Boolean(f.can_network_discovery);
+    if (activeCheck) activeCheck.checked = Boolean(plan.is_active);
+
+    if (adminPlanAlert) adminPlanAlert.style.display = "none";
+    adminPlanModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
   }
 
-  async function cancelSubscription(subId, btn) {
-    if (!subId) return;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
-    try {
-      const res = await fetch(`/api/admin/subscriptions/${subId}/cancel`, {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (res.ok) {
-        loadAdminSubscriptions();
-      }
-    } catch (_) {}
-  }
-
-  async function toggleUserActive(userId, makeActive, btn) {
-    if (!userId) return;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ is_active: makeActive })
-      });
-      if (res.ok) {
-        loadAdminUsers();
-      }
-    } catch (_) {}
-  }
-
-  async function togglePlanActive(planId, makeActive, btn) {
+  async function deletePlan(planId, name, subsCount) {
     if (!planId) return;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
+    const msg = subsCount > 0 
+      ? `Plan "${name}" has ${subsCount} associated subscription(s).\n\nTo preserve historical data integrity, this plan will be safely archived (deactivated) rather than permanently removed.\n\nProceed with archiving?`
+      : `Are you sure you want to permanently delete plan "${name}"? This operation cannot be undone.`;
+
+    if (!confirm(msg)) return;
+
+    try {
+      const res = await fetch(`/api/admin/plans/${planId}`, {
+        method: "DELETE",
+        credentials: "same-origin"
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || "Failed to remove plan.");
+      }
+      loadAdminPlans();
+      loadAdminMetrics();
+      loadPublicHomepagePlans();
+    } catch (_) {
+      alert("Network error processing plan removal.");
+    }
+  }
+
+  async function togglePlanActive(planId, newStatus, btn) {
+    if (!planId) return;
+    const actionLabel = newStatus ? "restore and activate" : "archive (deactivate)";
+    if (!confirm(`Are you sure you want to ${actionLabel} plan #${planId}?\n\n${newStatus ? "The plan will become visible for subscription requests." : "The plan will be hidden from public selection, but existing subscribers will retain their terms."}`)) {
+      return;
+    }
+
+    const originalContent = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+    }
+
     try {
       const res = await fetch(`/api/admin/plans/${planId}/status`, {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ is_active: makeActive })
+        body: JSON.stringify({ is_active: newStatus })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
         loadAdminPlans();
+        loadAdminMetrics();
+        loadPublicHomepagePlans();
+      } else {
+        alert(data.message || "Failed to update plan status.");
       }
-    } catch (_) {}
+    } catch (_) {
+      alert("Network error updating plan status.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+      }
+    }
   }
 
   // Admin Modals Handlers
   const adminPlanModal = document.getElementById("adminPlanModal");
   const adminPlanModalCloseBtn = document.getElementById("adminPlanModalCloseBtn");
+  const adminPlanCancelBtn = document.getElementById("adminPlanCancelBtn");
   const adminPlanModalBackdrop = document.getElementById("adminPlanModalBackdrop");
   const adminCreatePlanBtn = document.getElementById("adminCreatePlanBtn");
   const adminPlanForm = document.getElementById("adminPlanForm");
@@ -5632,14 +7441,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (adminCreatePlanBtn) {
     adminCreatePlanBtn.addEventListener("click", () => {
-      if (adminPlanForm) adminPlanForm.reset();
-      if (adminPlanAlert) adminPlanAlert.style.display = "none";
-      if (adminPlanModal) adminPlanModal.style.display = "flex";
-      document.body.style.overflow = "hidden";
+      openCreatePlanModal();
     });
   }
   if (adminPlanModalCloseBtn) {
     adminPlanModalCloseBtn.addEventListener("click", () => {
+      if (adminPlanModal) adminPlanModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+  if (adminPlanCancelBtn) {
+    adminPlanCancelBtn.addEventListener("click", () => {
       if (adminPlanModal) adminPlanModal.style.display = "none";
       document.body.style.overflow = "";
     });
@@ -5654,47 +7466,85 @@ document.addEventListener("DOMContentLoaded", () => {
   if (adminPlanForm) {
     adminPlanForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const id = document.getElementById("planFormId")?.value?.trim();
+      const mode = document.getElementById("planFormMode")?.value || "create";
+      const dbId = document.getElementById("planFormDbId")?.value;
+      const planCode = document.getElementById("planFormCode")?.value?.trim();
       const name = document.getElementById("planFormName")?.value?.trim();
       const description = document.getElementById("planFormDescription")?.value?.trim();
       const price = parseFloat(document.getElementById("planFormPrice")?.value || "0");
-      const duration_days = parseInt(document.getElementById("planFormDurationDays")?.value || "30", 10);
+      const currency = document.getElementById("planFormCurrency")?.value?.trim() || "USD";
+      const durationValue = parseInt(document.getElementById("planFormDurationValue")?.value || "30", 10);
+      const durationUnit = document.getElementById("planFormDurationUnit")?.value || "days";
       const canLiveMonitoring = document.getElementById("planFormCanLiveMonitoring")?.checked ?? true;
       const canPortScan = document.getElementById("planFormCanPortScan")?.checked ?? true;
       const canNetworkDiscovery = document.getElementById("planFormCanNetworkDiscovery")?.checked ?? false;
+      const isActive = document.getElementById("planFormIsActive")?.checked ?? true;
 
-      if (!id || !name) {
+      if (!name || (mode === "create" && !planCode)) {
         if (adminPlanAlert) {
           adminPlanAlert.className = "auth-alert error";
-          adminPlanAlert.textContent = "Please fill in Plan ID and Name.";
+          adminPlanAlert.textContent = "Please fill in all required plan fields.";
           adminPlanAlert.style.display = "block";
         }
         return;
       }
 
+      if (price < 0 || isNaN(price)) {
+        if (adminPlanAlert) {
+          adminPlanAlert.className = "auth-alert error";
+          adminPlanAlert.textContent = "Price must be a valid non-negative number.";
+          adminPlanAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (durationValue <= 0 || isNaN(durationValue)) {
+        if (adminPlanAlert) {
+          adminPlanAlert.className = "auth-alert error";
+          adminPlanAlert.textContent = "Duration term must be greater than zero.";
+          adminPlanAlert.style.display = "block";
+        }
+        return;
+      }
+
+      const payload = {
+        name,
+        description,
+        price,
+        currency,
+        duration_value: durationValue,
+        duration_unit: durationUnit,
+        is_active: isActive,
+        features: {
+          can_live_monitoring: canLiveMonitoring,
+          can_port_scan: canPortScan,
+          can_network_discovery: canNetworkDiscovery
+        }
+      };
+
+      if (mode === "create") {
+        payload.plan_code = planCode;
+      }
+
+      const submitBtn = document.getElementById("adminPlanSubmitBtn");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...'; }
+
       try {
-        const res = await fetch("/api/admin/plans", {
-          method: "POST",
+        const url = mode === "edit" ? `/api/admin/plans/${dbId}` : `/api/admin/plans`;
+        const method = mode === "edit" ? "PUT" : "POST";
+        const res = await fetch(url, {
+          method,
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({
-            id,
-            name,
-            description,
-            price,
-            duration_days,
-            features: {
-              can_live_monitoring: canLiveMonitoring,
-              can_port_scan: canPortScan,
-              can_network_discovery: canNetworkDiscovery
-            }
-          })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (res.ok && data.status === "success") {
           if (adminPlanModal) adminPlanModal.style.display = "none";
           document.body.style.overflow = "";
           loadAdminPlans();
+          loadAdminMetrics();
+          loadPublicHomepagePlans();
         } else {
           if (adminPlanAlert) {
             adminPlanAlert.className = "auth-alert error";
@@ -5708,6 +7558,8 @@ document.addEventListener("DOMContentLoaded", () => {
           adminPlanAlert.textContent = "Network error saving plan.";
           adminPlanAlert.style.display = "block";
         }
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<span class="auth-btn-text">Save Plan Configuration</span> <i class="fas fa-check auth-btn-icon"></i>'; }
       }
     });
   }
@@ -5785,21 +7637,666 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Admin Renew Subscription Modal
+  const adminRenewSubModal = document.getElementById("adminRenewSubModal");
+  const adminRenewSubModalCloseBtn = document.getElementById("adminRenewSubModalCloseBtn");
+  const adminRenewSubModalBackdrop = document.getElementById("adminRenewSubModalBackdrop");
+  const adminRenewSubForm = document.getElementById("adminRenewSubForm");
+  const adminRenewSubAlert = document.getElementById("adminRenewSubAlert");
+
+  function openAdminRenewModal(subInfo) {
+    if (!adminRenewSubModal || !subInfo) return;
+    const idInput = document.getElementById("renewSubId");
+    const targetDisp = document.getElementById("renewSubTargetDisplay");
+    const notesInput = document.getElementById("renewSubNotes");
+
+    if (idInput) idInput.value = subInfo.id;
+    if (targetDisp) targetDisp.textContent = `Subscription #${subInfo.id} · ${subInfo.user} (${subInfo.plan})`;
+    if (notesInput) notesInput.value = "Administrative renewal under approved policy";
+    if (adminRenewSubAlert) adminRenewSubAlert.style.display = "none";
+
+    adminRenewSubModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+  }
+
+  if (adminRenewSubModalCloseBtn) {
+    adminRenewSubModalCloseBtn.addEventListener("click", () => {
+      if (adminRenewSubModal) adminRenewSubModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+  if (adminRenewSubModalBackdrop) {
+    adminRenewSubModalBackdrop.addEventListener("click", () => {
+      if (adminRenewSubModal) adminRenewSubModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+
+  if (adminRenewSubForm) {
+    adminRenewSubForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const subId = document.getElementById("renewSubId")?.value;
+      const notes = document.getElementById("renewSubNotes")?.value?.trim();
+      if (!subId) return;
+
+      const submitBtn = document.getElementById("adminRenewSubSubmitBtn");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Renewing...'; }
+
+      try {
+        const res = await fetch(`/api/admin/subscriptions/${subId}/renew`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ notes })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          if (adminRenewSubModal) adminRenewSubModal.style.display = "none";
+          document.body.style.overflow = "";
+          loadAdminSubscriptions();
+          loadAdminMetrics();
+        } else {
+          if (adminRenewSubAlert) {
+            adminRenewSubAlert.className = "auth-alert error";
+            adminRenewSubAlert.textContent = data.message || "Failed to renew subscription.";
+            adminRenewSubAlert.style.display = "block";
+          }
+        }
+      } catch (_) {
+        if (adminRenewSubAlert) {
+          adminRenewSubAlert.className = "auth-alert error";
+          adminRenewSubAlert.textContent = "Network error renewing subscription.";
+          adminRenewSubAlert.style.display = "block";
+        }
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<span class="auth-btn-text">Confirm & Renew Subscription</span> <i class="fas fa-rotate auth-btn-icon"></i>'; }
+      }
+    });
+  }
+
+  // Admin Extend Subscription Modal
+  const adminExtendSubModal = document.getElementById("adminExtendSubModal");
+  const adminExtendSubModalCloseBtn = document.getElementById("adminExtendSubModalCloseBtn");
+  const adminExtendSubModalBackdrop = document.getElementById("adminExtendSubModalBackdrop");
+  const adminExtendSubForm = document.getElementById("adminExtendSubForm");
+  const adminExtendSubAlert = document.getElementById("adminExtendSubAlert");
+
+  function openAdminExtendModal(subInfo) {
+    if (!adminExtendSubModal || !subInfo) return;
+    const idInput = document.getElementById("extendSubId");
+    const targetDisp = document.getElementById("extendSubTargetDisplay");
+    const valInput = document.getElementById("extendDurationValue");
+    const unitInput = document.getElementById("extendDurationUnit");
+    const notesInput = document.getElementById("extendSubNotes");
+
+    if (idInput) idInput.value = subInfo.id;
+    if (targetDisp) targetDisp.textContent = `Subscription #${subInfo.id} · ${subInfo.user} (${subInfo.plan})`;
+    if (valInput) valInput.value = "30";
+    if (unitInput) unitInput.value = "days";
+    if (notesInput) notesInput.value = "Administrative extension courtesy grant";
+    if (adminExtendSubAlert) adminExtendSubAlert.style.display = "none";
+
+    adminExtendSubModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+  }
+
+  if (adminExtendSubModalCloseBtn) {
+    adminExtendSubModalCloseBtn.addEventListener("click", () => {
+      if (adminExtendSubModal) adminExtendSubModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+  if (adminExtendSubModalBackdrop) {
+    adminExtendSubModalBackdrop.addEventListener("click", () => {
+      if (adminExtendSubModal) adminExtendSubModal.style.display = "none";
+      document.body.style.overflow = "";
+    });
+  }
+
+  // Duration Presets (+7d, +30d, +90d)
+  document.querySelectorAll(".duration-presets-group .preset-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const val = btn.getAttribute("data-preset-val");
+      const unit = btn.getAttribute("data-preset-unit");
+      const valInput = document.getElementById("extendDurationValue");
+      const unitInput = document.getElementById("extendDurationUnit");
+      if (valInput && val) valInput.value = val;
+      if (unitInput && unit) unitInput.value = unit;
+    });
+  });
+
+  if (adminExtendSubForm) {
+    adminExtendSubForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const subId = document.getElementById("extendSubId")?.value;
+      const durationValue = parseInt(document.getElementById("extendDurationValue")?.value || "30", 10);
+      const durationUnit = document.getElementById("extendDurationUnit")?.value || "days";
+      const notes = document.getElementById("extendSubNotes")?.value?.trim();
+      if (!subId) return;
+
+      const submitBtn = document.getElementById("adminExtendSubSubmitBtn");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Extending...'; }
+
+      try {
+        const res = await fetch(`/api/admin/subscriptions/${subId}/extend`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            duration_value: durationValue,
+            duration_unit: durationUnit,
+            notes
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          if (adminExtendSubModal) adminExtendSubModal.style.display = "none";
+          document.body.style.overflow = "";
+          loadAdminSubscriptions();
+          loadAdminMetrics();
+        } else {
+          if (adminExtendSubAlert) {
+            adminExtendSubAlert.className = "auth-alert error";
+            adminExtendSubAlert.textContent = data.message || "Failed to extend subscription.";
+            adminExtendSubAlert.style.display = "block";
+          }
+        }
+      } catch (_) {
+        if (adminExtendSubAlert) {
+          adminExtendSubAlert.className = "auth-alert error";
+          adminExtendSubAlert.textContent = "Network error extending subscription.";
+          adminExtendSubAlert.style.display = "block";
+        }
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<span class="auth-btn-text">Apply Extension</span> <i class="fas fa-calendar-plus auth-btn-icon"></i>'; }
+      }
+    });
+  }
+
+  // Load and Render Public Homepage Dynamic Plans Catalog
+  async function loadPublicHomepagePlans() {
+    const container = document.getElementById("publicHomepagePlansGrid");
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/subscriptions/plans");
+      const data = await res.json();
+      if (!res.ok || data.status !== "success") {
+        container.innerHTML = `<div class="plans-loading-placeholder text-danger">Unable to load public plans.</div>`;
+        return;
+      }
+
+      const plans = data.plans || [];
+      if (plans.length === 0) {
+        container.innerHTML = `<div class="plans-loading-placeholder text-muted">No public plans currently offered. Please check back soon.</div>`;
+        return;
+      }
+
+      const activeSub = currentUserSubscription;
+      const isSubActive = activeSub && activeSub.status === "active";
+      const isSubPending = activeSub && activeSub.status === "pending";
+
+      let html = "";
+      for (const p of plans) {
+        const isFeatured = p.plan_code === "SCOUT-PRO" || p.id === "SCOUT-PRO";
+        const isCurrentPlan = isSubActive && (activeSub.plan_id === p.id || activeSub.plan_code === p.plan_code);
+        const isPendingPlan = isSubPending && (activeSub.plan_id === p.id || activeSub.plan_code === p.plan_code);
+
+        const priceDisplay = p.price === 0 ? "Free" : `$${p.price.toFixed(2)}`;
+        const durationDisplay = `/ ${p.duration_value} ${p.duration_unit || 'days'}`;
+
+        const f = p.features || {};
+        const canMonitor = f.can_live_monitoring !== false;
+        const canPort = f.can_port_scan !== false;
+        const canNd = f.can_network_discovery === true;
+
+        let btnHtml = "";
+        if (!currentUser) {
+          btnHtml = `<button type="button" class="btn-public-plan-cta" data-public-plan-action="auth"><i class="fas fa-arrow-right"></i> Get Started with ${escapeHtml(p.name)}</button>`;
+        } else if (currentUser.role === "Admin") {
+          btnHtml = `<button type="button" class="btn-public-plan-cta current" disabled><i class="fas fa-shield-halved"></i> Root Administrator</button>`;
+        } else if (isCurrentPlan) {
+          btnHtml = `<button type="button" class="btn-public-plan-cta current" disabled><i class="fas fa-circle-check"></i> Current Active Plan</button>`;
+        } else if (isPendingPlan) {
+          btnHtml = `<button type="button" class="btn-public-plan-cta pending" disabled><i class="fas fa-clock"></i> Activation Pending</button>`;
+        } else {
+          btnHtml = `<button type="button" class="btn-public-plan-cta" data-public-plan-id="${p.id}"><i class="fas fa-bolt"></i> Select ${escapeHtml(p.name)}</button>`;
+        }
+
+        html += `
+          <div class="public-plan-card ${isFeatured ? 'featured' : ''}">
+            ${isFeatured ? '<span class="public-plan-featured-badge"><i class="fas fa-star"></i> Recommended Tier</span>' : ''}
+            <div>
+              <div class="public-plan-header">
+                <div class="public-plan-code">${escapeHtml(p.plan_code || 'SCOUT')}</div>
+                <h3 class="public-plan-name">${escapeHtml(p.name)}</h3>
+                <p class="public-plan-desc">${escapeHtml(p.description || 'Full enterprise threat intelligence and detection capabilities.')}</p>
+              </div>
+              <div class="public-plan-pricing-box">
+                <span class="public-plan-price">${priceDisplay}</span>
+                <span class="public-plan-term">${durationDisplay}</span>
+              </div>
+              <ul class="public-plan-features-list">
+                <li class="public-plan-feature-item ${canMonitor ? 'enabled' : 'disabled'}">
+                  <i class="fas ${canMonitor ? 'fa-check' : 'fa-xmark'}"></i>
+                  <span>Real-Time Traffic Telemetry & 15-Class Hostile ML Inference</span>
+                </li>
+                <li class="public-plan-feature-item ${canPort ? 'enabled' : 'disabled'}">
+                  <i class="fas ${canPort ? 'fa-check' : 'fa-xmark'}"></i>
+                  <span>Active Port Security Scanning & Vulnerability Enumeration</span>
+                </li>
+                <li class="public-plan-feature-item ${canNd ? 'enabled' : 'disabled'}">
+                  <i class="fas ${canNd ? 'fa-check' : 'fa-xmark'}"></i>
+                  <span>Autonomous Subnet Host & Asset Discovery</span>
+                </li>
+              </ul>
+            </div>
+            <div>
+              ${btnHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+
+      container.querySelectorAll("[data-public-plan-action='auth']").forEach(btn => {
+        btn.addEventListener("click", () => {
+          openAuthModal("register", "Create your SCOUT account to access security telemetry and activate plans.");
+        });
+      });
+
+      container.querySelectorAll("[data-public-plan-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const pid = btn.getAttribute("data-public-plan-id");
+          if (pid) requestSubscription(pid, btn);
+        });
+      });
+    } catch (_) {
+      container.innerHTML = `<div class="plans-loading-placeholder text-danger">Network error connecting to plan catalog.</div>`;
+    }
+  }
+
   // Refresh Buttons
   const refreshRequestsBtn = document.getElementById("refreshRequestsBtn");
-  if (refreshRequestsBtn) refreshRequestsBtn.addEventListener("click", loadAdminRequests);
+  if (refreshRequestsBtn) refreshRequestsBtn.addEventListener("click", () => {
+    loadAdminRequests();
+    loadAdminMetrics();
+  });
 
   const refreshSubsBtn = document.getElementById("refreshSubsBtn");
-  if (refreshSubsBtn) refreshSubsBtn.addEventListener("click", loadAdminSubscriptions);
+  if (refreshSubsBtn) refreshSubsBtn.addEventListener("click", () => {
+    loadAdminSubscriptions();
+    loadAdminMetrics();
+  });
 
   const refreshUsersBtn = document.getElementById("refreshUsersBtn");
-  if (refreshUsersBtn) refreshUsersBtn.addEventListener("click", loadAdminUsers);
+  if (refreshUsersBtn) refreshUsersBtn.addEventListener("click", () => {
+    loadAdminUsers();
+    loadAdminMetrics();
+  });
+
+  const adminSubSearchInput = document.getElementById("adminSubSearchInput");
+  if (adminSubSearchInput) {
+    let debounceTimer;
+    adminSubSearchInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadAdminSubscriptions, 300);
+    });
+  }
+
+  const adminUserSearchInput = document.getElementById("adminUserSearchInput");
+  if (adminUserSearchInput) {
+    let debounceTimer;
+    adminUserSearchInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadAdminUsers, 300);
+    });
+  }
+
+  const adminUserRoleFilter = document.getElementById("adminUserRoleFilter");
+  if (adminUserRoleFilter) adminUserRoleFilter.addEventListener("change", loadAdminUsers);
+
+  const adminUserStatusFilter = document.getElementById("adminUserStatusFilter");
+  if (adminUserStatusFilter) adminUserStatusFilter.addEventListener("change", loadAdminUsers);
+
+  const adminUserSubStatusFilter = document.getElementById("adminUserSubStatusFilter");
+  if (adminUserSubStatusFilter) adminUserSubStatusFilter.addEventListener("change", loadAdminUsers);
+
+  // Load Subscription Security Audit Logs with Real Data & Event Action Badges
+  async function loadAdminAuditLogs() {
+    const tbody = document.getElementById("adminAuditTbody");
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading audit logs...</td></tr>`;
+
+    try {
+      const res = await fetch("/api/admin/audit-logs", { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success") {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(data.message || "Failed to load audit logs.")}</td></tr>`;
+        return;
+      }
+
+      const logs = data.audit_logs || [];
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-circle-check"></i> No administrative audit events recorded yet.</td></tr>`;
+        return;
+      }
+
+      let rowsHtml = "";
+      for (const log of logs) {
+        const timeStr = log.timestamp ? formatUtcDate(log.timestamp) : "—";
+        const action = (log.action || "UNKNOWN").toUpperCase();
+
+        let badgeClass = "badge-muted";
+        let actionIcon = "fa-circle-dot";
+        if (action === "APPROVED" || action === "ACTIVATED") {
+          badgeClass = "badge-green";
+          actionIcon = "fa-circle-check";
+        } else if (action === "CREATED" || action === "REQUESTED") {
+          badgeClass = "badge-cyan";
+          actionIcon = "fa-plus";
+        } else if (action === "REJECTED" || action === "CANCELLED" || action === "CANCELED" || action === "SUSPENDED") {
+          badgeClass = "badge-coral";
+          actionIcon = "fa-ban";
+        } else if (action === "EXTENDED" || action === "RENEWED") {
+          badgeClass = "badge-blue";
+          actionIcon = "fa-rotate";
+        } else if (action === "DATES_ADJUSTED" || action === "UPDATED") {
+          badgeClass = "badge-amber";
+          actionIcon = "fa-pen-to-square";
+        }
+
+        const actionBadge = `<span class="sub-badge ${badgeClass}" style="display:inline-flex; align-items:center; gap:5px;"><i class="fas ${actionIcon}"></i> ${escapeHtml(action)}</span>`;
+
+        const subjectUser = log.subject_user || (log.subscription_id ? `Sub #${log.subscription_id}` : "—");
+        const subjectEmail = log.subject_email || "";
+        const subjectHtml = `
+          <div class="audit-subject-wrap">
+            <span class="audit-subject-name font-medium">${escapeHtml(subjectUser)}</span>
+            ${subjectEmail ? `<br><small class="audit-subject-email text-muted">${escapeHtml(subjectEmail)}</small>` : ""}
+          </div>
+        `;
+
+        const planName = log.plan_name || (log.subscription_id ? `Sub #${log.subscription_id}` : "—");
+        const actorHtml = log.actor_id 
+          ? `<span class="badge-actor" style="display:inline-flex; align-items:center; gap:5px; font-size:0.75rem; padding:2px 8px; border-radius:4px; background:rgba(59,130,246,0.15); color:#60A5FA; border:1px solid rgba(59,130,246,0.3);"><i class="fas fa-user-shield"></i> Admin #${escapeHtml(String(log.actor_id))}</span>`
+          : `<span class="text-muted"><i class="fas fa-robot"></i> System</span>`;
+
+        const detailsText = log.details || "—";
+
+        rowsHtml += `
+          <tr>
+            <td style="white-space:nowrap; font-family:var(--font-mono, monospace); font-size:0.8rem; color:var(--text-muted);"><i class="fas fa-clock"></i> ${escapeHtml(timeStr)}</td>
+            <td>${actionBadge}</td>
+            <td>${subjectHtml}</td>
+            <td><span class="font-medium">${escapeHtml(planName)}</span></td>
+            <td>${actorHtml}</td>
+            <td style="max-width:320px; font-size:0.84rem; word-break:break-word;">${escapeHtml(detailsText)}</td>
+          </tr>
+        `;
+      }
+      tbody.innerHTML = rowsHtml;
+    } catch (err) {
+      console.error("Error loading admin audit logs:", err);
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger"><i class="fas fa-triangle-exclamation"></i> Network error fetching audit logs.</td></tr>`;
+    }
+  }
 
   const refreshAuditBtn = document.getElementById("refreshAuditBtn");
-  if (refreshAuditBtn) refreshAuditBtn.addEventListener("click", loadAdminAuditLogs);
+  if (refreshAuditBtn) refreshAuditBtn.addEventListener("click", () => {
+    loadAdminAuditLogs();
+    loadAdminMetrics();
+  });
+
+  // Admin Metric Cards Interactive Navigation with Pre-Applied Filters
+  const metricCardBindings = [
+    {
+      id: "adminMetricTotalUsersCard",
+      action: () => {
+        activateAdminTab("users", true);
+        if (adminUserStatusFilter) {
+          adminUserStatusFilter.value = "";
+          loadAdminUsers();
+        }
+      }
+    },
+    {
+      id: "adminMetricActiveUsersCard",
+      action: () => {
+        activateAdminTab("users", true);
+        if (adminUserStatusFilter) {
+          adminUserStatusFilter.value = "active";
+          loadAdminUsers();
+        }
+      }
+    },
+    {
+      id: "adminMetricInactiveUsersCard",
+      action: () => {
+        activateAdminTab("users", true);
+        if (adminUserStatusFilter) {
+          adminUserStatusFilter.value = "disabled";
+          loadAdminUsers();
+        }
+      }
+    },
+    {
+      id: "adminMetricTotalSubscribersCard",
+      action: () => {
+        activateAdminTab("subscriptions", true);
+        if (adminSubStatusFilter) {
+          adminSubStatusFilter.value = "all";
+          loadAdminSubscriptions();
+        }
+      }
+    },
+    {
+      id: "adminMetricActiveSubsCard",
+      action: () => {
+        activateAdminTab("subscriptions", true);
+        if (adminSubStatusFilter) {
+          adminSubStatusFilter.value = "active";
+          loadAdminSubscriptions();
+        }
+      }
+    },
+    {
+      id: "adminPendingCard",
+      action: () => {
+        activateAdminTab("requests", true);
+      }
+    },
+    {
+      id: "adminMetricExpiredSubsCard",
+      action: () => {
+        activateAdminTab("subscriptions", true);
+        if (adminSubStatusFilter) {
+          adminSubStatusFilter.value = "expired";
+          loadAdminSubscriptions();
+        }
+      }
+    },
+    {
+      id: "adminMetricCanceledSubsCard",
+      action: () => {
+        activateAdminTab("subscriptions", true);
+        if (adminSubStatusFilter) {
+          adminSubStatusFilter.value = "canceled";
+          loadAdminSubscriptions();
+        }
+      }
+    },
+    {
+      id: "adminMetricPlansCard",
+      action: () => {
+        activateAdminTab("plans", true);
+      }
+    },
+    {
+      id: "adminMetricInactivePlansCard",
+      action: () => {
+        activateAdminTab("plans", true);
+      }
+    }
+  ];
+
+  metricCardBindings.forEach(binding => {
+    const cardEl = document.getElementById(binding.id);
+    if (cardEl) {
+      cardEl.addEventListener("click", binding.action);
+      cardEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          binding.action();
+        }
+      });
+    }
+  });
 
   const adminSubStatusFilter = document.getElementById("adminSubStatusFilter");
   if (adminSubStatusFilter) adminSubStatusFilter.addEventListener("change", loadAdminSubscriptions);
+
+  // Admin Profile Update Form Handler
+  const adminProfileForm = document.getElementById("adminProfileForm");
+  const adminProfileAlert = document.getElementById("adminProfileAlert");
+  if (adminProfileForm) {
+    adminProfileForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fullName = document.getElementById("adminProfileFullNameInput")?.value?.trim();
+      const email = document.getElementById("adminProfileEmailInput")?.value?.trim();
+      const submitBtn = document.getElementById("adminProfileSubmitBtn");
+
+      if (!email) {
+        if (adminProfileAlert) {
+          adminProfileAlert.className = "auth-alert error";
+          adminProfileAlert.textContent = "Email address cannot be empty.";
+          adminProfileAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...'; }
+
+      try {
+        const res = await fetch("/api/auth/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ full_name: fullName, email: email })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          if (adminProfileAlert) {
+            adminProfileAlert.className = "auth-alert success";
+            adminProfileAlert.textContent = "Profile updated successfully.";
+            adminProfileAlert.style.display = "block";
+          }
+          loadAdminProfile();
+        } else {
+          if (adminProfileAlert) {
+            adminProfileAlert.className = "auth-alert error";
+            adminProfileAlert.textContent = data.message || "Failed to update profile.";
+            adminProfileAlert.style.display = "block";
+          }
+        }
+      } catch (_) {
+        if (adminProfileAlert) {
+          adminProfileAlert.className = "auth-alert error";
+          adminProfileAlert.textContent = "Network error updating profile.";
+          adminProfileAlert.style.display = "block";
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span class="auth-btn-text">Save Profile Changes</span> <i class="fas fa-floppy-disk auth-btn-icon"></i>';
+        }
+      }
+    });
+  }
+
+  // Admin Password Change Form Handler
+  const adminPasswordForm = document.getElementById("adminPasswordForm");
+  const adminPasswordAlert = document.getElementById("adminPasswordAlert");
+  if (adminPasswordForm) {
+    adminPasswordForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const currPwd = document.getElementById("adminCurrentPasswordInput")?.value;
+      const newPwd = document.getElementById("adminNewPasswordInput")?.value;
+      const confPwd = document.getElementById("adminConfirmPasswordInput")?.value;
+      const submitBtn = document.getElementById("adminPasswordSubmitBtn");
+
+      if (!currPwd || !newPwd || !confPwd) {
+        if (adminPasswordAlert) {
+          adminPasswordAlert.className = "auth-alert error";
+          adminPasswordAlert.textContent = "All password fields are required.";
+          adminPasswordAlert.style.display = "block";
+        }
+        return;
+      }
+      if (newPwd !== confPwd) {
+        if (adminPasswordAlert) {
+          adminPasswordAlert.className = "auth-alert error";
+          adminPasswordAlert.textContent = "New passwords do not match.";
+          adminPasswordAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Updating...'; }
+
+      try {
+        const res = await fetch("/api/auth/change-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            current_password: currPwd,
+            new_password: newPwd,
+            confirm_new_password: confPwd
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          if (adminPasswordAlert) {
+            adminPasswordAlert.className = "auth-alert success";
+            adminPasswordAlert.textContent = "Password changed successfully! All previous sessions revoked.";
+            adminPasswordAlert.style.display = "block";
+          }
+          adminPasswordForm.reset();
+        } else {
+          if (adminPasswordAlert) {
+            adminPasswordAlert.className = "auth-alert error";
+            adminPasswordAlert.textContent = data.message || "Failed to update password.";
+            adminPasswordAlert.style.display = "block";
+          }
+        }
+      } catch (_) {
+        if (adminPasswordAlert) {
+          adminPasswordAlert.className = "auth-alert error";
+          adminPasswordAlert.textContent = "Network error updating password.";
+          adminPasswordAlert.style.display = "block";
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span class="auth-btn-text">Update Password</span> <i class="fas fa-lock auth-btn-icon"></i>';
+        }
+      }
+    });
+  }
+
+  const refreshProfileBtn = document.getElementById("refreshProfileBtn");
+  if (refreshProfileBtn) refreshProfileBtn.addEventListener("click", loadAdminProfile);
+
+  const adminPanelLogoutBtn = document.getElementById("adminPanelLogoutBtn");
+  if (adminPanelLogoutBtn) {
+    adminPanelLogoutBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      performLogout();
+    });
+  }
 
   // Initialize Hero Visual Enhancements & Background Videos
   initCyberBackgroundCanvas();
@@ -5812,7 +8309,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Check auth session before initial view switch
   checkAuthSession().finally(() => {
-    switchView(getQueryView(), false);
+    const initialView = getQueryView();
+    const urlParams = new URLSearchParams(window.location.search);
+    const isExplicitPublic = urlParams.get("public") === "1" || urlParams.get("view") === "home" || urlParams.get("view") === "landing";
+
+    // If initialView is landing (or no view in URL) and user is authenticated and not requesting explicit public view:
+    if ((initialView === "landing" || !urlParams.has("view")) && currentUser && !isExplicitPublic) {
+      if (currentUser.role === "Admin") {
+        switchView("admin", false);
+      } else if (currentUserSubscription && currentUserSubscription.status === "active") {
+        switchView("dashboard", false);
+      } else {
+        switchView("plans", false);
+      }
+    } else {
+      switchView(initialView, false);
+    }
   });
 
   // Lifecycle Decoupled: Navigating between sections or leaving the page does NOT

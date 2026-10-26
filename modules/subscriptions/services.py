@@ -9,7 +9,7 @@ from typing import Tuple, Dict, Any, Optional
 
 from modules.auth.models import User, utcnow
 from modules.auth.db import get_db_session
-from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog
+from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog, ensure_utc
 
 
 def request_subscription(user_id: int, plan_id: int, notes: Optional[str] = None) -> Tuple[bool, str, Dict[str, Any]]:
@@ -86,6 +86,14 @@ def activate_subscription(
         if not sub:
             return False, "Subscription record not found.", {}
 
+        # State transition validation
+        if sub.status == "active":
+            return False, "Subscription is already active.", {}
+        if sub.status == "rejected":
+            return False, "Cannot activate a subscription request that has already been rejected.", {}
+        if sub.status == "canceled":
+            return False, "Cannot activate a canceled subscription. Please use renewal instead.", {}
+
         prev_status = sub.status
         now = utcnow()
         plan = sub.plan
@@ -144,6 +152,14 @@ def reject_subscription(
         if not sub:
             return False, "Subscription record not found.", {}
 
+        # State transition validation
+        if sub.status == "active":
+            return False, "Cannot reject an active subscription. Use cancellation instead.", {}
+        if sub.status == "rejected":
+            return False, "Subscription request is already rejected.", {}
+        if sub.status == "canceled":
+            return False, "Cannot reject a canceled subscription.", {}
+
         prev_status = sub.status
         sub.status = "rejected"
         sub.cancellation_reason = reason or "Request rejected by administrator."
@@ -180,6 +196,12 @@ def cancel_subscription(
         sub = session.query(UserSubscription).filter_by(id=subscription_id).first()
         if not sub:
             return False, "Subscription record not found.", {}
+
+        # State transition validation
+        if sub.status == "canceled":
+            return False, "Subscription is already canceled.", {}
+        if sub.status == "rejected":
+            return False, "Cannot cancel a rejected subscription request.", {}
 
         prev_status = sub.status
         sub.status = "canceled"
@@ -240,3 +262,189 @@ def adjust_subscription_dates(
         sub_dict = sub.to_dict()
 
     return True, "Subscription dates updated successfully.", sub_dict
+
+
+def renew_subscription(
+    subscription_id: int,
+    admin_id: int,
+    duration_days: Optional[int] = None,
+    notes: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Renews an expired, canceled, or active subscription under administrative policy.
+    Transition: Any -> Active.
+    Policy:
+      - Start date is set to current UTC time (utcnow()).
+      - End date is calculated from start date using plan duration or explicit override.
+      - Previous status is captured and transition to 'active' is logged.
+    """
+    with get_db_session() as session:
+        admin = session.query(User).filter_by(id=admin_id).first()
+        if not admin or admin.role != "Admin":
+            return False, "Only Administrators may renew subscriptions.", {}
+
+        sub = session.query(UserSubscription).filter_by(id=subscription_id).first()
+        if not sub:
+            return False, "Subscription record not found.", {}
+
+        prev_status = sub.status
+        plan = sub.plan
+        now = utcnow()
+
+        if duration_days and duration_days > 0:
+            calc_days = duration_days
+        elif plan.duration_unit == "months":
+            calc_days = plan.duration_value * 30
+        elif plan.duration_unit == "years":
+            calc_days = plan.duration_value * 365
+        else:
+            calc_days = plan.duration_value
+
+        start_date = now
+        end_date = start_date + timedelta(days=calc_days)
+
+        sub.status = "active"
+        sub.start_date = start_date
+        sub.end_date = end_date
+        sub.activated_at = now
+        sub.activated_by_id = admin_id
+        if notes:
+            sub.admin_notes = notes
+
+        note_str = f" Notes: {notes}" if notes else ""
+        audit = SubscriptionAuditLog(
+            subscription_id=sub.id,
+            actor_id=admin_id,
+            action="RENEWED",
+            previous_status=prev_status,
+            new_status="active",
+            details=f"Admin '{admin.username}' renewed subscription. Valid from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({calc_days} days).{note_str}"
+        )
+        session.add(audit)
+        session.flush()
+        sub_dict = sub.to_dict()
+
+    return True, f"Subscription #{subscription_id} renewed successfully.", sub_dict
+
+
+def extend_subscription(
+    subscription_id: int,
+    admin_id: int,
+    extension_days: int,
+    notes: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Extends an active or expired subscription by a specified number of days.
+    Policy:
+      - Extension days must be an integer > 0.
+      - For an active subscription where end_date > now, new_end_date = end_date + timedelta(days=extension_days).
+      - If subscription was expired (end_date <= now or status != 'active'), new_end_date = now + timedelta(days=extension_days)
+        and status is restored to 'active'.
+    """
+    if not isinstance(extension_days, int) or extension_days <= 0:
+        return False, "Extension days must be a positive integer.", {}
+
+    with get_db_session() as session:
+        admin = session.query(User).filter_by(id=admin_id).first()
+        if not admin or admin.role != "Admin":
+            return False, "Only Administrators may extend subscriptions.", {}
+
+        sub = session.query(UserSubscription).filter_by(id=subscription_id).first()
+        if not sub:
+            return False, "Subscription record not found.", {}
+
+        prev_status = sub.status
+        now = ensure_utc(utcnow())
+        current_end = ensure_utc(sub.end_date)
+
+        if current_end and current_end > now and sub.status == "active":
+            new_end = current_end + timedelta(days=extension_days)
+            basis = f"extended from current expiry ({current_end.strftime('%Y-%m-%d')})"
+        else:
+            new_end = now + timedelta(days=extension_days)
+            basis = "extended from current date"
+
+        sub.status = "active"
+        sub.end_date = new_end
+        if not sub.start_date:
+            sub.start_date = now
+        if notes:
+            sub.admin_notes = notes
+
+        note_str = f" Notes: {notes}" if notes else ""
+        audit = SubscriptionAuditLog(
+            subscription_id=sub.id,
+            actor_id=admin_id,
+            action="EXTENDED",
+            previous_status=prev_status,
+            new_status="active",
+            details=f"Admin '{admin.username}' extended subscription by {extension_days} days ({basis}). New expiration: {new_end.strftime('%Y-%m-%d')}.{note_str}"
+        )
+        session.add(audit)
+        session.flush()
+        sub_dict = sub.to_dict()
+
+    return True, f"Subscription #{subscription_id} extended by {extension_days} days.", sub_dict
+
+
+def determine_user_landing_view(user: User) -> Tuple[str, str]:
+    """
+    Centralized post-login and default routing resolver.
+    Evaluates role, account status, and subscription state to return:
+    (view_key: str, redirect_url: str).
+
+    - Admin -> ("admin", "/?view=admin")
+    - User with active subscription -> ("dashboard", "/?view=dashboard")
+    - User with pending request -> ("plans", "/?view=plans&status=pending")
+    - User with expired/no subscription -> ("plans", "/?view=plans")
+    """
+    if not user or not user.is_active:
+        return "landing", "/"
+
+    if user.role == "Admin":
+        return "admin", "/?view=admin"
+
+    with get_db_session() as session:
+        # Check active subscription
+        active_sub = (
+            session.query(UserSubscription)
+            .filter_by(user_id=user.id, status="active")
+            .order_by(UserSubscription.end_date.desc())
+            .first()
+        )
+        if active_sub and active_sub.is_valid_active():
+            return "dashboard", "/?view=dashboard"
+
+        # Check pending subscription
+        pending_sub = (
+            session.query(UserSubscription)
+            .filter_by(user_id=user.id, status="pending")
+            .first()
+        )
+        if pending_sub:
+            return "plans", "/?view=plans&status=pending"
+
+        # Expired or no subscription
+        return "plans", "/?view=plans"
+
+
+def sync_expired_subscriptions() -> int:
+    """
+    Automated maintenance sweep: transitions any subscription where status == 'active'
+    and end_date < utcnow() to 'expired'.
+    Returns the count of updated records.
+    """
+    with get_db_session() as session:
+        now = ensure_utc(utcnow())
+        expired_subs = (
+            session.query(UserSubscription)
+            .filter(UserSubscription.status == "active", UserSubscription.end_date < now)
+            .all()
+        )
+        count = len(expired_subs)
+        for s in expired_subs:
+            s.status = "expired"
+        if count > 0:
+            session.flush()
+        return count
+

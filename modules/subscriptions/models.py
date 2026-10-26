@@ -123,7 +123,7 @@ class UserSubscription(Base):
             return False
         return True
 
-    def to_dict(self, include_audit: bool = False) -> Dict[str, Any]:
+    def to_dict(self, include_audit: bool = False, include_admin_notes: bool = True) -> Dict[str, Any]:
         """Returns JSON-serializable representation of the subscription."""
         now = ensure_utc(utcnow())
         is_active_now = self.is_valid_active(now)
@@ -141,6 +141,9 @@ class UserSubscription(Base):
             "plan_id": self.plan_id,
             "plan_name": self.plan.name if self.plan else None,
             "plan_code": self.plan.plan_code if self.plan else None,
+            "plan_price": self.plan.price if self.plan else None,
+            "plan_currency": self.plan.currency if self.plan else "USD",
+            "plan_duration": f"{self.plan.duration_value} {self.plan.duration_unit}" if self.plan else None,
             "status": self.status,
             "is_valid_active": is_active_now,
             "start_date": self.start_date.isoformat() if self.start_date else None,
@@ -151,9 +154,10 @@ class UserSubscription(Base):
             "activated_by_id": self.activated_by_id,
             "activated_by_name": self.activated_by.username if self.activated_by else None,
             "cancellation_reason": self.cancellation_reason,
-            "admin_notes": self.admin_notes,
             "features": self.plan.get_features() if self.plan else {}
         }
+        if include_admin_notes:
+            data["admin_notes"] = self.admin_notes
         if include_audit:
             data["audit_logs"] = [log.to_dict() for log in self.audit_logs]
         return data

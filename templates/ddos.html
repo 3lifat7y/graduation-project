@@ -64,39 +64,77 @@
 
     <!-- Navigation Links -->
     <nav class="sidebar-nav" id="mainNav" role="navigation">
-      <div class="sidebar-section-label">OVERVIEW</div>
-      <a href="/#overview" class="sidebar-nav-item active" data-nav="home" data-tooltip="Home">
-        <i class="fas fa-house-chimney nav-icon"></i>
-        <span class="nav-text">Home</span>
-      </a>
+      <!-- Admin Navigation Group (Rendered when Authenticated as Admin) -->
+      <div class="sidebar-nav-group" id="sidebarAdminNavGroup" style="display:none;">
+        <div class="sidebar-section-label">ADMIN DASHBOARD</div>
+        <a href="/?view=admin" class="sidebar-nav-item admin-nav-item" data-nav="admin" data-tooltip="Admin Dashboard">
+          <i class="fas fa-gauge-high nav-icon"></i>
+          <span class="nav-text">Platform Overview</span>
+        </a>
 
-      <div class="sidebar-section-label">OPERATIONAL TOOLS</div>
-      <a href="/?view=monitoring" class="sidebar-nav-item" data-nav="monitoring" data-tooltip="Live Network Monitoring">
-        <i class="fas fa-satellite-dish nav-icon"></i>
-        <span class="nav-text">Live Network Monitoring</span>
-        <span class="nav-badge-pill">Live</span>
-      </a>
-      <a href="/?view=port-scanner" class="sidebar-nav-item" data-nav="port-scanner" data-tooltip="Port Scanner">
-        <i class="fas fa-bullseye nav-icon"></i>
-        <span class="nav-text">Port Scanner</span>
-      </a>
-      <a href="/network-discovery" class="sidebar-nav-item" data-nav="network-discovery" data-tooltip="Network Discovery">
-        <i class="fas fa-sitemap nav-icon"></i>
-        <span class="nav-text">Network Discovery</span>
-      </a>
+        <div class="sidebar-section-label">PLATFORM MANAGEMENT</div>
+        <a href="/?view=admin-users" class="sidebar-nav-item admin-nav-item" data-nav="admin-users" data-tooltip="User Management">
+          <i class="fas fa-users-gear nav-icon"></i>
+          <span class="nav-text">Users</span>
+        </a>
+        <a href="/?view=admin-plans" class="sidebar-nav-item admin-nav-item" data-nav="admin-plans" data-tooltip="Subscription Plans">
+          <i class="fas fa-gem nav-icon"></i>
+          <span class="nav-text">Subscription Plans</span>
+        </a>
+        <a href="/?view=admin-subs" class="sidebar-nav-item admin-nav-item" data-nav="admin-subs" data-tooltip="Subscriptions Registry">
+          <i class="fas fa-id-card nav-icon"></i>
+          <span class="nav-text">Subscriptions</span>
+          <span class="nav-badge-pill admin-badge" id="sidebarPendingBadge" style="display:none;">0</span>
+        </a>
+        <a href="/?view=admin-requests" class="sidebar-nav-item admin-nav-item" data-nav="admin-requests" data-tooltip="Pending Requests & Approvals">
+          <i class="fas fa-user-clock nav-icon"></i>
+          <span class="nav-text">Pending Requests</span>
+          <span class="nav-badge-pill admin-badge" id="sidebarRequestsBadge" style="display:none;">0</span>
+        </a>
 
-      <div class="sidebar-section-label nav-sub-label">ACCOUNT & BILLING</div>
-      <a href="/?view=plans" class="sidebar-nav-item" data-nav="plans" data-tooltip="Subscription Plans">
-        <i class="fas fa-gem nav-icon"></i>
-        <span class="nav-text">Subscription Plans</span>
-      </a>
+        <div class="sidebar-section-label">GOVERNANCE & SECURITY</div>
+        <a href="/?view=admin-audit" class="sidebar-nav-item admin-nav-item" data-nav="admin-audit" data-tooltip="Subscription Audit Logs">
+          <i class="fas fa-clipboard-list nav-icon"></i>
+          <span class="nav-text">Audit Logs</span>
+        </a>
+        <a href="/?view=admin-profile" class="sidebar-nav-item admin-nav-item" data-nav="admin-profile" data-tooltip="Admin Profile & Security">
+          <i class="fas fa-user-shield nav-icon"></i>
+          <span class="nav-text">Profile & Security</span>
+        </a>
+      </div>
 
-      <div class="sidebar-section-label nav-admin-label" id="sidebarAdminSectionLabel" style="display:none;">ADMINISTRATION</div>
-      <a href="/?view=admin" class="sidebar-nav-item admin-nav-item" id="sidebarAdminNavItem" data-nav="admin" data-tooltip="Admin Console" style="display:none;">
-        <i class="fas fa-shield-halved nav-icon"></i>
-        <span class="nav-text">Admin Console</span>
-        <span class="nav-badge-pill admin-badge">Admin</span>
-      </a>
+      <!-- Regular Operator Navigation Group (Rendered when Authenticated as User) -->
+      <div class="sidebar-nav-group" id="sidebarUserNavGroup" style="display:none;">
+        <div class="sidebar-section-label">OVERVIEW</div>
+        <a href="/?view=dashboard" class="sidebar-nav-item" id="sidebarDashboardNavItem" data-nav="dashboard" data-tooltip="Operator Dashboard">
+          <i class="fas fa-gauge-high nav-icon"></i>
+          <span class="nav-text">Dashboard</span>
+        </a>
+
+        <div class="sidebar-section-label nav-sub-label">ACCOUNT & BILLING</div>
+        <a href="/?view=plans" class="sidebar-nav-item" data-nav="plans" data-tooltip="Subscription Plans">
+          <i class="fas fa-gem nav-icon"></i>
+          <span class="nav-text">Subscription Plans</span>
+        </a>
+      </div>
+
+      <!-- Operational Tools (Shared by Authenticated Users & Admins) -->
+      <div class="sidebar-nav-group" id="sidebarToolsNavGroup">
+        <div class="sidebar-section-label">OPERATIONAL TOOLS</div>
+        <a href="/?view=monitoring" class="sidebar-nav-item" data-nav="monitoring" data-tooltip="Live Network Monitoring">
+          <i class="fas fa-satellite-dish nav-icon"></i>
+          <span class="nav-text">Live Network Monitoring</span>
+          <span class="nav-badge-pill">Live</span>
+        </a>
+        <a href="/?view=port-scanner" class="sidebar-nav-item" data-nav="port-scanner" data-tooltip="Port Scanner">
+          <i class="fas fa-bullseye nav-icon"></i>
+          <span class="nav-text">Port Scanner</span>
+        </a>
+        <a href="/network-discovery" class="sidebar-nav-item" data-nav="network-discovery" data-tooltip="Network Discovery">
+          <i class="fas fa-sitemap nav-icon"></i>
+          <span class="nav-text">Network Discovery</span>
+        </a>
+      </div>
     </nav>
 
     <!-- Sidebar Footer / System Engine Status -->
@@ -119,7 +157,7 @@
         <button class="top-nav-sidebar-toggle" id="navbarSidebarToggleBtn" type="button" aria-label="Toggle navigation sidebar" title="Toggle Sidebar">
           <i class="fas fa-bars"></i>
         </button>
-        <a href="/" class="top-nav-brand" aria-label="SCOUT Home">
+        <a href="/?public=1" class="top-nav-brand" id="topNavBrandLink" aria-label="SCOUT Home">
           <div class="top-nav-logo-wrap">
             <img src="/static/images/scout-logo.png" alt="SCOUT" class="scout-nav-logo scout-logo-light" />
             <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="scout-nav-logo scout-logo-dark" />
@@ -127,6 +165,16 @@
           <span class="top-nav-title visually-hidden">SCOUT</span>
         </a>
       </div>
+
+      <!-- Public Center Navigation for Anonymous Visitors -->
+      <nav class="public-top-nav-links" id="publicTopNavLinks" aria-label="Public Navigation">
+        <a href="/#overview" class="public-nav-link" data-top-nav="home">Home</a>
+        <a href="/#threat-intelligence" class="public-nav-link" data-top-nav="threats">Threat Intelligence</a>
+        <a href="/#system-architecture" class="public-nav-link" data-top-nav="architecture">Architecture</a>
+        <a href="/#prevention" class="public-nav-link" data-top-nav="prevention">Prevention</a>
+        <a href="/#public-pricing" class="public-nav-link" data-top-nav="pricing">Pricing & Plans</a>
+        <a href="/#team" class="public-nav-link" data-top-nav="team">Team</a>
+      </nav>
 
 
 
@@ -153,6 +201,14 @@
           </button>
         </div>
 
+        <!-- Dynamic Go to Dashboard CTA (Visible on Public Homepage when Logged In) -->
+        <div class="public-dashboard-cta-wrap" id="publicDashboardCtaWrap" style="display:none;">
+          <a href="/?view=dashboard" class="btn-auth-cta" id="publicDashboardCta">
+            <i class="fas fa-gauge-high"></i>
+            <span id="publicDashboardCtaText">Go to Dashboard</span>
+          </a>
+        </div>
+
         <!-- Authenticated User Profile Dropdown (Visible for Logged In Users) -->
         <div class="user-profile-menu" id="userProfileMenu" style="display:none;">
           <button class="user-profile-btn" id="userProfileDropdownBtn" type="button" aria-expanded="false" title="Account Menu">
@@ -169,6 +225,10 @@
               <div class="user-dropdown-email" id="dropdownUserEmail">user@scout.local</div>
             </div>
             <div class="user-dropdown-divider"></div>
+            <a href="/?view=dashboard" class="user-dropdown-item" id="dropdownDashboardLink">
+              <i class="fas fa-gauge-high dropdown-item-icon"></i>
+              <span>Dashboard</span>
+            </a>
             <a href="/?view=plans" class="user-dropdown-item" id="dropdownPlansLink">
               <i class="fas fa-gem dropdown-item-icon"></i>
               <span>Subscription Plans</span>
@@ -176,6 +236,10 @@
             <a href="/?view=admin" class="user-dropdown-item admin-only-item" id="dropdownAdminLink" style="display:none;">
               <i class="fas fa-shield-halved dropdown-item-icon"></i>
               <span>Admin Console</span>
+            </a>
+            <a href="/?public=1" class="user-dropdown-item" id="dropdownPublicLink">
+              <i class="fas fa-globe dropdown-item-icon"></i>
+              <span>View Public Website</span>
             </a>
             <div class="user-dropdown-divider"></div>
             <button type="button" class="user-dropdown-item text-danger" id="signOutBtn">
@@ -190,15 +254,11 @@
     <!-- Dedicated Tool Breadcrumb Bar (Visible when in dedicated view) -->
     <div class="dedicated-tool-bar" id="dedicatedToolBar" style="display:none;">
       <div class="breadcrumb-trail">
-        <a href="/" class="breadcrumb-link" id="breadcrumbHomeLink"><i class="fas fa-arrow-left"></i> Back to Overview</a>
+        <a href="/?view=dashboard" class="breadcrumb-link" id="breadcrumbDashboardLink"><i class="fas fa-gauge-high"></i> Dashboard</a>
         <span class="breadcrumb-sep">/</span>
         <span class="breadcrumb-current" id="dedicatedToolTitle">Live Network Monitoring</span>
       </div>
-      <div class="dedicated-tool-actions">
-        <button type="button" class="btn-subtle" id="dedicatedViewToggleBtn" title="Return to Home Page">
-          <i class="fas fa-house-chimney"></i> Home Page
-        </button>
-      </div>
+      <div class="dedicated-tool-actions"></div>
     </div>
 
     <!-- Main Scrolling Body -->
@@ -284,6 +344,9 @@
             </div>
 
             <div class="hero-cta-group">
+              <a href="/?view=dashboard" class="btn-primary" id="heroDynamicDashboardBtn" style="display:none;">
+                <i class="fas fa-gauge-high"></i> <span id="heroDynamicDashboardBtnText">Go to Dashboard</span>
+              </a>
               <a href="/?view=monitoring" class="btn-primary" id="heroStartScanBtn">
                 <i class="fas fa-satellite-dish"></i> Launch Live Monitoring
               </a>
@@ -1841,6 +1904,43 @@
         </div>
       </section>
 
+      <!-- Section: Public Homepage Subscription Plans Catalog -->
+      <section class="public-pricing-section" id="public-pricing">
+        <div class="section-container">
+          <div class="section-header text-center">
+            <div class="section-badge">
+              <i class="fas fa-gem"></i> Transparent Security Tiers
+            </div>
+            <h2 class="section-title">SCOUT Threat Intelligence & Defense Plans</h2>
+            <p class="section-subtitle">
+              Select an operational clearance tier to access real-time packet telemetry, autonomous 15-class threat detection, active port enumeration, and subnet reconnaissance. Fully synchronized with platform administration.
+            </p>
+          </div>
+
+          <!-- Dynamic Public Plans Grid (Loaded from API with Zero Mock Data) -->
+          <div class="public-plans-grid" id="publicHomepagePlansGrid">
+            <div class="plans-loading-placeholder">
+              <i class="fas fa-circle-notch fa-spin"></i> Loading live subscription tiers...
+            </div>
+          </div>
+
+          <div class="public-pricing-guarantee">
+            <div class="guarantee-item">
+              <i class="fas fa-bolt"></i>
+              <span>Instant provisioning upon administrative authorization</span>
+            </div>
+            <div class="guarantee-item">
+              <i class="fas fa-shield-check"></i>
+              <span>Zero telemetry telemetry throttles on all active tiers</span>
+            </div>
+            <div class="guarantee-item">
+              <i class="fas fa-user-shield"></i>
+              <span>Direct administrator access governance & security audit logs</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Section 7: Engineering Team & Contributors -->
       <section class="team-section" id="team">
         <div class="section-container">
@@ -1913,6 +2013,210 @@
         </div>
       </section>
 
+      <!-- Section: Authenticated User Dashboard -->
+      <section class="user-dashboard-section" id="user-dashboard" style="display:none;">
+        <div class="section-container">
+          <div class="user-dash-header-card">
+            <div class="user-dash-welcome-left">
+              <div class="user-dash-avatar" id="userDashAvatar"><i class="fas fa-user-shield"></i></div>
+              <div class="user-dash-welcome-text">
+                <div class="user-dash-role-badge"><span class="badge-dot"></span> <span id="userDashRoleBadge">Operator Clearance</span></div>
+                <h2 class="user-dash-title" id="userDashGreeting">Welcome back, Operator</h2>
+                <p class="user-dash-email" id="userDashEmail">operator@scout.local</p>
+              </div>
+            </div>
+            <div class="user-dash-plan-summary" id="userDashPlanSummary">
+              <div class="user-dash-plan-badge" id="userDashPlanBadge">
+                <i class="fas fa-gem"></i> <span id="userDashPlanName">Loading Plan...</span>
+              </div>
+              <div class="user-dash-plan-meta">
+                <span class="plan-status-pill active" id="userDashStatusPill"><i class="fas fa-check-circle"></i> Active Clearance</span>
+                <span class="plan-expiry-countdown" id="userDashCountdown"><i class="fas fa-clock"></i> Checking validity...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Navigation / Tool Entitlements Grid -->
+          <div class="user-dash-section-title">
+            <h3><i class="fas fa-microchip"></i> Authorized Operational Capabilities</h3>
+            <p>Access the cybersecurity tools and analytical engines unlocked by your active subscription plan.</p>
+          </div>
+
+          <div class="user-dash-tools-grid">
+            <!-- Tool 1: Live Monitoring -->
+            <div class="dash-tool-card" id="dashToolMonitorCard">
+              <div class="dash-tool-icon monitor-icon"><i class="fas fa-satellite-dish"></i></div>
+              <div class="dash-tool-content">
+                <div class="dash-tool-header">
+                  <h4>Live Network Monitoring</h4>
+                  <span class="tool-entitlement-badge" id="dashMonitorEntitlementBadge"><i class="fas fa-circle-check"></i> Unlocked</span>
+                </div>
+                <p>Passive packet interception, real-time 77-feature flow extraction, and 15-class autonomous AI attack classification.</p>
+                <div class="dash-tool-footer">
+                  <button type="button" class="btn-dash-action" id="dashLaunchMonitorBtn">
+                    <span>Launch Monitoring</span> <i class="fas fa-arrow-right"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tool 2: Port Scanner -->
+            <div class="dash-tool-card" id="dashToolPortCard">
+              <div class="dash-tool-icon port-icon"><i class="fas fa-bullseye"></i></div>
+              <div class="dash-tool-content">
+                <div class="dash-tool-header">
+                  <h4>Active Port Scanner</h4>
+                  <span class="tool-entitlement-badge" id="dashPortEntitlementBadge"><i class="fas fa-circle-check"></i> Unlocked</span>
+                </div>
+                <p>High-concurrency TCP socket probing, well-known port sweeps, loopback isolation, and service identification.</p>
+                <div class="dash-tool-footer">
+                  <button type="button" class="btn-dash-action" id="dashLaunchPortBtn">
+                    <span>Launch Port Scanner</span> <i class="fas fa-arrow-right"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tool 3: Network Discovery -->
+            <div class="dash-tool-card" id="dashToolNdCard">
+              <div class="dash-tool-icon nd-icon"><i class="fas fa-sitemap"></i></div>
+              <div class="dash-tool-content">
+                <div class="dash-tool-header">
+                  <h4>Network Discovery</h4>
+                  <span class="tool-entitlement-badge" id="dashNdEntitlementBadge"><i class="fas fa-circle-check"></i> Unlocked</span>
+                </div>
+                <p>ARP and ICMP sweeps across local subnets, MAC vendor fingerprinting, and live LAN device asset inventory.</p>
+                <div class="dash-tool-footer">
+                  <button type="button" class="btn-dash-action" id="dashLaunchNdBtn">
+                    <span>Launch Discovery</span> <i class="fas fa-arrow-right"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Dashboard Secondary Row: Subscription Details & Threat Alerts -->
+          <div class="user-dash-details-row">
+            <div class="user-dash-sub-details-card">
+              <div class="card-mini-header">
+                <h4><i class="fas fa-id-card"></i> Subscription Validity Details</h4>
+                <a href="/?view=plans" class="dash-text-link" id="dashChangePlanLink">Change Plan / Renew</a>
+              </div>
+              <div class="dash-details-meta-list">
+                <div class="dash-meta-row">
+                  <span class="meta-label">Plan Tier</span>
+                  <span class="meta-value" id="userDashDetailTier">—</span>
+                </div>
+                <div class="dash-meta-row">
+                  <span class="meta-label">Subscription Status</span>
+                  <span class="meta-value" id="userDashDetailStatus">—</span>
+                </div>
+                <div class="dash-meta-row">
+                  <span class="meta-label">Activated On</span>
+                  <span class="meta-value" id="userDashDetailStartDate">—</span>
+                </div>
+                <div class="dash-meta-row">
+                  <span class="meta-label">Expires On</span>
+                  <span class="meta-value" id="userDashDetailEndDate">—</span>
+                </div>
+                <div class="dash-meta-row">
+                  <span class="meta-label">Remaining Duration</span>
+                  <span class="meta-value highlight-lime" id="userDashDetailRemaining">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="user-dash-threat-summary-card">
+              <div class="card-mini-header">
+                <h4><i class="fas fa-shield-halved"></i> Threat Telemetry Snapshot</h4>
+                <span class="status-live-pill"><span class="status-live-dot"></span> Telemetry Online</span>
+              </div>
+              <div class="dash-threat-stat-body">
+                <div class="threat-kpi-row">
+                  <div class="threat-kpi-item">
+                    <span class="kpi-num" id="userDashThreatCount">0</span>
+                    <span class="kpi-label">Detected Attacks</span>
+                  </div>
+                  <div class="threat-kpi-item">
+                    <span class="kpi-num" id="userDashRecallRate">99.86%</span>
+                    <span class="kpi-label">Detection Recall</span>
+                  </div>
+                  <div class="threat-kpi-item">
+                    <span class="kpi-num">15</span>
+                    <span class="kpi-label">Class Multi-Vector</span>
+                  </div>
+                </div>
+                <p class="threat-kpi-note" id="userDashThreatNote">
+                  Autonomous AI intrusion engine is active. All packet flows are monitored against 15 trained hostile vector classes.
+                </p>
+                <a href="/?view=monitoring" class="btn-dash-secondary" id="dashViewMonitorThreats">
+                  <i class="fas fa-chart-line"></i> View Real-Time Telemetry
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Dashboard Tertiary Row: Operator Profile & Account Settings -->
+          <div class="user-dash-profile-row" id="userDashProfileRow" style="margin-top: 1.5rem;">
+            <div class="user-dash-profile-card">
+              <div class="card-mini-header">
+                <h4><i class="fas fa-user-pen"></i> Operator Profile & Account Settings</h4>
+                <span class="profile-security-badge"><i class="fas fa-shield-halved"></i> Identity Clearance</span>
+              </div>
+              <div class="user-dash-profile-forms">
+                <!-- Sub-form A: Profile Information -->
+                <form id="userDashProfileForm" class="user-dash-form" onsubmit="return false;">
+                  <h5><i class="fas fa-id-card"></i> Personal Details</h5>
+                  <div class="dash-form-grid">
+                    <div class="dash-form-group">
+                      <label for="userDashFullNameInput"><i class="fas fa-signature"></i> Full Name</label>
+                      <input type="text" id="userDashFullNameInput" class="dash-input" placeholder="Display Full Name" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="userDashEmailInput"><i class="fas fa-envelope"></i> Email Address</label>
+                      <input type="email" id="userDashEmailInput" class="dash-input" placeholder="operator@domain.com" />
+                    </div>
+                  </div>
+                  <div class="form-actions-inline">
+                    <button type="button" class="btn-dash-action" id="userDashSaveProfileBtn">
+                      <i class="fas fa-save"></i> <span>Update Profile</span>
+                    </button>
+                    <span id="userDashProfileMsg" class="dash-form-msg"></span>
+                  </div>
+                </form>
+
+                <hr class="profile-divider" style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.08));" />
+
+                <!-- Sub-form B: Password Update -->
+                <form id="userDashPasswordForm" class="user-dash-form" onsubmit="return false;">
+                  <h5><i class="fas fa-key"></i> Security Credentials</h5>
+                  <div class="dash-form-grid three-col">
+                    <div class="dash-form-group">
+                      <label for="userDashCurrentPassword"><i class="fas fa-lock"></i> Current Password</label>
+                      <input type="password" id="userDashCurrentPassword" class="dash-input" placeholder="Current password" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="userDashNewPassword"><i class="fas fa-shield-alt"></i> New Password</label>
+                      <input type="password" id="userDashNewPassword" class="dash-input" placeholder="Min 8 chars, mixed case, digit/symbol" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="userDashConfirmPassword"><i class="fas fa-shield-check"></i> Confirm Password</label>
+                      <input type="password" id="userDashConfirmPassword" class="dash-input" placeholder="Confirm new password" />
+                    </div>
+                  </div>
+                  <div class="form-actions-inline">
+                    <button type="button" class="btn-dash-action" id="userDashChangePasswordBtn">
+                      <i class="fas fa-lock-rotate"></i> <span>Change Password</span>
+                    </button>
+                    <span id="userDashPasswordMsg" class="dash-form-msg"></span>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Section 8: Subscription Plans & Entitlements -->
       <section class="subscription-plans-section" id="subscription-plans" style="display:none;">
         <div class="section-container">
@@ -1971,73 +2275,265 @@
 
       <!-- Section 9: Administrative Management Console -->
       <section class="admin-console-section" id="admin-console" style="display:none;">
-        <div class="section-container">
-          <div class="section-header">
-            <div class="section-badge admin-badge-pill">
-              <i class="fas fa-shield-halved"></i> Security Administration
-            </div>
-            <h2 class="section-title">SCOUT Administrative Console</h2>
-            <p class="section-subtitle">
-              Manage registered operators, evaluate subscription requests, configure plan entitlements, and audit platform security events.
-            </p>
-          </div>
-
-          <!-- Admin Metric Cards -->
-          <div class="admin-metrics-row">
-            <div class="admin-metric-card">
-              <div class="metric-icon"><i class="fas fa-users"></i></div>
-              <div class="metric-info">
-                <span class="metric-label">Registered Operators</span>
-                <span class="metric-value" id="adminMetricUsers">—</span>
-              </div>
-            </div>
-            <div class="admin-metric-card highlight-green">
-              <div class="metric-icon"><i class="fas fa-shield-check"></i></div>
-              <div class="metric-info">
-                <span class="metric-label">Active Subscriptions</span>
-                <span class="metric-value" id="adminMetricActiveSubs">—</span>
-              </div>
-            </div>
-            <div class="admin-metric-card highlight-amber" id="adminPendingCard">
-              <div class="metric-icon"><i class="fas fa-clock"></i></div>
-              <div class="metric-info">
-                <span class="metric-label">Pending Approvals</span>
-                <span class="metric-value" id="adminMetricPendingSubs">—</span>
-              </div>
-            </div>
-            <div class="admin-metric-card">
-              <div class="metric-icon"><i class="fas fa-gem"></i></div>
-              <div class="metric-info">
-                <span class="metric-label">Active Plan Tiers</span>
-                <span class="metric-value" id="adminMetricPlans">—</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Admin Tab Navigation -->
+        <div class="section-container admin-dashboard-container">
+          <!-- Admin Tab Navigation (Persistent across all Admin Views) -->
           <div class="admin-tabs-bar" role="tablist">
-            <button type="button" class="admin-tab-btn active" data-admin-tab="requests">
-              <i class="fas fa-bell"></i> Requests & Approvals
-              <span class="admin-tab-count" id="adminPendingCountBadge" style="display:none;">0</span>
+            <button type="button" class="admin-tab-btn active" data-admin-tab="overview">
+              <i class="fas fa-gauge-high"></i> Platform Overview
+            </button>
+            <button type="button" class="admin-tab-btn" data-admin-tab="users">
+              <i class="fas fa-users-gear"></i> Users
+            </button>
+            <button type="button" class="admin-tab-btn" data-admin-tab="plans">
+              <i class="fas fa-gem"></i> Subscription Plans
             </button>
             <button type="button" class="admin-tab-btn" data-admin-tab="subscriptions">
               <i class="fas fa-id-card"></i> All Subscriptions
             </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="users">
-              <i class="fas fa-user-gear"></i> Operators
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="plans">
-              <i class="fas fa-gem"></i> Plan Catalog
+            <button type="button" class="admin-tab-btn" data-admin-tab="requests">
+              <i class="fas fa-user-clock"></i> Pending Requests
+              <span class="admin-tab-count" id="adminPendingCountBadge" style="display:none;">0</span>
             </button>
             <button type="button" class="admin-tab-btn" data-admin-tab="audit">
               <i class="fas fa-clipboard-list"></i> Audit Logs
+            </button>
+            <button type="button" class="admin-tab-btn" data-admin-tab="profile">
+              <i class="fas fa-user-shield"></i> Profile & Security
             </button>
           </div>
 
           <!-- Admin Panels Container -->
           <div class="admin-panels-container">
+            <!-- Panel 0: Platform Overview (Appears ONLY on Platform Overview) -->
+            <div class="admin-panel" id="adminPanelOverview" style="display:none;">
+              <!-- Executive Admin Header -->
+              <div class="admin-dashboard-header">
+                <div class="admin-header-left">
+                  <div class="admin-header-badge-row">
+                    <span class="admin-live-badge"><span class="badge-dot pulse"></span> Root Clearance</span>
+                    <span class="admin-header-meta"><i class="fas fa-server"></i> Platform Governance & Access Telemetry</span>
+                  </div>
+                  <h2 class="admin-dashboard-title">SCOUT Administrative Console</h2>
+                  <p class="admin-dashboard-subtitle">
+                    Real-time operational governance over registered operators, subscription lifecycles, licensing tiers, and platform security events.
+                  </p>
+                </div>
+                <div class="admin-header-right">
+                  <button type="button" class="btn-admin-primary-action refresh-btn" id="adminRefreshAllBtn" title="Refresh all administrative metrics and datasets">
+                    <i class="fas fa-rotate"></i> <span>Refresh Dashboard</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Admin Metric Cards: 10 Expanded Real-Time Platform Metrics -->
+              <div class="admin-metrics-row">
+                <!-- 1. Total Users -->
+                <div class="admin-metric-card highlight-cyan" id="adminMetricTotalUsersCard" role="button" tabindex="0" title="Click to view all registered users">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-users"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Identity</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricTotalUsers">—</span>
+                    <span class="metric-label">Total Users</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-cyan"></i> All registered operators</span>
+                  </div>
+                </div>
+
+                <!-- 2. Active Accounts -->
+                <div class="admin-metric-card highlight-green" id="adminMetricActiveUsersCard" role="button" tabindex="0" title="Click to view active user accounts">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-user-check"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Identity</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricActiveUsers">—</span>
+                    <span class="metric-label">Active Accounts</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-green"></i> Clearance enabled</span>
+                  </div>
+                </div>
+
+                <!-- 3. Inactive Accounts -->
+                <div class="admin-metric-card highlight-coral" id="adminMetricInactiveUsersCard" role="button" tabindex="0" title="Click to view inactive/suspended user accounts">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-user-slash"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Identity</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricInactiveUsers">—</span>
+                    <span class="metric-label">Inactive Accounts</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-coral"></i> Suspended / revoked</span>
+                  </div>
+                </div>
+
+                <!-- 4. Total Subscribers -->
+                <div class="admin-metric-card highlight-blue" id="adminMetricTotalSubscribersCard" role="button" tabindex="0" title="Click to view all subscribed users">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-id-badge"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Licensing</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricTotalSubscribers">—</span>
+                    <span class="metric-label">Total Subscribers</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-blue"></i> Unique subscribed users</span>
+                  </div>
+                </div>
+
+                <!-- 5. Active Subscriptions -->
+                <div class="admin-metric-card highlight-green" id="adminMetricActiveSubsCard" role="button" tabindex="0" title="Click to view active subscriptions">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-shield-check"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Licensing</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricActiveSubs">—</span>
+                    <span class="metric-label">Active Subscriptions</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-green"></i> Unlocked tool access</span>
+                  </div>
+                </div>
+
+                <!-- 6. Pending Requests -->
+                <div class="admin-metric-card highlight-amber" id="adminPendingCard" role="button" tabindex="0" title="Click to view pending subscription requests">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-clock"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Workflow</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricPendingSubs">—</span>
+                    <span class="metric-label">Pending Requests</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-amber"></i> Awaiting activation</span>
+                  </div>
+                </div>
+
+                <!-- 7. Expired Subscriptions -->
+                <div class="admin-metric-card highlight-coral" id="adminMetricExpiredSubsCard" role="button" tabindex="0" title="Click to view expired subscriptions">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-calendar-xmark"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Licensing</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricExpiredSubs">—</span>
+                    <span class="metric-label">Expired Subscriptions</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-coral"></i> Reached term end date</span>
+                  </div>
+                </div>
+
+                <!-- 8. Canceled Subscriptions -->
+                <div class="admin-metric-card highlight-muted" id="adminMetricCanceledSubsCard" role="button" tabindex="0" title="Click to view canceled subscriptions">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-ban"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Licensing</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricCanceledSubs">—</span>
+                    <span class="metric-label">Canceled Subscriptions</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-muted"></i> Terminated / revoked</span>
+                  </div>
+                </div>
+
+                <!-- 9. Active Plans -->
+                <div class="admin-metric-card highlight-green" id="adminMetricPlansCard" role="button" tabindex="0" title="Click to view active subscription plans">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-gem"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Catalog</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricPlans">—</span>
+                    <span class="metric-label">Active Plans</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-green"></i> Live in public catalog</span>
+                  </div>
+                </div>
+
+                <!-- 10. Inactive Plans -->
+                <div class="admin-metric-card highlight-muted" id="adminMetricInactivePlansCard" role="button" tabindex="0" title="Click to view inactive/archived plans">
+                  <div class="metric-card-top">
+                    <div class="metric-icon"><i class="fas fa-box-archive"></i></div>
+                    <div class="metric-card-action">
+                      <span class="metric-tag">Catalog</span>
+                      <i class="fas fa-arrow-up-right-from-square metric-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="metric-info">
+                    <span class="metric-value" id="adminMetricInactivePlans">—</span>
+                    <span class="metric-label">Inactive Plans</span>
+                  </div>
+                  <div class="metric-card-bottom">
+                    <span class="metric-context"><i class="fas fa-circle-dot status-dot-muted"></i> Archived from public</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Admin Quick Action Shortcuts -->
+              <div class="admin-shortcuts-toolbar" id="adminShortcutsToolbar">
+                <span class="shortcuts-title"><i class="fas fa-bolt"></i> Quick Jump:</span>
+                <button type="button" class="admin-shortcut-btn" data-jump-tab="users">
+                  <i class="fas fa-users-gear"></i> Users
+                </button>
+                <button type="button" class="admin-shortcut-btn" data-jump-tab="plans">
+                  <i class="fas fa-gem"></i> Subscription Plans
+                </button>
+                <button type="button" class="admin-shortcut-btn" data-jump-tab="subscriptions">
+                  <i class="fas fa-id-card"></i> All Subscriptions
+                </button>
+                <button type="button" class="admin-shortcut-btn" data-jump-tab="requests">
+                  <i class="fas fa-user-clock"></i> Pending Requests
+                </button>
+                <button type="button" class="admin-shortcut-btn" data-jump-tab="audit">
+                  <i class="fas fa-clipboard-list"></i> Audit Logs
+                </button>
+                <button type="button" class="admin-shortcut-btn" data-jump-tab="profile">
+                  <i class="fas fa-user-shield"></i> Profile & Security
+                </button>
+              </div>
+            </div>
+
             <!-- Panel 1: Subscription Requests -->
-            <div class="admin-panel active" id="adminPanelRequests">
+            <div class="admin-panel" id="adminPanelRequests" style="display:none;">
               <div class="panel-header-row">
                 <div class="panel-title-wrap">
                   <h3>Pending Subscription Requests</h3>
@@ -2047,23 +2543,18 @@
                   <i class="fas fa-rotate"></i> Refresh
                 </button>
               </div>
-              <div class="admin-table-wrap">
-                <table class="admin-table" id="adminRequestsTable">
-                  <thead>
-                    <tr>
-                      <th>Operator</th>
-                      <th>Requested Plan</th>
-                      <th>Price / Term</th>
-                      <th>Requested At</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminRequestsTbody">
-                    <tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading requests...</td></tr>
-                  </tbody>
-                </table>
+              <!-- Responsive Requests Cards Grid -->
+              <div class="admin-requests-card-container">
+                <div class="admin-requests-cards-grid" id="adminRequestsCardsGrid">
+                  <div class="admin-cards-loading">
+                    <i class="fas fa-circle-notch fa-spin"></i> Loading pending requests...
+                  </div>
+                </div>
               </div>
+              <!-- Hidden fallback table for legacy DOM references -->
+              <table id="adminRequestsTable" style="display:none;" aria-hidden="true">
+                <tbody id="adminRequestsTbody"></tbody>
+              </table>
             </div>
 
             <!-- Panel 2: All Subscriptions -->
@@ -2074,6 +2565,10 @@
                   <p>Inspect active, pending, expired, and canceled subscriptions across all accounts.</p>
                 </div>
                 <div class="panel-actions-group">
+                  <div class="admin-search-wrap">
+                    <i class="fas fa-search admin-search-icon"></i>
+                    <input type="text" id="adminSubSearchInput" class="admin-search-input" placeholder="Search by user, email, sub ID..." />
+                  </div>
                   <select id="adminSubStatusFilter" class="admin-filter-select">
                     <option value="all">All Statuses</option>
                     <option value="active">Active Only</option>
@@ -2086,23 +2581,18 @@
                   </button>
                 </div>
               </div>
-              <div class="admin-table-wrap">
-                <table class="admin-table" id="adminSubsTable">
-                  <thead>
-                    <tr>
-                      <th>Operator</th>
-                      <th>Plan</th>
-                      <th>Status</th>
-                      <th>Start Date</th>
-                      <th>Expiration Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminSubsTbody">
-                    <tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading subscriptions...</td></tr>
-                  </tbody>
-                </table>
+              <!-- Responsive Global Subscriptions Cards Grid -->
+              <div class="admin-subs-card-container">
+                <div class="admin-subs-cards-grid" id="adminSubsCardsGrid">
+                  <div class="admin-cards-loading">
+                    <i class="fas fa-circle-notch fa-spin"></i> Loading subscriptions...
+                  </div>
+                </div>
               </div>
+              <!-- Hidden fallback table for legacy DOM references -->
+              <table id="adminSubsTable" style="display:none;" aria-hidden="true">
+                <tbody id="adminSubsTbody"></tbody>
+              </table>
             </div>
 
             <!-- Panel 3: Operators / User Management -->
@@ -2110,30 +2600,48 @@
               <div class="panel-header-row">
                 <div class="panel-title-wrap">
                   <h3>Operator Accounts</h3>
-                  <p>View registered users, roles, account status, and toggle access.</p>
+                  <p>Search registered operators, inspect subscription history, toggle suspension, and manage administrative roles.</p>
                 </div>
-                <button type="button" class="btn-admin-refresh" id="refreshUsersBtn">
-                  <i class="fas fa-rotate"></i> Refresh
-                </button>
+                <div class="panel-actions-group">
+                  <div class="admin-search-wrap">
+                    <i class="fas fa-search admin-search-icon"></i>
+                    <input type="text" id="adminUserSearchInput" class="admin-search-input" placeholder="Search by username, email, name..." />
+                  </div>
+                  <select id="adminUserRoleFilter" class="admin-filter-select">
+                    <option value="">All Roles</option>
+                    <option value="Admin">Admin</option>
+                    <option value="User">User</option>
+                  </select>
+                  <select id="adminUserStatusFilter" class="admin-filter-select">
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="disabled">Suspended</option>
+                  </select>
+                  <select id="adminUserSubStatusFilter" class="admin-filter-select">
+                    <option value="">All Subscriptions</option>
+                    <option value="active">Active Sub</option>
+                    <option value="pending">Pending Sub</option>
+                    <option value="expired">Expired Sub</option>
+                    <option value="canceled">Canceled Sub</option>
+                    <option value="none">No Subscription</option>
+                  </select>
+                  <button type="button" class="btn-admin-refresh" id="refreshUsersBtn">
+                    <i class="fas fa-rotate"></i> Refresh
+                  </button>
+                </div>
               </div>
-              <div class="admin-table-wrap">
-                <table class="admin-table" id="adminUsersTable">
-                  <thead>
-                    <tr>
-                      <th>Operator</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Account Status</th>
-                      <th>Joined</th>
-                      <th>Subscription</th>
-                      <th>Moderation</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminUsersTbody">
-                    <tr><td colspan="7" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading operators...</td></tr>
-                  </tbody>
-                </table>
+              <!-- Responsive Operator Cards Grid (Card-based UI/UX) -->
+              <div class="admin-users-card-container">
+                <div class="admin-users-cards-grid" id="adminUsersCardsGrid">
+                  <div class="admin-cards-loading">
+                    <i class="fas fa-circle-notch fa-spin"></i> Loading operators...
+                  </div>
+                </div>
               </div>
+              <!-- Hidden fallback table for legacy DOM references -->
+              <table id="adminUsersTable" style="display:none;" aria-hidden="true">
+                <tbody id="adminUsersTbody"></tbody>
+              </table>
             </div>
 
             <!-- Panel 4: Plan Catalog -->
@@ -2147,24 +2655,18 @@
                   <i class="fas fa-plus"></i> Create New Plan
                 </button>
               </div>
-              <div class="admin-table-wrap">
-                <table class="admin-table" id="adminPlansTable">
-                  <thead>
-                    <tr>
-                      <th>Plan ID</th>
-                      <th>Name</th>
-                      <th>Price</th>
-                      <th>Duration</th>
-                      <th>Entitlements</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminPlansTbody">
-                    <tr><td colspan="7" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading plans...</td></tr>
-                  </tbody>
-                </table>
+              <!-- Responsive Plan Cards Grid -->
+              <div class="admin-plans-card-container">
+                <div class="admin-plans-cards-grid" id="adminPlansCardsGrid">
+                  <div class="admin-cards-loading">
+                    <i class="fas fa-circle-notch fa-spin"></i> Loading plan catalog...
+                  </div>
+                </div>
               </div>
+              <!-- Hidden fallback table for legacy DOM references -->
+              <table id="adminPlansTable" style="display:none;" aria-hidden="true">
+                <tbody id="adminPlansTbody"></tbody>
+              </table>
             </div>
 
             <!-- Panel 5: Audit Logs -->
@@ -2194,6 +2696,130 @@
                     <tr><td colspan="6" class="text-center py-4"><i class="fas fa-circle-notch fa-spin"></i> Loading audit logs...</td></tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!-- Panel 6: Admin Profile & Security -->
+            <div class="admin-panel" id="adminPanelProfile" style="display:none;">
+              <div class="panel-header-row">
+                <div class="panel-title-wrap">
+                  <h3>Admin Profile & Account Security</h3>
+                  <p>Inspect administrator credentials, update display details, change passwords, and manage security sessions.</p>
+                </div>
+                <button type="button" class="btn-admin-refresh" id="refreshProfileBtn">
+                  <i class="fas fa-rotate"></i> Refresh Profile
+                </button>
+              </div>
+
+              <div class="admin-profile-layout">
+                <!-- Identity Overview Card -->
+                <div class="admin-profile-card identity-card">
+                  <div class="admin-avatar-wrap">
+                    <div class="admin-avatar-icon"><i class="fas fa-shield-halved"></i></div>
+                    <div class="admin-identity-meta">
+                      <h4 id="adminProfileDispName">Administrator</h4>
+                      <span class="admin-role-badge"><i class="fas fa-user-shield"></i> Platform Administrator</span>
+                    </div>
+                  </div>
+                  <div class="admin-info-list">
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-user"></i> Username</span>
+                      <span class="info-val" id="adminProfileDispUsername">—</span>
+                    </div>
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-envelope"></i> Email</span>
+                      <span class="info-val" id="adminProfileDispEmail">—</span>
+                    </div>
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-circle-check"></i> Account Status</span>
+                      <span class="info-val text-success" id="adminProfileDispStatus">Active</span>
+                    </div>
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-calendar-plus"></i> Member Since</span>
+                      <span class="info-val" id="adminProfileDispJoined">—</span>
+                    </div>
+                    <div class="admin-info-row">
+                      <span class="info-label"><i class="fas fa-clock-rotate-left"></i> Last Login</span>
+                      <span class="info-val" id="adminProfileDispLastLogin">—</span>
+                    </div>
+                  </div>
+                  <div class="admin-logout-wrap">
+                    <button type="button" class="btn-admin-action cancel" id="adminPanelLogoutBtn" style="width:100%; justify-content:center;">
+                      <i class="fas fa-right-from-bracket"></i> Sign Out Administrator
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Forms Column -->
+                <div class="admin-profile-forms-col">
+                  <!-- Edit Profile Details Card -->
+                  <div class="admin-profile-card form-card">
+                    <div class="card-header-inner">
+                      <h4><i class="fas fa-id-badge"></i> Edit Profile Details</h4>
+                      <p>Update administrator display name and contact email address.</p>
+                    </div>
+                    <div class="auth-alert" id="adminProfileAlert" style="display:none;"></div>
+                    <form id="adminProfileForm" novalidate>
+                      <div class="auth-form-row">
+                        <div class="auth-form-group">
+                          <label for="adminProfileFullNameInput" class="auth-label">Full Name</label>
+                          <input type="text" id="adminProfileFullNameInput" class="auth-input" placeholder="e.g. Lead Administrator" />
+                        </div>
+                        <div class="auth-form-group">
+                          <label for="adminProfileEmailInput" class="auth-label">Email Address</label>
+                          <input type="email" id="adminProfileEmailInput" class="auth-input" placeholder="admin@domain.com" required />
+                        </div>
+                      </div>
+                      <button type="submit" class="btn-auth-submit" id="adminProfileSubmitBtn" style="margin-top:12px;">
+                        <span class="auth-btn-text">Save Profile Changes</span>
+                        <i class="fas fa-floppy-disk auth-btn-icon"></i>
+                      </button>
+                    </form>
+                  </div>
+
+                  <!-- Change Password Security Card -->
+                  <div class="admin-profile-card form-card">
+                    <div class="card-header-inner">
+                      <h4><i class="fas fa-key"></i> Security & Password Management</h4>
+                      <p>Update administrator master password. Changing password automatically revokes previous sessions.</p>
+                    </div>
+                    <div class="auth-alert" id="adminPasswordAlert" style="display:none;"></div>
+                    <form id="adminPasswordForm" novalidate>
+                      <div class="auth-form-group">
+                        <label for="adminCurrentPasswordInput" class="auth-label">Current Password</label>
+                        <div class="auth-input-wrap">
+                          <i class="fas fa-lock auth-input-icon"></i>
+                          <input type="password" id="adminCurrentPasswordInput" class="auth-input" placeholder="Enter current password" required />
+                        </div>
+                      </div>
+                      <div class="auth-form-row">
+                        <div class="auth-form-group">
+                          <label for="adminNewPasswordInput" class="auth-label">New Password</label>
+                          <div class="auth-input-wrap">
+                            <i class="fas fa-shield auth-input-icon"></i>
+                            <input type="password" id="adminNewPasswordInput" class="auth-input" placeholder="Min 8 chars, 1 uppercase, 1 special" required />
+                          </div>
+                        </div>
+                        <div class="auth-form-group">
+                          <label for="adminConfirmPasswordInput" class="auth-label">Confirm New Password</label>
+                          <div class="auth-input-wrap">
+                            <i class="fas fa-shield-check auth-input-icon"></i>
+                            <input type="password" id="adminConfirmPasswordInput" class="auth-input" placeholder="Repeat new password" required />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="auth-pwd-guidance" style="margin-bottom:12px;">
+                        <div class="guidance-item" id="adminPwdRuleLength"><i class="fas fa-circle-dot"></i> Min 8 characters</div>
+                        <div class="guidance-item" id="adminPwdRuleCase"><i class="fas fa-circle-dot"></i> Uppercase & lowercase</div>
+                        <div class="guidance-item" id="adminPwdRuleNumSpecial"><i class="fas fa-circle-dot"></i> Number & special character</div>
+                      </div>
+                      <button type="submit" class="btn-auth-submit" id="adminPasswordSubmitBtn">
+                        <span class="auth-btn-text">Update Password</span>
+                        <i class="fas fa-lock auth-btn-icon"></i>
+                      </button>
+                    </form>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2227,6 +2853,7 @@
             <a href="/network-discovery">Network Discovery</a>
             <a href="/#threat-intelligence">Attack Classification</a>
             <a href="/#prevention">Defensive Architecture</a>
+            <a href="/#public-pricing">Pricing & Plans</a>
             <a href="/#team">Project Team</a>
           </div>
 
@@ -2379,65 +3006,240 @@
     </div>
   </div>
 
+  <!-- Modal: Admin User Details & History Drawer -->
+  <div class="auth-modal" id="adminUserDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminUserDetailsModalTitle" style="display:none;">
+    <div class="auth-modal-backdrop" id="adminUserDetailsModalBackdrop"></div>
+    <div class="auth-modal-dialog modal-lg">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-user-gear"></i> Operator Dossier</div>
+        <h3 class="auth-modal-title" id="adminUserDetailsModalTitle">Operator Profile & Subscriptions</h3>
+        <p class="auth-modal-subtitle">Comprehensive account record, subscription lifecycle audit, and security controls.</p>
+        <button type="button" class="auth-modal-close" id="adminUserDetailsModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminUserDetailsAlert" style="display:none;"></div>
+        
+        <!-- User Overview Grid -->
+        <div class="user-dossier-grid" id="adminUserDossierMeta">
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-hashtag"></i> User ID</span>
+            <span class="dossier-val" id="dossierUserId">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-user"></i> Username</span>
+            <span class="dossier-val" id="dossierUsername">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-envelope"></i> Email</span>
+            <span class="dossier-val" id="dossierEmail">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-id-card"></i> Full Name</span>
+            <span class="dossier-val" id="dossierFullName">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-shield"></i> Role</span>
+            <span class="dossier-val" id="dossierRole">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-toggle-on"></i> Account Status</span>
+            <span class="dossier-val" id="dossierStatus">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-calendar-plus"></i> Registered</span>
+            <span class="dossier-val" id="dossierCreated">—</span>
+          </div>
+          <div class="dossier-item">
+            <span class="dossier-label"><i class="fas fa-clock"></i> Last Login</span>
+            <span class="dossier-val" id="dossierLastLogin">—</span>
+          </div>
+        </div>
+
+        <!-- Admin Operator Profile Edit Form -->
+        <div class="dossier-edit-section" style="margin-top: 1.25rem; padding: 1rem; border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+          <div class="dossier-section-title" style="margin-bottom: 0.75rem;">
+            <h4 style="font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-user-pen text-primary"></i> Edit Operator Details</h4>
+          </div>
+          <form id="adminUserEditForm" class="dossier-edit-form" onsubmit="return false;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.75rem; align-items: flex-end;">
+              <div>
+                <label for="adminUserEditFullName" style="font-size: 0.8rem; font-weight: 500; display: block; margin-bottom: 0.25rem;"><i class="fas fa-id-card"></i> Full Name</label>
+                <input type="text" id="adminUserEditFullName" class="form-control" style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.85rem;" placeholder="Display Full Name" />
+              </div>
+              <div>
+                <label for="adminUserEditEmail" style="font-size: 0.8rem; font-weight: 500; display: block; margin-bottom: 0.25rem;"><i class="fas fa-envelope"></i> Email Address</label>
+                <input type="email" id="adminUserEditEmail" class="form-control" style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.85rem;" placeholder="operator@domain.com" />
+              </div>
+              <div>
+                <button type="button" class="btn-admin-action activate" id="adminUserEditSaveBtn" style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+                  <i class="fas fa-save"></i> Save Profile
+                </button>
+              </div>
+            </div>
+            <div id="adminUserEditMsg" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 4px;"></div>
+          </form>
+        </div>
+
+        <!-- Quick Moderation Controls inside Drawer -->
+        <div class="dossier-actions-toolbar" id="adminDossierActions">
+          <!-- Populated dynamically: Toggle status, Change Role -->
+        </div>
+
+        <!-- Full Subscription History -->
+        <div class="dossier-section-title">
+          <h4><i class="fas fa-receipt"></i> Complete Subscription Lifecycle History</h4>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table" id="adminUserSubsHistoryTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Plan Tier</th>
+                <th>Status</th>
+                <th>Start Date</th>
+                <th>Expiration Date</th>
+                <th>Admin Notes / Reason</th>
+              </tr>
+            </thead>
+            <tbody id="adminUserSubsHistoryTbody">
+              <tr><td colspan="6" class="text-center py-3 text-muted">No subscriptions found for this operator.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Admin Plan Editor -->
   <div class="auth-modal" id="adminPlanModal" role="dialog" aria-modal="true" aria-labelledby="adminPlanModalTitle" style="display:none;">
     <div class="auth-modal-backdrop" id="adminPlanModalBackdrop"></div>
-    <div class="auth-modal-dialog">
+    <div class="auth-modal-dialog modal-lg">
       <div class="auth-modal-header">
-        <div class="auth-modal-badge"><i class="fas fa-gem"></i> Plan Tier Editor</div>
+        <div class="auth-modal-badge"><i class="fas fa-gem"></i> Plan Tier Configurator</div>
         <h3 class="auth-modal-title" id="adminPlanModalTitle">Configure Subscription Plan</h3>
-        <p class="auth-modal-subtitle">Define plan identifiers, pricing, billing duration, and feature permissions.</p>
+        <p class="auth-modal-subtitle">Define plan identifiers, pricing structure, billing duration, and cybersecurity entitlements.</p>
         <button type="button" class="auth-modal-close" id="adminPlanModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
       </div>
       <div class="auth-modal-body">
         <div class="auth-alert" id="adminPlanAlert" style="display:none;"></div>
-        <form id="adminPlanForm" novalidate>
+        <form id="adminPlanForm" class="admin-plan-form-grid" novalidate>
           <input type="hidden" id="planFormMode" value="create" />
-          <div class="auth-form-row">
-            <div class="auth-form-group">
-              <label for="planFormId" class="auth-label">Plan ID (Slug)</label>
-              <input type="text" id="planFormId" class="auth-input" placeholder="e.g. SCOUT-PRO" required />
+          <input type="hidden" id="planFormDbId" value="" />
+
+          <!-- Section 1: Identifiers -->
+          <div class="plan-modal-section">
+            <h5 class="plan-modal-sec-title"><i class="fas fa-fingerprint"></i> Plan Identification</h5>
+            <div class="auth-form-row">
+              <div class="auth-form-group">
+                <label for="planFormCode" class="auth-label">Plan Code (Slug) <span class="required-star">*</span></label>
+                <input type="text" id="planFormCode" class="auth-input" placeholder="e.g. SCOUT-ENTERPRISE" required />
+                <small class="field-hint text-muted" id="planFormCodeHint">Unique immutable identifier for system licensing.</small>
+              </div>
+              <div class="auth-form-group">
+                <label for="planFormName" class="auth-label">Plan Display Name <span class="required-star">*</span></label>
+                <input type="text" id="planFormName" class="auth-input" placeholder="e.g. Enterprise SOC Defense" required />
+                <small class="field-hint text-muted">Public title shown across plan catalogs and cards.</small>
+              </div>
             </div>
             <div class="auth-form-group">
-              <label for="planFormName" class="auth-label">Plan Name</label>
-              <input type="text" id="planFormName" class="auth-input" placeholder="e.g. Professional Tier" required />
-            </div>
-          </div>
-          <div class="auth-form-group">
-            <label for="planFormDescription" class="auth-label">Description</label>
-            <input type="text" id="planFormDescription" class="auth-input" placeholder="Brief summary of capabilities" required />
-          </div>
-          <div class="auth-form-row">
-            <div class="auth-form-group">
-              <label for="planFormPrice" class="auth-label">Price (USD)</label>
-              <input type="number" step="0.01" min="0" id="planFormPrice" class="auth-input" placeholder="49.00" required />
-            </div>
-            <div class="auth-form-group">
-              <label for="planFormDurationDays" class="auth-label">Duration (Days)</label>
-              <input type="number" min="1" id="planFormDurationDays" class="auth-input" placeholder="30" required />
+              <label for="planFormDescription" class="auth-label">Description <span class="required-star">*</span></label>
+              <input type="text" id="planFormDescription" class="auth-input" placeholder="Target operational tier and organizational scope..." required />
             </div>
           </div>
-          <div class="auth-form-group">
-            <label class="auth-label">Feature Entitlements</label>
-            <div class="plan-entitlements-toggles">
-              <label class="entitlement-checkbox-label">
+
+          <!-- Section 2: Pricing & Term -->
+          <div class="plan-modal-section">
+            <h5 class="plan-modal-sec-title"><i class="fas fa-coins"></i> Pricing & Term Duration</h5>
+            <div class="auth-form-row four-col">
+              <div class="auth-form-group">
+                <label for="planFormPrice" class="auth-label">Price <span class="required-star">*</span></label>
+                <input type="number" step="0.01" min="0" id="planFormPrice" class="auth-input" placeholder="49.00" required />
+              </div>
+              <div class="auth-form-group">
+                <label for="planFormCurrency" class="auth-label">Currency <span class="required-star">*</span></label>
+                <select id="planFormCurrency" class="auth-input">
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="CAD">CAD ($)</option>
+                </select>
+              </div>
+              <div class="auth-form-group">
+                <label for="planFormDurationValue" class="auth-label">Duration Term <span class="required-star">*</span></label>
+                <input type="number" min="1" id="planFormDurationValue" class="auth-input" placeholder="30" value="30" required />
+              </div>
+              <div class="auth-form-group">
+                <label for="planFormDurationUnit" class="auth-label">Unit <span class="required-star">*</span></label>
+                <select id="planFormDurationUnit" class="auth-input">
+                  <option value="days">Days</option>
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Feature Entitlements -->
+          <div class="plan-modal-section">
+            <h5 class="plan-modal-sec-title"><i class="fas fa-shield-halved"></i> Cybersecurity Entitlements</h5>
+            <div class="plan-entitlements-grid">
+              <label class="entitlement-card-label">
                 <input type="checkbox" id="planFormCanLiveMonitoring" checked />
-                <span>Live Network Monitoring & Intrusion Detection</span>
+                <div class="entitlement-card-content">
+                  <div class="entitlement-card-icon"><i class="fas fa-tower-broadcast"></i></div>
+                  <div class="entitlement-card-text">
+                    <strong>Live Telemetry & Detection</strong>
+                    <p>Real-time packet capture, flow feature extraction, and AI classification.</p>
+                  </div>
+                </div>
               </label>
-              <label class="entitlement-checkbox-label">
+
+              <label class="entitlement-card-label">
                 <input type="checkbox" id="planFormCanPortScan" checked />
-                <span>Active Port Scanning & Service Probing</span>
+                <div class="entitlement-card-content">
+                  <div class="entitlement-card-icon"><i class="fas fa-network-wired"></i></div>
+                  <div class="entitlement-card-text">
+                    <strong>Port Scanner & Probing</strong>
+                    <p>High-concurrency TCP port scanning and active service inspection.</p>
+                  </div>
+                </div>
               </label>
-              <label class="entitlement-checkbox-label">
+
+              <label class="entitlement-card-label">
                 <input type="checkbox" id="planFormCanNetworkDiscovery" />
-                <span>Subnet Reconnaissance & Network Discovery</span>
+                <div class="entitlement-card-content">
+                  <div class="entitlement-card-icon"><i class="fas fa-compass"></i></div>
+                  <div class="entitlement-card-text">
+                    <strong>Subnet Reconnaissance</strong>
+                    <p>Layer-2 ARP broadcast scanning and local asset discovery.</p>
+                  </div>
+                </div>
               </label>
             </div>
           </div>
-          <button type="submit" class="btn-auth-submit" id="adminPlanSubmitBtn">
-            <span class="auth-btn-text">Save Plan Configuration</span>
-            <i class="fas fa-check auth-btn-icon"></i>
-          </button>
+
+          <!-- Section 4: Catalog Visibility -->
+          <div class="plan-modal-section">
+            <h5 class="plan-modal-sec-title"><i class="fas fa-globe"></i> Catalog Visibility</h5>
+            <label class="catalog-visibility-toggle">
+              <input type="checkbox" id="planFormIsActive" checked />
+              <div class="visibility-toggle-content">
+                <strong>Publish Plan to Public Catalog</strong>
+                <p>When enabled, operators can browse, select, and request activation for this tier.</p>
+              </div>
+            </label>
+          </div>
+
+          <!-- Form Actions Footer -->
+          <div class="plan-modal-footer">
+            <button type="button" class="btn-admin-action cancel" id="adminPlanCancelBtn">
+              <i class="fas fa-xmark"></i> Cancel
+            </button>
+            <button type="submit" class="btn-auth-submit" id="adminPlanSubmitBtn">
+              <span class="auth-btn-text">Save Plan Configuration</span>
+              <i class="fas fa-check auth-btn-icon"></i>
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -2468,6 +3270,93 @@
           <button type="submit" class="btn-auth-submit" id="adminDateSubmitBtn">
             <span class="auth-btn-text">Apply Date Adjustment</span>
             <i class="fas fa-check auth-btn-icon"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Renew Subscription -->
+  <div class="auth-modal" id="adminRenewSubModal" role="dialog" aria-modal="true" aria-labelledby="adminRenewSubModalTitle" style="display:none;">
+    <div class="auth-modal-backdrop" id="adminRenewSubModalBackdrop"></div>
+    <div class="auth-modal-dialog">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-rotate"></i> Lifecycle Renewal</div>
+        <h3 class="auth-modal-title" id="adminRenewSubModalTitle">Renew Expired Subscription</h3>
+        <p class="auth-modal-subtitle">Re-activate subscription lifecycle for the selected operator under approved audit policy.</p>
+        <button type="button" class="auth-modal-close" id="adminRenewSubModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminRenewSubAlert" style="display:none;"></div>
+        <form id="adminRenewSubForm" novalidate>
+          <input type="hidden" id="renewSubId" value="" />
+          <div class="auth-form-group">
+            <label class="auth-label">Operator & Subscription Target</label>
+            <div class="dossier-val" id="renewSubTargetDisplay" style="padding:10px 14px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;">—</div>
+          </div>
+          <div class="auth-form-group">
+            <label for="renewSubPolicy" class="auth-label">Effective Start Policy</label>
+            <select id="renewSubPolicy" class="auth-input">
+              <option value="immediate">Start Immediately (Current UTC timestamp)</option>
+            </select>
+          </div>
+          <div class="auth-form-group">
+            <label for="renewSubNotes" class="auth-label">Administrative Reason / Notes</label>
+            <input type="text" id="renewSubNotes" class="auth-input" placeholder="e.g. Authorized renewal by lead administrator" required />
+          </div>
+          <button type="submit" class="btn-auth-submit" id="adminRenewSubSubmitBtn">
+            <span class="auth-btn-text">Confirm & Renew Subscription</span>
+            <i class="fas fa-rotate auth-btn-icon"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Extend Subscription -->
+  <div class="auth-modal" id="adminExtendSubModal" role="dialog" aria-modal="true" aria-labelledby="adminExtendSubModalTitle" style="display:none;">
+    <div class="auth-modal-backdrop" id="adminExtendSubModalBackdrop"></div>
+    <div class="auth-modal-dialog">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-calendar-plus"></i> Extend Subscription</div>
+        <h3 class="auth-modal-title" id="adminExtendSubModalTitle">Extend Active Subscription</h3>
+        <p class="auth-modal-subtitle">Append additional validity duration to an active subscription without disrupting service.</p>
+        <button type="button" class="auth-modal-close" id="adminExtendSubModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminExtendSubAlert" style="display:none;"></div>
+        <form id="adminExtendSubForm" novalidate>
+          <input type="hidden" id="extendSubId" value="" />
+          <div class="auth-form-group">
+            <label class="auth-label">Operator & Subscription Target</label>
+            <div class="dossier-val" id="extendSubTargetDisplay" style="padding:10px 14px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;">—</div>
+          </div>
+          <div class="auth-form-row">
+            <div class="auth-form-group">
+              <label for="extendDurationValue" class="auth-label">Extension Value</label>
+              <input type="number" min="1" id="extendDurationValue" class="auth-input" value="30" required />
+            </div>
+            <div class="auth-form-group">
+              <label for="extendDurationUnit" class="auth-label">Extension Unit</label>
+              <select id="extendDurationUnit" class="auth-input">
+                <option value="days">Days</option>
+                <option value="months">Months</option>
+                <option value="years">Years</option>
+              </select>
+            </div>
+          </div>
+          <div class="duration-presets-group" style="display:flex;gap:8px;margin-bottom:14px;">
+            <button type="button" class="admin-shortcut-btn preset-btn" data-preset-val="7" data-preset-unit="days">+7 Days</button>
+            <button type="button" class="admin-shortcut-btn preset-btn" data-preset-val="30" data-preset-unit="days">+30 Days</button>
+            <button type="button" class="admin-shortcut-btn preset-btn" data-preset-val="90" data-preset-unit="days">+90 Days</button>
+          </div>
+          <div class="auth-form-group">
+            <label for="extendSubNotes" class="auth-label">Administrative Reason / Notes</label>
+            <input type="text" id="extendSubNotes" class="auth-input" placeholder="e.g. VIP extension courtesy grant" required />
+          </div>
+          <button type="submit" class="btn-auth-submit" id="adminExtendSubSubmitBtn">
+            <span class="auth-btn-text">Apply Extension</span>
+            <i class="fas fa-calendar-plus auth-btn-icon"></i>
           </button>
         </form>
       </div>
