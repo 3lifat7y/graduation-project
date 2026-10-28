@@ -310,15 +310,17 @@ def resolve_benign_configuration(labels_dict=None):
         return None, None, err
 
 
+# Initialize model and scaler on module import
+load_model_and_scaler()
+
 # Detect benign index and label dynamically from verified model configuration
 BENIGN_IDX, BENIGN_LABEL, CONFIG_ERROR = resolve_benign_configuration(CLASS_LABELS)
 
 num_feats = getattr(model, 'n_features_in_', len(FEATURE_COLUMNS) if FEATURE_COLUMNS is not None else 0)
+model_name = type(model).__name__ if model is not None else "None"
+scaler_name = type(scaler).__name__ if scaler is not None else "None"
 print(f"✅ Model loaded successfully → {num_feats} features, {len(CLASS_LABELS)} classes (Benign index: {BENIGN_IDX}, Label: '{BENIGN_LABEL}')")
-print(f"✅ Scaler loaded → {type(scaler).__name__}")
-
-# Initialize model and scaler on module import
-load_model_and_scaler()
+print(f"✅ Scaler loaded → {scaler_name}")
 
 
 def is_benign_label(label: Any) -> bool:
@@ -2801,17 +2803,13 @@ def check_port_availability(port: int = 5000):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description="SocNet / DDoS-Guard Monitoring Server")
+    parser = argparse.ArgumentParser(description="SCOUT — Autonomous Cyber Threat Defense & Telemetry Platform")
     parser.add_argument("--host", default=os.environ.get("SOCNET_HOST", "0.0.0.0"), help="Host IP to bind (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("SOCNET_PORT", 5000)), help="Port to bind Flask API (default: 5000)")
     parser.add_argument("--traffic-port", type=int, default=int(os.environ.get("SOCNET_TRAFFIC_PORT", 8080)), help="Port for benign test traffic service (default: 8080)")
     parser.add_argument("--no-traffic-service", action="store_true", help="Disable the in-process benign traffic test service")
     args = parser.parse_args()
 
-    print("=" * 90)
-    print("           AI-POWERED REAL-TIME DDoS DETECTION SYSTEM")
-    print("                    ULTIMATE FINAL VERSION - 2025")
-    print("=" * 90)
     load_model_and_scaler()
     check_port_availability(args.port)
 
@@ -2830,17 +2828,38 @@ if __name__ == '__main__':
         app.traffic_test_port = args.traffic_port
         start_benign_traffic_service(host=args.host, port=args.traffic_port)
 
-    print("Server is running on:")
-    print(f"   → Dashboard / API : http://127.0.0.1:{args.port} (Localhost)")
+    # Dynamic metrics from active environment
+    model_name = type(model).__name__ if model is not None else "Multi-Class XGBoost"
+    feature_count = getattr(model, 'n_features_in_', len(FEATURE_COLUMNS) if FEATURE_COLUMNS is not None else 77)
+    class_count = len(CLASS_LABELS) if CLASS_LABELS else 15
+    scaler_name = type(scaler).__name__ if scaler is not None else "StandardScaler"
+
+    print("=" * 90)
+    print("   SCOUT : Autonomous Cyber Threat Defense & Telemetry Platform")
+    print("   Real-Time Traffic Inspection • AI Intrusion Detection • Subnet & Port Recon")
+    print("=" * 90)
+    print(" [ENGINE STATUS]")
+    print(f"   • Champion Model     : {model_name} ({feature_count} Flow Features, {class_count} Traffic Classes)")
+    print(f"   • Telemetry Scaler   : {scaler_name} (Normalized Flow Dynamics)")
+    print(f"   • Network Adapter    : [{ad_type}: {ad_name}] (Host IP: {ad_ip})")
+    print(f"   • System Core        : Operational · Active Telemetry & Guarding")
+    print("")
+    print(" [ACTIVE WORKSTATIONS & URLS]")
+    print(f"   → Web SOC Dashboard  : http://127.0.0.1:{args.port} (Localhost)")
     if ad_ip and ad_ip != "127.0.0.1":
-        print(f"   → Remote Test API : http://{ad_ip}:{args.port} [{ad_type}: {ad_name}]")
+        print(f"   → Remote / LAN Access: http://{ad_ip}:{args.port} [{ad_type}: {ad_name}]")
+    print(f"   → Live Threat Radar  : http://127.0.0.1:{args.port}/?view=monitoring")
+    print(f"   → Port & Host Scanner: http://127.0.0.1:{args.port}/?view=port-scanner")
+    print(f"   → Subnet Discovery   : http://127.0.0.1:{args.port}/network-discovery")
+    print(f"   → Architecture Map   : http://127.0.0.1:{args.port}/#system-architecture")
     if not args.no_traffic_service:
-        print(f"   → Benign Traffic  : http://{ad_ip}:{args.traffic_port} (Port for send_traffic.py)")
-    print("\nFeatures:")
-    print("   • Automatic Network Adapter Auto-Discovery (Wi-Fi & Ethernet)")
-    print("   • Live flow capture & 77-feature extraction engine")
-    print("   • Multi-Class Intrusion Detection (15 categories)")
-    print("   • Real benign network traffic testing with send_traffic.py")
-    print("   • 6-State Reactive Lifecycle")
+        print(f"   → Benign Traffic Sink: http://{ad_ip}:{args.traffic_port} (Port for send_traffic.py)")
+    print("")
+    print(" [CORE PLATFORM CAPABILITIES]")
+    print("   • Live Flow Telemetry    : Real-time packet sniffer with 77-feature extraction engine")
+    print("   • Multi-Class AI Defense : 15 traffic categories (DoS/DDoS, Web Attacks, Brute Force)")
+    print("   • Subnet Reconnaissance  : Autonomous ARP/ICMP sweep & OUI hardware fingerprinting")
+    print("   • Port Security Auditor  : Pure-Python async TCP port scanner (Localhost, IP, Subnet /24)")
+    print("   • SOC Governance & RBAC  : Role-based access control, audit logs & telemetry analytics")
     print("=" * 90)
     app.run(host=args.host, port=args.port, debug=False, threaded=True)
