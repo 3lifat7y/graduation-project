@@ -6,6 +6,11 @@
 (function () {
   'use strict';
 
+  // Idempotent guard: When loaded alongside unified main.js, delegate to main controller
+  if (typeof window !== 'undefined' && window.__scoutNetworkDiscoveryInitialized) {
+    return;
+  }
+
   // State Management
   // State Management
   const state = {
@@ -1746,6 +1751,9 @@
 
   // 11. Initialize Page
   document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window !== 'undefined' && window.__scoutNetworkDiscoveryInitialized) {
+      return;
+    }
     initTheme();
     initAuth();
     initEventListeners();

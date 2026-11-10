@@ -157,7 +157,7 @@
         <button class="top-nav-sidebar-toggle" id="navbarSidebarToggleBtn" type="button" aria-label="Toggle navigation sidebar" title="Toggle Sidebar">
           <i class="fas fa-bars"></i>
         </button>
-        <a href="/" class="top-nav-brand" aria-label="SCOUT Home">
+        <a href="/?public=1" class="top-nav-brand" id="topNavBrandLink" aria-label="SCOUT Home">
           <div class="top-nav-logo-wrap">
             <img src="/static/images/scout-logo.png" alt="SCOUT" class="scout-nav-logo scout-logo-light" />
             <img src="/static/images/scout-logo-dark.png" alt="SCOUT" class="scout-nav-logo scout-logo-dark" />
@@ -167,11 +167,6 @@
       </div>
 
       <div class="top-nav-right">
-        <div class="top-nav-health-pill" id="topNavHealthPill" title="Local Network Adapter Status">
-          <span class="health-dot running" id="topNavHealthDot"></span>
-          <span class="health-label" id="topNavHealthLabel">Adapter: Detecting...</span>
-        </div>
-        
         <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Toggle Dark and Light Mode" title="Toggle Theme">
           <i class="fas fa-moon" id="themeToggleIcon"></i>
           <span class="theme-toggle-text" id="themeToggleText">Dark Mode</span>
@@ -186,6 +181,14 @@
           <a href="/register" class="btn-auth-cta" id="headerGetStartedBtn" title="Create a new SCOUT account">
             <i class="fas fa-user-shield"></i>
             <span>Get Started</span>
+          </a>
+        </div>
+
+        <!-- Dynamic Go to Dashboard CTA (Visible on Operational Tools when Logged In) -->
+        <div class="public-dashboard-cta-wrap" id="publicDashboardCtaWrap" style="display:none;">
+          <a href="/?view=dashboard" class="btn-auth-cta" id="publicDashboardCta">
+            <i class="fas fa-gauge-high"></i>
+            <span id="publicDashboardCtaText">Go to Dashboard</span>
           </a>
         </div>
 
@@ -232,11 +235,13 @@
     </header>
 
     <!-- Dedicated Tool Breadcrumb Bar -->
-    <div class="dedicated-tool-bar">
+    <div class="dedicated-tool-bar" id="dedicatedToolBar">
       <div class="breadcrumb-trail">
-        <a href="/" class="breadcrumb-link"><i class="fas fa-arrow-left"></i> Back to Overview</a>
+        <a href="/?public=1" class="breadcrumb-link" id="breadcrumbHomeLink"><i class="fas fa-house"></i> Home</a>
         <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current">Network Discovery & Asset Inventory</span>
+        <a href="/?view=dashboard" class="breadcrumb-link" id="breadcrumbDashboardLink"><i class="fas fa-gauge-high"></i> Dashboard</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current" id="dedicatedToolTitle">Network Discovery & Asset Inventory</span>
       </div>
       <div class="dedicated-tool-actions">
         <button class="btn-subtle" id="ndHeaderCtaBtn" type="button" aria-label="Trigger Discovery Scan">
@@ -690,7 +695,9 @@
     </div>
   </div>
 
-  <!-- Network Discovery Engine Script -->
+  <!-- SCOUT Unified Main Application Script -->
+  <script src="/static/main.js"></script>
+  <!-- Backward Compatibility Script Bridge -->
   <script src="/static/network_discovery.js"></script>
 </body>
 </html>
