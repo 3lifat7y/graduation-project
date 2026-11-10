@@ -247,6 +247,8 @@ class TestBrowserAuthFlows(unittest.TestCase):
 
     def test_04_register_page_guidance_and_submission(self):
         """4. Test /register: no username field, required Full Name/Email/Phone, complexity, and creation."""
+        self.cdp.eval_js("fetch('/api/auth/logout', { method: 'POST' })")
+        time.sleep(0.5)
         self.cdp.navigate(f"{BASE_URL}/register", wait_seconds=1.5)
 
         # Verify Username field is completely absent from DOM
@@ -273,15 +275,13 @@ class TestBrowserAuthFlows(unittest.TestCase):
         len_valid = self.cdp.eval_js("document.getElementById('pwdRuleLength').classList.contains('valid')")
         self.assertFalse(len_valid, "Weak password should not satisfy length rule")
 
-        # Type complex password
-        self.cdp.eval_js("(() => { const p = document.getElementById('regPassword'); p.value = 'CyberAnalyst#2026'; p.dispatchEvent(new Event('input')); })()")
+        # Type complex 8-digit numeric password
+        self.cdp.eval_js("(() => { const p = document.getElementById('regPassword'); p.value = '87654321'; p.dispatchEvent(new Event('input')); })()")
         time.sleep(0.2)
         len_valid = self.cdp.eval_js("document.getElementById('pwdRuleLength').classList.contains('valid')")
-        case_valid = self.cdp.eval_js("document.getElementById('pwdRuleCase').classList.contains('valid')")
-        num_valid = self.cdp.eval_js("document.getElementById('pwdRuleNumSpecial').classList.contains('valid')")
+        digits_valid = self.cdp.eval_js("document.getElementById('pwdRuleDigits').classList.contains('valid')")
         self.assertTrue(len_valid)
-        self.assertTrue(case_valid)
-        self.assertTrue(num_valid)
+        self.assertTrue(digits_valid)
 
         # Fill mismatched confirm password and submit
         ts = int(time.time())
@@ -290,12 +290,12 @@ class TestBrowserAuthFlows(unittest.TestCase):
         phone = f"+1 (555) {ts % 900 + 100}-9988"
         self.__class__.test_email = email
         self.__class__.test_phone = phone
-        self.__class__.test_password = "CyberAnalyst#2026"
+        self.__class__.test_password = "87654321"
 
         self.cdp.eval_js(f"document.getElementById('regFullName').value = '{full_name}'")
         self.cdp.eval_js(f"document.getElementById('regEmail').value = '{email}'")
         self.cdp.eval_js(f"document.getElementById('regPhone').value = '{phone}'")
-        self.cdp.eval_js("document.getElementById('regConfirmPassword').value = 'MismatchPass#999'")
+        self.cdp.eval_js("document.getElementById('regConfirmPassword').value = '11112222'")
 
         self.cdp.eval_js("document.getElementById('registerSubmitBtn').click()")
         time.sleep(0.3)
@@ -303,7 +303,7 @@ class TestBrowserAuthFlows(unittest.TestCase):
         self.assertIn("match", alert_text.lower())
 
         # Correct confirm password and submit
-        self.cdp.eval_js("document.getElementById('regConfirmPassword').value = 'CyberAnalyst#2026'")
+        self.cdp.eval_js("document.getElementById('regConfirmPassword').value = '87654321'")
         self.cdp.eval_js("document.getElementById('registerSubmitBtn').click()")
         time.sleep(2.0)
 

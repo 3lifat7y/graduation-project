@@ -36,6 +36,7 @@ def get_admin_metrics():
     """
     Returns verified, genuine database activity statistics.
     Provides exact counts for users, subscription states, and plans without mock data.
+    Separates pending subscription requests from actual active/historical subscriptions.
     """
     sync_expired_subscriptions()
     with get_db_session() as session:
@@ -43,13 +44,15 @@ def get_admin_metrics():
         active_users = session.query(User).filter_by(is_active=True).count()
         inactive_users = session.query(User).filter_by(is_active=False).count()
 
-        total_subscribers = session.query(func.count(func.distinct(UserSubscription.user_id))).scalar() or 0
+        total_subscribers = session.query(func.count(func.distinct(UserSubscription.user_id))).filter(UserSubscription.status != "pending").scalar() or 0
         active_subscribers = session.query(func.count(func.distinct(UserSubscription.user_id))).filter(UserSubscription.status == "active").scalar() or 0
 
         pending_subs = session.query(UserSubscription).filter_by(status="pending").count()
         active_subs = session.query(UserSubscription).filter_by(status="active").count()
         expired_subs = session.query(UserSubscription).filter_by(status="expired").count()
         canceled_subs = session.query(UserSubscription).filter_by(status="canceled").count()
+        rejected_subs = session.query(UserSubscription).filter_by(status="rejected").count()
+        total_actual_subs = session.query(UserSubscription).filter(UserSubscription.status.in_(["active", "expired", "canceled"])).count()
 
         available_plans = session.query(SubscriptionPlan).filter_by(is_active=True).count()
         inactive_plans = session.query(SubscriptionPlan).filter_by(is_active=False).count()
@@ -67,6 +70,8 @@ def get_admin_metrics():
             "active_subscriptions": active_subs,
             "expired_subscriptions": expired_subs,
             "canceled_subscriptions": canceled_subs,
+            "rejected_subscriptions": rejected_subs,
+            "total_subscriptions": total_actual_subs,
             "available_plans": available_plans,
             "active_plans": available_plans,
             "inactive_plans": inactive_plans,
@@ -104,8 +109,9 @@ def list_admin_plans():
         plan_list = []
         for p in plans:
             p_dict = p.to_dict()
-            p_dict["total_subscribers"] = session.query(UserSubscription).filter_by(plan_id=p.id).count()
+            p_dict["total_subscribers"] = session.query(UserSubscription).filter_by(plan_id=p.id).filter(UserSubscription.status != "pending").count()
             p_dict["active_subscribers"] = session.query(UserSubscription).filter_by(plan_id=p.id, status="active").count()
+            p_dict["pending_subscribers"] = session.query(UserSubscription).filter_by(plan_id=p.id, status="pending").count()
             p_dict["subscribers_count"] = p_dict["total_subscribers"]
             plan_list.append(p_dict)
 
@@ -205,7 +211,7 @@ def get_admin_plan_details(plan_id: int):
             return jsonify({"status": "error", "message": "Plan not found."}), 404
 
         plan_dict = plan.to_dict()
-        total_subs = session.query(UserSubscription).filter_by(plan_id=plan.id).count()
+        total_subs = session.query(UserSubscription).filter_by(plan_id=plan.id).filter(UserSubscription.status != "pending").count()
         active_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="active").count()
         pending_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="pending").count()
         expired_subs = session.query(UserSubscription).filter_by(plan_id=plan.id, status="expired").count()
@@ -222,10 +228,11 @@ def get_admin_plan_details(plan_id: int):
         plan_dict["active_subscribers"] = active_subs
         plan_dict["subscribers_count"] = total_subs
 
-        # Recent subscriptions under this plan (newest first, limit 25)
+        # Recent approved/actual subscriptions under this plan (newest first, limit 25)
         recent_subs = (
             session.query(UserSubscription)
             .filter_by(plan_id=plan.id)
+            .filter(UserSubscription.status != "pending")
             .order_by(UserSubscription.id.desc())
             .limit(25)
             .all()
@@ -915,7 +922,12 @@ def delete_admin_user(user_id: int):
 @sub_admin_bp.route("/subscriptions", methods=["GET"])
 @admin_required
 def list_admin_subscriptions():
-    """Lists subscriptions with optional status, search, and user filters."""
+    """
+    Lists genuine subscription records with optional status, search, and user filters.
+    IMPORTANT: All Subscriptions displays exclusively actual subscription records created
+    or activated through the approved workflow (active, expired, canceled).
+    Pending subscription requests appear strictly under Pending Requests.
+    """
     sync_expired_subscriptions()
     status_filter = request.args.get("status", "").strip().lower()
     user_id_param = request.args.get("user_id")
@@ -923,8 +935,19 @@ def list_admin_subscriptions():
 
     with get_db_session() as session:
         query = session.query(UserSubscription).join(User, UserSubscription.user_id == User.id)
-        if status_filter:
+
+        if status_filter == "pending":
+            # Direct status query for pending (compatibility with legacy test assertions)
+            query = query.filter(UserSubscription.status == "pending")
+        elif status_filter in ("active", "expired", "canceled"):
             query = query.filter(UserSubscription.status == status_filter)
+        elif status_filter == "rejected":
+            query = query.filter(UserSubscription.status == "rejected")
+        else:
+            # Default ("all" or not specified): ONLY actual subscription records created or activated
+            # through the approved workflow (active, expired, canceled). Excludes pending requests and rejected requests.
+            query = query.filter(UserSubscription.status.in_(["active", "expired", "canceled"]))
+
         if user_id_param:
             try:
                 query = query.filter(UserSubscription.user_id == int(user_id_param))
@@ -947,7 +970,6 @@ def list_admin_subscriptions():
                     (func.coalesce(User.phone_number, "").contains(search))
                 )
 
-
         subs = query.order_by(UserSubscription.id.desc()).all()
         sub_list = [s.to_dict(include_audit=False) for s in subs]
 
@@ -958,7 +980,64 @@ def list_admin_subscriptions():
     }), 200
 
 
+@sub_admin_bp.route("/requests", methods=["GET"])
+@sub_admin_bp.route("/subscription-requests", methods=["GET"])
+@admin_required
+def list_admin_subscription_requests():
+    """
+    Dedicated endpoint for subscription requests awaiting administrative review.
+    Displays only requests whose status is Pending by default.
+    """
+    sync_expired_subscriptions()
+    status_filter = request.args.get("status", "pending").strip().lower()
+    user_id_param = request.args.get("user_id")
+    search = request.args.get("search", "").strip().lower()
+
+    with get_db_session() as session:
+        query = session.query(UserSubscription).join(User, UserSubscription.user_id == User.id)
+        if status_filter in ("pending", "rejected"):
+            query = query.filter(UserSubscription.status == status_filter)
+        elif status_filter == "all":
+            query = query.filter(UserSubscription.status.in_(["pending", "rejected"]))
+        else:
+            query = query.filter(UserSubscription.status == "pending")
+
+        if user_id_param:
+            try:
+                query = query.filter(UserSubscription.user_id == int(user_id_param))
+            except (ValueError, TypeError):
+                pass
+
+        if search:
+            if search.isdigit():
+                query = query.filter(
+                    (UserSubscription.id == int(search)) |
+                    (func.lower(User.username).contains(search)) |
+                    (func.lower(User.email).contains(search)) |
+                    (func.lower(User.full_name).contains(search)) |
+                    (func.coalesce(User.phone_number, "").contains(search))
+                )
+            else:
+                query = query.filter(
+                    (func.lower(User.username).contains(search)) |
+                    (func.lower(User.email).contains(search)) |
+                    (func.lower(User.full_name).contains(search)) |
+                    (func.coalesce(User.phone_number, "").contains(search))
+                )
+
+        requests = query.order_by(UserSubscription.id.desc()).all()
+        req_list = [r.to_dict(include_audit=False) for r in requests]
+
+    return jsonify({
+        "status": "success",
+        "requests": req_list,
+        "subscriptions": req_list,  # compatibility alias
+        "count": len(req_list)
+    }), 200
+
+
 @sub_admin_bp.route("/subscriptions/<int:sub_id>", methods=["GET"])
+@sub_admin_bp.route("/requests/<int:sub_id>", methods=["GET"])
 @admin_required
 def get_admin_subscription_details(sub_id: int):
     """
@@ -1091,6 +1170,8 @@ def delete_admin_subscription(sub_id: int):
 
 @sub_admin_bp.route("/subscriptions/<int:sub_id>/activate", methods=["POST"])
 @sub_admin_bp.route("/subscriptions/<int:sub_id>/approve", methods=["POST"])
+@sub_admin_bp.route("/requests/<int:sub_id>/activate", methods=["POST"])
+@sub_admin_bp.route("/requests/<int:sub_id>/approve", methods=["POST"])
 @admin_required
 def activate_subscription_route(sub_id: int):
     """Admin approves and activates a pending or expired subscription."""
@@ -1118,6 +1199,7 @@ def activate_subscription_route(sub_id: int):
 
 
 @sub_admin_bp.route("/subscriptions/<int:sub_id>/reject", methods=["POST"])
+@sub_admin_bp.route("/requests/<int:sub_id>/reject", methods=["POST"])
 @admin_required
 def reject_subscription_route(sub_id: int):
     """Admin rejects a pending subscription request."""
@@ -1343,3 +1425,170 @@ def list_admin_audit_logs():
         "audit_logs": log_list,
         "count": len(log_list)
     }), 200
+
+
+# ==============================================================================
+# 5. Administrative Payment Methods & Accounts CRUD Management
+# ==============================================================================
+
+@sub_admin_bp.route("/payment-methods", methods=["GET"])
+@admin_required
+def list_admin_payment_methods():
+    """Returns all payment methods including inactive methods and accounts."""
+    from modules.subscriptions.services_payment import list_payment_methods
+    methods = list_payment_methods(include_inactive=True, include_inactive_accounts=True)
+    return jsonify({
+        "status": "success",
+        "payment_methods": methods,
+        "count": len(methods)
+    }), 200
+
+
+@sub_admin_bp.route("/payment-methods", methods=["POST"])
+@admin_required
+def create_admin_payment_method():
+    """Creates a new payment method with optional initial accounts."""
+    from modules.subscriptions.services_payment import create_payment_method
+    data = request.get_json(silent=True) or {}
+    success, message, method_dict = create_payment_method(data)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "payment_method": method_dict
+    }), 201
+
+
+@sub_admin_bp.route("/payment-methods/<int:method_id>", methods=["GET"])
+@admin_required
+def get_admin_payment_method(method_id: int):
+    """Retrieves single payment method by ID."""
+    from modules.subscriptions.services_payment import get_payment_method
+    method = get_payment_method(method_id, include_inactive_accounts=True)
+    if not method:
+        return jsonify({"status": "error", "message": "Payment method not found."}), 404
+
+    return jsonify({
+        "status": "success",
+        "payment_method": method
+    }), 200
+
+
+@sub_admin_bp.route("/payment-methods/<int:method_id>", methods=["PUT"])
+@admin_required
+def update_admin_payment_method(method_id: int):
+    """Updates payment method properties."""
+    from modules.subscriptions.services_payment import update_payment_method
+    data = request.get_json(silent=True) or {}
+    success, message, method_dict = update_payment_method(method_id, data)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "payment_method": method_dict
+    }), 200
+
+
+@sub_admin_bp.route("/payment-methods/<int:method_id>", methods=["DELETE"])
+@admin_required
+def delete_admin_payment_method(method_id: int):
+    """Deletes payment method and its receiving accounts."""
+    from modules.subscriptions.services_payment import delete_payment_method
+    success, message = delete_payment_method(method_id)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message
+    }), 200
+
+
+@sub_admin_bp.route("/payment-methods/<int:method_id>/toggle", methods=["POST"])
+@admin_required
+def toggle_admin_payment_method(method_id: int):
+    """Toggles active/inactive status of payment method."""
+    from modules.subscriptions.services_payment import toggle_payment_method
+    data = request.get_json(silent=True) or {}
+    is_active_val = data.get("is_active")
+    success, message, method_dict = toggle_payment_method(method_id, is_active=is_active_val)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "payment_method": method_dict
+    }), 200
+
+
+@sub_admin_bp.route("/payment-methods/<int:method_id>/accounts", methods=["POST"])
+@admin_required
+def add_admin_receiving_account(method_id: int):
+    """Adds a receiving account to a payment method."""
+    from modules.subscriptions.services_payment import add_receiving_account
+    data = request.get_json(silent=True) or {}
+    success, message, acc_dict = add_receiving_account(method_id, data)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "account": acc_dict
+    }), 201
+
+
+@sub_admin_bp.route("/receiving-accounts/<int:account_id>", methods=["PUT"])
+@admin_required
+def update_admin_receiving_account(account_id: int):
+    """Updates receiving account details."""
+    from modules.subscriptions.services_payment import update_receiving_account
+    data = request.get_json(silent=True) or {}
+    success, message, acc_dict = update_receiving_account(account_id, data)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "account": acc_dict
+    }), 200
+
+
+@sub_admin_bp.route("/receiving-accounts/<int:account_id>", methods=["DELETE"])
+@admin_required
+def delete_admin_receiving_account(account_id: int):
+    """Deletes a receiving account."""
+    from modules.subscriptions.services_payment import delete_receiving_account
+    success, message = delete_receiving_account(account_id)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message
+    }), 200
+
+
+@sub_admin_bp.route("/receiving-accounts/<int:account_id>/toggle", methods=["POST"])
+@admin_required
+def toggle_admin_receiving_account(account_id: int):
+    """Toggles active/inactive status of a receiving account."""
+    from modules.subscriptions.services_payment import toggle_receiving_account
+    data = request.get_json(silent=True) or {}
+    is_active_val = data.get("is_active")
+    success, message, acc_dict = toggle_receiving_account(account_id, is_active=is_active_val)
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "account": acc_dict
+    }), 200
+

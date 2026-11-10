@@ -1700,13 +1700,17 @@
               if (mRes.ok) {
                 const mData = await mRes.json();
                 const count = mData.metrics ? mData.metrics.pending_subscriptions : 0;
+                const sidebarRequestsDot = document.getElementById('sidebarRequestsDot');
+                if (sidebarRequestsDot) {
+                  sidebarRequestsDot.style.display = count > 0 ? 'block' : 'none';
+                }
                 if (sidebarPendingBadge) {
-                  sidebarPendingBadge.textContent = count;
-                  sidebarPendingBadge.style.display = count > 0 ? 'inline-block' : 'none';
+                  sidebarPendingBadge.style.display = 'none';
+                  sidebarPendingBadge.textContent = '';
                 }
                 if (sidebarRequestsBadge) {
-                  sidebarRequestsBadge.textContent = count;
-                  sidebarRequestsBadge.style.display = count > 0 ? 'inline-block' : 'none';
+                  sidebarRequestsBadge.style.display = 'none';
+                  sidebarRequestsBadge.textContent = '';
                 }
               }
             } catch (_) {}

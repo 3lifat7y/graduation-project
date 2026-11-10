@@ -2413,7 +2413,9 @@ document.addEventListener("DOMContentLoaded", () => {
       normalized = "admin-users";
     } else if (normalized.startsWith("admin-plan")) {
       normalized = "admin-plans";
-    } else if (normalized.startsWith("admin-sub")) {
+    } else if (normalized === "admin-payments" || normalized.startsWith("admin-payment")) {
+      normalized = "admin-payments";
+    } else if (normalized === "admin-subscriptions" || normalized.startsWith("admin-sub")) {
       normalized = "admin-subs";
     } else if (normalized.startsWith("admin-request")) {
       normalized = "admin-requests";
@@ -2432,6 +2434,12 @@ document.addEventListener("DOMContentLoaded", () => {
         item.removeAttribute("aria-current");
       }
     });
+  }
+
+  function highlightNavOnScroll() {
+    if (!document.body.classList.contains("home-view")) {
+      return;
+    }
   }
 
   // Update Active Link in Global Top Navbar & Public Sidebar
@@ -2840,7 +2848,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (billingLabel) billingLabel.style.display = "block";
       if (dashItem) dashItem.style.display = "flex";
       if (plansItem) plansItem.style.display = "flex";
-      if (pendingBadge) pendingBadge.style.display = "none";
+      if (pendingBadge) {
+        pendingBadge.style.display = "none";
+        pendingBadge.textContent = "";
+      }
 
       if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
       const f = (sub.plan && sub.plan.features) || sub.features || {};
@@ -2853,15 +2864,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     } else if (isSubPending) {
       // Case E: Pending Approval
-      // Show: Plans (with Pending badge), Profile & Security, Sign Out. Hide: Dashboard, Operational tools
+      // Show: Plans, Profile & Security, Sign Out. Hide: Dashboard, Operational tools
       if (overviewLabel) overviewLabel.style.display = "none";
       if (billingLabel) billingLabel.style.display = "block";
       if (dashItem) dashItem.style.display = "none";
       if (plansItem) plansItem.style.display = "flex";
       if (pendingBadge) {
-        pendingBadge.style.display = "inline-block";
-        pendingBadge.textContent = "Pending";
-        pendingBadge.className = "nav-badge-pill warning";
+        pendingBadge.style.display = "none";
+        pendingBadge.textContent = "";
       }
       if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
 
@@ -2873,9 +2883,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dashItem) dashItem.style.display = "none";
       if (plansItem) plansItem.style.display = "flex";
       if (pendingBadge) {
-        pendingBadge.style.display = "inline-block";
-        pendingBadge.textContent = "Expired";
-        pendingBadge.className = "nav-badge-pill danger";
+        pendingBadge.style.display = "none";
+        pendingBadge.textContent = "";
       }
       if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
 
@@ -2886,7 +2895,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (billingLabel) billingLabel.style.display = "block";
       if (dashItem) dashItem.style.display = "none";
       if (plansItem) plansItem.style.display = "flex";
-      if (pendingBadge) pendingBadge.style.display = "none";
+      if (pendingBadge) {
+        pendingBadge.style.display = "none";
+        pendingBadge.textContent = "";
+      }
       if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
     }
   }
@@ -3015,6 +3027,12 @@ document.addEventListener("DOMContentLoaded", () => {
         currentUser = data.user;
         await fetchCurrentUserSubscription();
         updateAuthUI(data.user);
+        if (data.user && data.user.role === "Admin") {
+          loadAdminMetrics();
+          if (!window.__adminMetricsInterval) {
+            window.__adminMetricsInterval = setInterval(loadAdminMetrics, 12000);
+          }
+        }
         return data.user;
       } else if (res.status === 403) {
         const data = await res.json().catch(() => ({}));
@@ -3641,6 +3659,8 @@ document.addEventListener("DOMContentLoaded", () => {
           subTab = "plans";
         } else if (targetView === "admin-subs" || targetView === "admin-subscriptions") {
           subTab = "subscriptions";
+        } else if (targetView === "admin-payments" || targetView === "admin-payment-methods") {
+          subTab = "payments";
         } else if (targetView === "admin-requests") {
           subTab = "requests";
         } else if (targetView === "admin-audit") {
@@ -8113,15 +8133,30 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else if (sub.status === "pending") {
         if (subStatusDot) subStatusDot.className = "sub-status-dot pending";
-        if (subStatusText) subStatusText.textContent = "Pending Approval";
-        if (subStatusTitle) subStatusTitle.textContent = sub.plan ? `Request Pending: ${sub.plan.name}` : "Request Pending";
-        if (subStatusMessage) subStatusMessage.textContent = "Your request has been submitted to system administrators. Access will activate upon verification.";
+        if (subStatusText) subStatusText.textContent = "Pending Verification";
+        const isManualPay = sub.payment_status === "pending_verification" || sub.payment_method_name;
+        if (isManualPay) {
+          if (subStatusTitle) subStatusTitle.textContent = `Payment Verification: ${sub.plan_name || (sub.plan ? sub.plan.name : "Selected Tier")}`;
+          const methodInfo = sub.payment_method_name ? ` via ${sub.payment_method_name}` : "";
+          const txInfo = sub.transaction_reference ? ` (Ref: ${sub.transaction_reference})` : "";
+          if (subStatusMessage) subStatusMessage.textContent = `Your payment transfer receipt${methodInfo}${txInfo} has been submitted and is currently awaiting administrator verification. Access will activate upon approval.`;
+        } else {
+          if (subStatusTitle) subStatusTitle.textContent = sub.plan ? `Request Pending: ${sub.plan.name}` : "Request Pending";
+          if (subStatusMessage) subStatusMessage.textContent = "Your subscription request has been submitted to system administrators. Access will activate upon verification.";
+        }
         if (subMetaRow) {
           subMetaRow.style.display = "flex";
           if (subMetaStart) subMetaStart.textContent = formatUtcDate(sub.created_at || sub.start_date);
-          if (subMetaEnd) subMetaEnd.textContent = "Awaiting Activation";
-          if (subMetaTier) subMetaTier.textContent = sub.plan_id;
+          if (subMetaEnd) subMetaEnd.textContent = "Awaiting Verification";
+          if (subMetaTier) subMetaTier.textContent = sub.plan_name || sub.plan_id;
         }
+      } else if (sub.status === "rejected") {
+        if (subStatusDot) subStatusDot.className = "sub-status-dot canceled";
+        if (subStatusText) subStatusText.textContent = "Request Rejected";
+        if (subStatusTitle) subStatusTitle.textContent = "Payment Verification Declined";
+        const reasonText = sub.rejection_reason || sub.cancellation_reason || "Verification criteria not met.";
+        if (subStatusMessage) subStatusMessage.textContent = `Your subscription request was rejected by an administrator. Reason: "${reasonText}". You may select a plan below to submit a new payment request.`;
+        if (subMetaRow) subMetaRow.style.display = "none";
       } else if (sub.status === "expired") {
         if (subStatusDot) subStatusDot.className = "sub-status-dot expired";
         if (subStatusText) subStatusText.textContent = "Subscription Expired";
@@ -8243,6 +8278,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       plansCatalogGrid.innerHTML = html;
 
+      window._cachedPlans = plans;
+
       // Bind button click listeners
       plansCatalogGrid.querySelectorAll(".btn-plan-select").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -8250,7 +8287,10 @@ document.addEventListener("DOMContentLoaded", () => {
             openAuthModal("signin", "Please sign in or create an account to request a subscription plan.");
           } else {
             const planId = btn.getAttribute("data-plan-id");
-            if (planId) requestSubscription(planId, btn);
+            if (planId) {
+              const matchedPlan = plans.find(pl => String(pl.id) === String(planId) || String(pl.plan_code) === String(planId));
+              openCheckout(planId, matchedPlan);
+            }
           }
         });
       });
@@ -8317,6 +8357,7 @@ document.addEventListener("DOMContentLoaded", () => {
     subscriptions: document.getElementById("adminPanelSubscriptions"),
     users: document.getElementById("adminPanelUsers"),
     plans: document.getElementById("adminPanelPlans"),
+    payments: document.getElementById("adminPanelPayments"),
     audit: document.getElementById("adminPanelAudit"),
     profile: document.getElementById("adminPanelProfile")
   };
@@ -8340,17 +8381,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (tabKey === "overview") loadAdminMetrics();
     else if (tabKey === "requests") loadAdminRequests();
-    else if (tabKey === "subscriptions") loadAdminSubscriptions();
-    else if (tabKey === "users") loadAdminUsers();
-    else if (tabKey === "plans") loadAdminPlans();
-    else if (tabKey === "audit") loadAdminAuditLogs();
-    else if (tabKey === "profile") loadAdminProfile();
+    else if (tabKey === "subscriptions") { loadAdminSubscriptions(); loadAdminMetrics(); }
+    else if (tabKey === "users") { loadAdminUsers(); loadAdminMetrics(); }
+    else if (tabKey === "plans") { loadAdminPlans(); loadAdminMetrics(); }
+    else if (tabKey === "payments") { loadAdminPaymentMethods(); loadAdminMetrics(); }
+    else if (tabKey === "audit") { loadAdminAuditLogs(); loadAdminMetrics(); }
+    else if (tabKey === "profile") { loadAdminProfile(); loadAdminMetrics(); }
 
     const titleMap = {
       overview: "SCOUT Administrative Console — Platform Overview",
       users: "SCOUT Admin — Operator & User Accounts",
       plans: "SCOUT Admin — Subscription Plans Catalog",
       subscriptions: "SCOUT Admin — Global Subscription Registry",
+      payments: "SCOUT Admin — Payment Methods & Accounts",
       requests: "SCOUT Admin — Pending Subscription Requests",
       audit: "SCOUT Admin — Security Audit Logs",
       profile: "SCOUT Admin — Profile & Security"
@@ -8429,6 +8472,33 @@ document.addEventListener("DOMContentLoaded", () => {
     loadAdminProfile();
   }
 
+  // Centralized Sidebar Pending Requests Notification Dot Updater
+  function updatePendingRequestsNotification(count) {
+    const pendingCount = Number(count) || 0;
+    const dot = document.getElementById("sidebarRequestsDot");
+    if (dot) {
+      dot.style.display = pendingCount > 0 ? "block" : "none";
+    }
+
+    // Suppress and hide legacy badges so no numeric badge shifts the sidebar icon
+    const sbBadge = document.getElementById("sidebarPendingBadge");
+    if (sbBadge) {
+      sbBadge.style.display = "none";
+      sbBadge.textContent = "";
+    }
+    const srBadge = document.getElementById("sidebarRequestsBadge");
+    if (srBadge) {
+      srBadge.style.display = "none";
+      srBadge.textContent = "";
+    }
+
+    const countBadge = document.getElementById("adminPendingCountBadge");
+    if (countBadge) {
+      countBadge.textContent = pendingCount;
+      countBadge.style.display = pendingCount > 0 ? "inline-block" : "none";
+    }
+  }
+
   // Load Database Platform Activity Metrics for Admin (Zero Mock Data)
   async function loadAdminMetrics() {
     const totalUsersEl = document.getElementById("adminMetricTotalUsers");
@@ -8458,20 +8528,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (plansEl) plansEl.textContent = m.available_plans ?? 0;
         if (inactivePlansEl) inactivePlansEl.textContent = m.inactive_plans ?? 0;
 
-        const countBadge = document.getElementById("adminPendingCountBadge");
-        if (countBadge) {
-          countBadge.textContent = m.pending_subscriptions;
-          countBadge.style.display = m.pending_subscriptions > 0 ? "inline-block" : "none";
-        }
-        if (sidebarPendingBadge) {
-          sidebarPendingBadge.textContent = m.pending_subscriptions;
-          sidebarPendingBadge.style.display = m.pending_subscriptions > 0 ? "inline-block" : "none";
-        }
-        const sidebarRequestsBadge = document.getElementById("sidebarRequestsBadge");
-        if (sidebarRequestsBadge) {
-          sidebarRequestsBadge.textContent = m.pending_subscriptions;
-          sidebarRequestsBadge.style.display = m.pending_subscriptions > 0 ? "inline-block" : "none";
-        }
+        const pendingCount = (m.pending_subscriptions !== undefined) ? m.pending_subscriptions : 0;
+        updatePendingRequestsNotification(pendingCount);
       }
     } catch (_) {}
   }
@@ -9305,22 +9363,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const requests = data.subscriptions || [];
+      const requests = (data.requests || data.subscriptions || []).filter(r => r.status === "pending");
       if (pendingMetric) pendingMetric.textContent = requests.length;
-      if (countBadge) {
-        countBadge.textContent = requests.length;
-        countBadge.style.display = requests.length > 0 ? "inline-block" : "none";
-      }
-      const sbBadge = document.getElementById("sidebarPendingBadge");
-      if (sbBadge) {
-        sbBadge.textContent = requests.length;
-        sbBadge.style.display = requests.length > 0 ? "inline-block" : "none";
-      }
-      const srBadge = document.getElementById("sidebarRequestsBadge");
-      if (srBadge) {
-        srBadge.textContent = requests.length;
-        srBadge.style.display = requests.length > 0 ? "inline-block" : "none";
-      }
+      updatePendingRequestsNotification(requests.length);
 
       if (requests.length === 0) {
         if (cardsGrid) {
@@ -9378,7 +9423,31 @@ document.addEventListener("DOMContentLoaded", () => {
                   <span class="request-data-label"><i class="fas fa-fingerprint"></i> Subscription ID</span>
                   <span class="request-data-val"><code>#${r.id}</code></span>
                 </div>
+                ${r.payment_method_name ? `
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-wallet"></i> Payment Method</span>
+                  <span class="request-data-val font-semibold">${escapeHtml(r.payment_method_name)}</span>
+                </div>
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-arrow-right-to-bracket"></i> Receiving Account</span>
+                  <span class="request-data-val font-mono">${escapeHtml(r.receiving_account_identifier || '—')}</span>
+                </div>
+                ` : ''}
+                ${r.transaction_reference ? `
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-barcode"></i> Tx Reference</span>
+                  <span class="request-data-val font-mono">${escapeHtml(r.transaction_reference)}</span>
+                </div>
+                ` : ''}
               </div>
+              ${r.receipt_url ? `
+              <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-base); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);"><i class="fas fa-file-invoice"></i> Payment Receipt</span>
+                <button type="button" class="btn-receipt-thumb" data-view-receipt="${escapeHtml(r.receipt_url)}" data-filename="${escapeHtml(r.receipt_original_name || 'receipt.png')}">
+                  <i class="fas fa-magnifying-glass-plus"></i> View Receipt
+                </button>
+              </div>
+              ` : ''}
             </div>
             <div class="request-card-footer">
               <button type="button" class="btn-admin-action details" data-sub-details-id="${r.id}" title="View Request Details & Dossier">
@@ -9437,6 +9506,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         container.querySelectorAll("[data-act-id]").forEach(btn => {
           btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
+        });
+        container.querySelectorAll("[data-view-receipt]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const url = btn.getAttribute("data-view-receipt");
+            const filename = btn.getAttribute("data-filename") || "receipt.png";
+            openReceiptViewer(url, filename);
+          });
         });
         container.querySelectorAll("[data-rej-id]").forEach(btn => {
           btn.addEventListener("click", () => rejectSubscription(btn.getAttribute("data-rej-id"), btn));
@@ -9514,7 +9590,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const subs = data.subscriptions || [];
+      const rawSubs = data.subscriptions || [];
+      // Enforce strict separation: pending requests must NEVER appear in All Subscriptions!
+      const subs = rawSubs.filter(s => s.status !== "pending");
       const activeCount = subs.filter(s => s.status === "active").length;
       if (activeMetric && filterStatus === "all" && !searchVal) activeMetric.textContent = activeCount;
 
@@ -9539,8 +9617,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const opEmail = s.user_email || (s.user && s.user.email) || "";
         const initials = opName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "OP";
         const planName = s.plan_name || (s.plan && s.plan.name) || s.plan_code || s.plan_id;
-        const statusClass = s.status === "active" ? "active" : (s.status === "pending" ? "pending" : (s.status === "expired" ? "expired" : "canceled"));
-        const statusIcon = s.status === "active" ? "fa-circle-check" : (s.status === "pending" ? "fa-clock" : (s.status === "expired" ? "fa-circle-exclamation" : "fa-ban"));
+        const statusClass = s.status === "active" ? "active" : (s.status === "expired" ? "expired" : "canceled");
+        const statusIcon = s.status === "active" ? "fa-circle-check" : (s.status === "expired" ? "fa-circle-exclamation" : "fa-ban");
 
         let actionBtns = `
           <button type="button" class="btn-admin-action details" data-sub-details-id="${s.id}" title="View Subscription Details & Audit Dossier">
@@ -9660,6 +9738,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         container.querySelectorAll("[data-act-id]").forEach(btn => {
           btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
+        });
+        container.querySelectorAll("[data-view-receipt]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const url = btn.getAttribute("data-view-receipt");
+            const filename = btn.getAttribute("data-filename") || "receipt.png";
+            openReceiptViewer(url, filename);
+          });
         });
         container.querySelectorAll("[data-rej-id]").forEach(btn => {
           btn.addEventListener("click", () => rejectSubscription(btn.getAttribute("data-rej-id"), btn));
@@ -12153,6 +12238,55 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dStatus) dStatus.innerHTML = `<span class="sub-badge ${r.status}">${escapeHtml(r.status)}</span>`;
       if (notesInput) notesInput.value = r.admin_notes || "";
 
+      // Populate Payment Details if manual payment request
+      const payCard = document.getElementById("fpReqPaymentCard");
+      if (payCard) {
+        const isManual = r.payment_method_name || r.receipt_filename;
+        if (isManual) {
+          payCard.style.display = "block";
+          const pMethod = document.getElementById("fpReqDossierPayMethod");
+          const pAccount = document.getElementById("fpReqDossierPayAccount");
+          const pHolder = document.getElementById("fpReqDossierPayHolder");
+          const pAmount = document.getElementById("fpReqDossierPayAmount");
+          const pTxRef = document.getElementById("fpReqDossierTxRef");
+          const pStatus = document.getElementById("fpReqDossierPayStatus");
+          const pNotesWrap = document.getElementById("fpReqNotesWrap");
+          const pNotes = document.getElementById("fpReqDossierNotes");
+          const pReceiptWrap = document.getElementById("fpReqReceiptWrap");
+          const pReceiptImg = document.getElementById("fpReqReceiptImg");
+          const pInspectBtn = document.getElementById("fpReqInspectReceiptBtn");
+
+          if (pMethod) pMethod.textContent = r.payment_method_name || "—";
+          if (pAccount) pAccount.textContent = r.receiving_account_identifier || "—";
+          if (pHolder) pHolder.textContent = r.receiving_account_holder || "—";
+          if (pAmount) pAmount.textContent = `${parseFloat(r.payment_amount || r.plan_price || 0).toFixed(2)} ${r.payment_currency || 'EGP'}`;
+          if (pTxRef) pTxRef.textContent = r.transaction_reference || "None provided";
+          if (pStatus) pStatus.innerHTML = `<span class="sub-badge ${r.payment_status === 'approved' ? 'active' : 'pending'}">${escapeHtml(r.payment_status || 'pending_verification')}</span>`;
+
+          if (r.payment_notes) {
+            if (pNotesWrap) pNotesWrap.style.display = "block";
+            if (pNotes) pNotes.textContent = r.payment_notes;
+          } else {
+            if (pNotesWrap) pNotesWrap.style.display = "none";
+          }
+
+          if (r.receipt_url) {
+            if (pReceiptWrap) pReceiptWrap.style.display = "block";
+            if (pReceiptImg) {
+              pReceiptImg.src = r.receipt_url;
+              pReceiptImg.onclick = () => openReceiptViewer(r.receipt_url, r.receipt_original_name || 'receipt.png');
+            }
+            if (pInspectBtn) {
+              pInspectBtn.onclick = () => openReceiptViewer(r.receipt_url, r.receipt_original_name || 'receipt.png');
+            }
+          } else {
+            if (pReceiptWrap) pReceiptWrap.style.display = "none";
+          }
+        } else {
+          payCard.style.display = "none";
+        }
+      }
+
       if (appBtn) {
         appBtn.onclick = async () => {
           appBtn.disabled = true;
@@ -12473,10 +12607,6 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         } finally {
           editPlanSubmitBtn.disabled = false;
-          editPlanSubmitBtn.innerHTML = origHtml;
-        }
-      });
-    }
           editPlanSubmitBtn.innerHTML = origHtml;
         }
       });
@@ -13008,6 +13138,1026 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const adminSubStatusFilter = document.getElementById("adminSubStatusFilter");
   if (adminSubStatusFilter) adminSubStatusFilter.addEventListener("change", loadAdminSubscriptions);
+
+  // ==============================================================================
+  // SCOUT Manual Payment System — Lightbox, Checkout & Admin Controllers
+  // ==============================================================================
+
+  // 1. Receipt Lightbox Viewer
+  const receiptViewerModal = document.getElementById("receiptViewerModal");
+  const receiptViewerModalBackdrop = document.getElementById("receiptViewerModalBackdrop");
+  const receiptViewerModalCloseBtn = document.getElementById("receiptViewerModalCloseBtn");
+  const receiptViewerImg = document.getElementById("receiptViewerImg");
+  const receiptViewerMetaFilename = document.getElementById("receiptViewerMetaFilename");
+  const receiptViewerDownloadBtn = document.getElementById("receiptViewerDownloadBtn");
+
+  function openReceiptViewer(receiptUrl, filename) {
+    if (!receiptViewerModal || !receiptUrl) return;
+    if (receiptViewerImg) receiptViewerImg.src = receiptUrl;
+    if (receiptViewerMetaFilename) receiptViewerMetaFilename.innerHTML = `<i class="fas fa-file-image"></i> ${escapeHtml(filename || 'receipt.png')}`;
+    if (receiptViewerDownloadBtn) {
+      receiptViewerDownloadBtn.href = receiptUrl;
+      receiptViewerDownloadBtn.download = filename || 'payment_receipt.png';
+    }
+    receiptViewerModal.style.display = "flex";
+  }
+
+  function closeReceiptViewer() {
+    if (!receiptViewerModal) return;
+    receiptViewerModal.style.display = "none";
+    if (receiptViewerImg) receiptViewerImg.src = "";
+  }
+
+  if (receiptViewerModalCloseBtn) receiptViewerModalCloseBtn.addEventListener("click", closeReceiptViewer);
+  if (receiptViewerModalBackdrop) receiptViewerModalBackdrop.addEventListener("click", closeReceiptViewer);
+
+  // 2. User Checkout Controller
+  let checkoutSelectedPlan = null;
+  let checkoutSelectedMethod = null;
+  let checkoutSelectedAccount = null;
+  let checkoutSelectedFile = null;
+
+  const checkoutView = document.getElementById("checkoutView");
+  const userPlansCatalogContainer = document.getElementById("userPlansCatalogContainer");
+  const checkoutBackBtn = document.getElementById("checkoutBackBtn");
+  const checkoutMethodsGrid = document.getElementById("checkoutMethodsGrid");
+  const checkoutAccountSection = document.getElementById("checkoutAccountSection");
+  const checkoutAccountSelectWrap = document.getElementById("checkoutAccountSelectWrap");
+  const checkoutAccountSelect = document.getElementById("checkoutAccountSelect");
+  const checkoutAccountHolder = document.getElementById("checkoutAccountHolder");
+  const checkoutAccountIdentifier = document.getElementById("checkoutAccountIdentifier");
+  const checkoutAccountProviderBadge = document.getElementById("checkoutAccountProviderBadge");
+  const checkoutAccountDesc = document.getElementById("checkoutAccountDesc");
+  const checkoutInstructionsBox = document.getElementById("checkoutInstructionsBox");
+  const checkoutInstructionsText = document.getElementById("checkoutInstructionsText");
+  const checkoutCopyAccountBtn = document.getElementById("checkoutCopyAccountBtn");
+  const copyAccountBtnText = document.getElementById("copyAccountBtnText");
+
+  const checkoutUploadSection = document.getElementById("checkoutUploadSection");
+  const receiptDropzone = document.getElementById("receiptDropzone");
+  const receiptFileInput = document.getElementById("receiptFileInput");
+  const dropzoneIdle = document.getElementById("dropzoneIdle");
+  const dropzonePreview = document.getElementById("dropzonePreview");
+  const receiptPreviewImg = document.getElementById("receiptPreviewImg");
+  const receiptPreviewName = document.getElementById("receiptPreviewName");
+  const receiptPreviewSize = document.getElementById("receiptPreviewSize");
+  const replaceReceiptBtn = document.getElementById("replaceReceiptBtn");
+  const checkoutTxRef = document.getElementById("checkoutTxRef");
+  const checkoutNotes = document.getElementById("checkoutNotes");
+  const checkoutAlertBox = document.getElementById("checkoutAlertBox");
+  const submitCheckoutBtn = document.getElementById("submitCheckoutBtn");
+
+  function closeCheckout() {
+    if (checkoutView) checkoutView.style.display = "none";
+    if (userPlansCatalogContainer) userPlansCatalogContainer.style.display = "block";
+    checkoutSelectedPlan = null;
+    checkoutSelectedMethod = null;
+    checkoutSelectedAccount = null;
+    checkoutSelectedFile = null;
+  }
+
+  if (checkoutBackBtn) checkoutBackBtn.addEventListener("click", closeCheckout);
+
+  async function openCheckout(planId, planData) {
+    if (!currentUser) {
+      openAuthModal("signin", "Please sign in or create an account to purchase a subscription plan.");
+      return;
+    }
+    if (currentUser.is_active === false) {
+      alert("Your account is suspended. You cannot purchase subscription plans.");
+      return;
+    }
+
+    let plan = planData;
+    if (!plan && window._cachedPlans) {
+      plan = window._cachedPlans.find(p => String(p.id) === String(planId) || String(p.plan_code) === String(planId));
+    }
+    if (!plan) {
+      try {
+        const res = await fetch("/api/plans");
+        const data = await res.json();
+        if (res.ok && data.plans) {
+          plan = data.plans.find(p => String(p.id) === String(planId) || String(p.plan_code) === String(planId));
+        }
+      } catch (_) {}
+    }
+
+    if (!plan) {
+      alert("Could not load plan details. Please refresh and try again.");
+      return;
+    }
+
+    checkoutSelectedPlan = plan;
+    checkoutSelectedMethod = null;
+    checkoutSelectedAccount = null;
+    checkoutSelectedFile = null;
+
+    // Hide Catalog, Show Checkout
+    if (userPlansCatalogContainer) userPlansCatalogContainer.style.display = "none";
+    if (checkoutView) {
+      checkoutView.style.display = "block";
+      checkoutView.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // Populate Plan Summary
+    const cpName = document.getElementById("checkoutPlanName");
+    const cpDesc = document.getElementById("checkoutPlanDesc");
+    const cpPrice = document.getElementById("checkoutPlanPrice");
+    const cpDuration = document.getElementById("checkoutPlanDuration");
+    const cpTotal = document.getElementById("checkoutTotalDue");
+    const cpFeatures = document.getElementById("checkoutFeaturesList");
+
+    if (cpName) cpName.textContent = plan.name || "Plan";
+    if (cpDesc) cpDesc.textContent = plan.description || "";
+    const priceFormatted = plan.price === 0 ? "Free" : `$${parseFloat(plan.price).toFixed(2)}`;
+    if (cpPrice) cpPrice.textContent = priceFormatted;
+    if (cpDuration) cpDuration.textContent = `${plan.duration_days || plan.duration_value || 30} Days`;
+    if (cpTotal) cpTotal.textContent = `${priceFormatted} ${plan.currency || 'USD'}`;
+
+    if (cpFeatures) {
+      const f = plan.features || {};
+      const items = [
+        { label: "Live Traffic Telemetry & 15-Class AI Intrusion Detection", enabled: f.can_live_monitoring !== false },
+        { label: "Active Port Scanning & TCP Service Enumeration", enabled: f.can_port_scan !== false },
+        { label: "Subnet Reconnaissance & Network Discovery", enabled: f.can_network_discovery === true },
+        { label: `Max Concurrent Scans: ${f.max_concurrent_scans || 1}`, enabled: true }
+      ];
+      cpFeatures.innerHTML = items.map(it => `
+        <li class="checkout-feature-item ${it.enabled ? '' : 'text-muted'}" style="${it.enabled ? '' : 'opacity:0.6;'}">
+          <i class="fas ${it.enabled ? 'fa-check text-success' : 'fa-xmark text-muted'}"></i>
+          <span>${escapeHtml(it.label)}</span>
+        </li>
+      `).join("");
+    }
+
+    // Reset Steps
+    if (checkoutAccountSection) checkoutAccountSection.style.display = "none";
+    if (checkoutUploadSection) checkoutUploadSection.style.display = "none";
+    if (checkoutAlertBox) checkoutAlertBox.style.display = "none";
+    if (checkoutTxRef) checkoutTxRef.value = "";
+    if (checkoutNotes) checkoutNotes.value = "";
+    if (receiptFileInput) receiptFileInput.value = "";
+    if (dropzoneIdle) dropzoneIdle.style.display = "block";
+    if (dropzonePreview) dropzonePreview.style.display = "none";
+
+    // Fetch Active Payment Methods
+    if (checkoutMethodsGrid) {
+      checkoutMethodsGrid.innerHTML = `
+        <div class="plans-loading-placeholder" style="grid-column: 1 / -1;">
+          <i class="fas fa-circle-notch fa-spin"></i> Loading payment methods...
+        </div>
+      `;
+    }
+
+    try {
+      const res = await fetch("/api/payment-methods");
+      const data = await res.json();
+      const methods = (data.payment_methods || []).filter(m => m.is_active && m.accounts && m.accounts.length > 0);
+
+      if (methods.length === 0) {
+        if (checkoutMethodsGrid) {
+          checkoutMethodsGrid.innerHTML = `
+            <div class="checkout-alert-box error" style="grid-column: 1 / -1; display:flex;">
+              <i class="fas fa-circle-exclamation"></i> No payment methods are currently configured for new requests. Please contact the administrator.
+            </div>
+          `;
+        }
+        return;
+      }
+
+      let gridHtml = "";
+      methods.forEach(m => {
+        gridHtml += `
+          <div class="checkout-method-chip" data-method-id="${m.id}">
+            <div class="checkout-method-icon-wrap">
+              <i class="${escapeHtml(m.logo_icon || 'fas fa-wallet')}"></i>
+            </div>
+            <div class="checkout-method-chip-info">
+              <span class="checkout-method-chip-name">${escapeHtml(m.display_name)}</span>
+              <span class="checkout-method-chip-count">${m.accounts.length} ${m.accounts.length === 1 ? 'account' : 'accounts'} available</span>
+            </div>
+          </div>
+        `;
+      });
+      if (checkoutMethodsGrid) checkoutMethodsGrid.innerHTML = gridHtml;
+
+      // Bind Chip Click Listeners
+      checkoutMethodsGrid.querySelectorAll(".checkout-method-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+          checkoutMethodsGrid.querySelectorAll(".checkout-method-chip").forEach(c => c.classList.remove("selected"));
+          chip.classList.add("selected");
+          const mId = parseInt(chip.getAttribute("data-method-id"));
+          const selectedM = methods.find(m => m.id === mId);
+          selectPaymentMethod(selectedM);
+        });
+      });
+
+      // Auto-select first method
+      if (methods.length > 0) {
+        const firstChip = checkoutMethodsGrid.querySelector(".checkout-method-chip");
+        if (firstChip) firstChip.click();
+      }
+
+    } catch (err) {
+      if (checkoutMethodsGrid) {
+        checkoutMethodsGrid.innerHTML = `
+          <div class="checkout-alert-box error" style="grid-column: 1 / -1; display:flex;">
+            <i class="fas fa-circle-exclamation"></i> Network error loading payment methods.
+          </div>
+        `;
+      }
+    }
+  }
+
+  function selectPaymentMethod(m) {
+    if (!m) return;
+    checkoutSelectedMethod = m;
+
+    // Display Instructions
+    if (checkoutInstructionsText) {
+      checkoutInstructionsText.textContent = m.instructions || "Transfer the exact amount to the account below, then upload your transaction receipt.";
+    }
+
+    // Accounts logic
+    const activeAccounts = (m.accounts || []).filter(a => a.is_active);
+    if (activeAccounts.length === 0) {
+      if (checkoutAccountSection) checkoutAccountSection.style.display = "none";
+      if (checkoutUploadSection) checkoutUploadSection.style.display = "none";
+      return;
+    }
+
+    if (activeAccounts.length > 1) {
+      if (checkoutAccountSelectWrap) checkoutAccountSelectWrap.style.display = "block";
+      if (checkoutAccountSelect) {
+        checkoutAccountSelect.innerHTML = activeAccounts.map(acc => `
+          <option value="${acc.id}">${escapeHtml(acc.account_identifier)} — ${escapeHtml(acc.account_holder_name)}</option>
+        `).join("");
+        checkoutAccountSelect.onchange = () => {
+          const accId = parseInt(checkoutAccountSelect.value);
+          const found = activeAccounts.find(a => a.id === accId);
+          updateAccountCard(found);
+        };
+      }
+      updateAccountCard(activeAccounts[0]);
+    } else {
+      if (checkoutAccountSelectWrap) checkoutAccountSelectWrap.style.display = "none";
+      updateAccountCard(activeAccounts[0]);
+    }
+
+    if (checkoutAccountSection) checkoutAccountSection.style.display = "block";
+    if (checkoutUploadSection) checkoutUploadSection.style.display = "block";
+  }
+
+  function updateAccountCard(acc) {
+    if (!acc) return;
+    checkoutSelectedAccount = acc;
+    if (checkoutAccountHolder) checkoutAccountHolder.textContent = acc.account_holder_name;
+    if (checkoutAccountIdentifier) checkoutAccountIdentifier.textContent = acc.account_identifier;
+    if (checkoutAccountProviderBadge) checkoutAccountProviderBadge.textContent = checkoutSelectedMethod ? checkoutSelectedMethod.display_name : "Wallet";
+    if (checkoutAccountDesc) checkoutAccountDesc.textContent = acc.description || "";
+  }
+
+  // Copy to clipboard
+  if (checkoutCopyAccountBtn) {
+    checkoutCopyAccountBtn.addEventListener("click", () => {
+      if (!checkoutSelectedAccount || !checkoutSelectedAccount.account_identifier) return;
+      navigator.clipboard.writeText(checkoutSelectedAccount.account_identifier).then(() => {
+        checkoutCopyAccountBtn.classList.add("copied");
+        if (copyAccountBtnText) copyAccountBtnText.textContent = "Copied!";
+        const icon = checkoutCopyAccountBtn.querySelector("i");
+        if (icon) icon.className = "fas fa-check";
+        setTimeout(() => {
+          checkoutCopyAccountBtn.classList.remove("copied");
+          if (copyAccountBtnText) copyAccountBtnText.textContent = "Copy";
+          if (icon) icon.className = "fas fa-copy";
+        }, 2200);
+      }).catch(() => {
+        alert(`Account Identifier: ${checkoutSelectedAccount.account_identifier}`);
+      });
+    });
+  }
+
+  // Receipt Drag & Drop
+  if (receiptDropzone && receiptFileInput) {
+    receiptDropzone.addEventListener("click", (e) => {
+      if (e.target.closest("#replaceReceiptBtn")) return;
+      receiptFileInput.click();
+    });
+
+    receiptDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      receiptDropzone.classList.add("dragover");
+    });
+    receiptDropzone.addEventListener("dragleave", () => {
+      receiptDropzone.classList.remove("dragover");
+    });
+    receiptDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      receiptDropzone.classList.remove("dragover");
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleReceiptFileSelected(e.dataTransfer.files[0]);
+      }
+    });
+
+    receiptFileInput.addEventListener("change", () => {
+      if (receiptFileInput.files && receiptFileInput.files.length > 0) {
+        handleReceiptFileSelected(receiptFileInput.files[0]);
+      }
+    });
+
+    if (replaceReceiptBtn) {
+      replaceReceiptBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        receiptFileInput.value = "";
+        checkoutSelectedFile = null;
+        if (dropzonePreview) dropzonePreview.style.display = "none";
+        if (dropzoneIdle) dropzoneIdle.style.display = "block";
+        receiptFileInput.click();
+      });
+    }
+  }
+
+  function handleReceiptFileSelected(file) {
+    if (!file) return;
+    const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+
+    if (!allowed.includes(ext)) {
+      if (checkoutAlertBox) {
+        checkoutAlertBox.innerHTML = `<i class="fas fa-circle-exclamation"></i> Unsupported format "${escapeHtml(ext)}". Please upload JPG, JPEG, PNG, or WEBP.`;
+        checkoutAlertBox.style.display = "flex";
+      }
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      if (checkoutAlertBox) {
+        checkoutAlertBox.innerHTML = `<i class="fas fa-circle-exclamation"></i> File size exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please upload a smaller image.`;
+        checkoutAlertBox.style.display = "flex";
+      }
+      return;
+    }
+
+    if (checkoutAlertBox) checkoutAlertBox.style.display = "none";
+    checkoutSelectedFile = file;
+
+    if (receiptPreviewImg) receiptPreviewImg.src = URL.createObjectURL(file);
+    if (receiptPreviewName) receiptPreviewName.textContent = file.name;
+    if (receiptPreviewSize) receiptPreviewSize.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+
+    if (dropzoneIdle) dropzoneIdle.style.display = "none";
+    if (dropzonePreview) dropzonePreview.style.display = "flex";
+  }
+
+  // Submit Checkout
+  if (submitCheckoutBtn) {
+    submitCheckoutBtn.addEventListener("click", async () => {
+      if (!checkoutSelectedPlan) {
+        alert("Please select a valid subscription plan.");
+        return;
+      }
+      if (!checkoutSelectedMethod) {
+        if (checkoutAlertBox) {
+          checkoutAlertBox.innerHTML = '<i class="fas fa-circle-exclamation"></i> Please select an active payment method.';
+          checkoutAlertBox.style.display = "flex";
+        }
+        return;
+      }
+      if (!checkoutSelectedAccount) {
+        if (checkoutAlertBox) {
+          checkoutAlertBox.innerHTML = '<i class="fas fa-circle-exclamation"></i> Please select a valid receiving account.';
+          checkoutAlertBox.style.display = "flex";
+        }
+        return;
+      }
+      if (!checkoutSelectedFile) {
+        if (checkoutAlertBox) {
+          checkoutAlertBox.innerHTML = '<i class="fas fa-circle-exclamation"></i> Please select and upload your payment receipt image.';
+          checkoutAlertBox.style.display = "flex";
+        }
+        return;
+      }
+
+      if (checkoutAlertBox) checkoutAlertBox.style.display = "none";
+      submitCheckoutBtn.disabled = true;
+      submitCheckoutBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Submitting Verification...';
+
+      const formData = new FormData();
+      formData.append("plan_id", checkoutSelectedPlan.id);
+      formData.append("payment_method_id", checkoutSelectedMethod.id);
+      formData.append("receiving_account_id", checkoutSelectedAccount.id);
+      formData.append("receipt", checkoutSelectedFile);
+      if (checkoutTxRef && checkoutTxRef.value.trim()) {
+        formData.append("transaction_reference", checkoutTxRef.value.trim());
+      }
+      if (checkoutNotes && checkoutNotes.value.trim()) {
+        formData.append("notes", checkoutNotes.value.trim());
+      }
+
+      try {
+        const res = await fetch("/api/subscriptions/checkout/submit", {
+          method: "POST",
+          credentials: "same-origin",
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === "success") {
+          closeCheckout();
+          const subAlert = document.getElementById("subAlertBox");
+          if (subAlert) {
+            subAlert.className = "sub-alert-box success";
+            subAlert.innerHTML = '<i class="fas fa-circle-check"></i> ' + (data.message || "Payment request submitted! Your payment receipt is pending administrative verification.");
+            subAlert.style.display = "flex";
+          }
+          await loadUserSubscription();
+          await loadPlansCatalog();
+        } else {
+          if (checkoutAlertBox) {
+            checkoutAlertBox.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + escapeHtml(data.message || "Failed to submit payment request.");
+            checkoutAlertBox.style.display = "flex";
+          }
+        }
+      } catch (_) {
+        if (checkoutAlertBox) {
+          checkoutAlertBox.innerHTML = '<i class="fas fa-circle-exclamation"></i> Network error submitting payment verification.';
+          checkoutAlertBox.style.display = "flex";
+        }
+      } finally {
+        submitCheckoutBtn.disabled = false;
+        submitCheckoutBtn.innerHTML = '<i class="fas fa-file-shield"></i> Submit Payment for Verification';
+      }
+    });
+  }
+
+  // ==============================================================================
+  // 3. Admin Payment Methods & Accounts Controller
+  // ==============================================================================
+  let cachedPaymentMethods = [];
+  const adminPaymentsCardsGrid = document.getElementById("adminPaymentsCardsGrid");
+  const adminPaymentSearchInput = document.getElementById("adminPaymentSearchInput");
+  const adminPaymentStatusFilter = document.getElementById("adminPaymentStatusFilter");
+  const refreshPaymentsBtn = document.getElementById("refreshPaymentsBtn");
+  const adminCreatePaymentMethodBtn = document.getElementById("adminCreatePaymentMethodBtn");
+
+  const adminPaymentMethodModal = document.getElementById("adminPaymentMethodModal");
+  const adminPaymentMethodModalBackdrop = document.getElementById("adminPaymentMethodModalBackdrop");
+  const adminPaymentMethodModalCloseBtn = document.getElementById("adminPaymentMethodModalCloseBtn");
+  const pmModalCancelBtn = document.getElementById("pmModalCancelBtn");
+  const adminPaymentMethodForm = document.getElementById("adminPaymentMethodForm");
+  const adminPaymentMethodModalAlert = document.getElementById("adminPaymentMethodModalAlert");
+  const adminPaymentMethodModalTitle = document.getElementById("adminPaymentMethodModalTitle");
+  const pmModalMethodId = document.getElementById("pmModalMethodId");
+  const pmModalDisplayName = document.getElementById("pmModalDisplayName");
+  const pmModalName = document.getElementById("pmModalName");
+  const pmModalProviderType = document.getElementById("pmModalProviderType");
+  const pmModalIcon = document.getElementById("pmModalIcon");
+  const pmModalDisplayOrder = document.getElementById("pmModalDisplayOrder");
+  const pmModalIsActive = document.getElementById("pmModalIsActive");
+  const pmModalDescription = document.getElementById("pmModalDescription");
+  const pmModalInstructions = document.getElementById("pmModalInstructions");
+  const pmModalSaveBtn = document.getElementById("pmModalSaveBtn");
+  const pmModalSaveText = document.getElementById("pmModalSaveText");
+
+  const adminReceivingAccountModal = document.getElementById("adminReceivingAccountModal");
+  const adminReceivingAccountModalBackdrop = document.getElementById("adminReceivingAccountModalBackdrop");
+  const adminReceivingAccountModalCloseBtn = document.getElementById("adminReceivingAccountModalCloseBtn");
+  const raModalCancelBtn = document.getElementById("raModalCancelBtn");
+  const adminReceivingAccountForm = document.getElementById("adminReceivingAccountForm");
+  const adminReceivingAccountModalAlert = document.getElementById("adminReceivingAccountModalAlert");
+  const adminReceivingAccountModalTitle = document.getElementById("adminReceivingAccountModalTitle");
+  const raModalMethodId = document.getElementById("raModalMethodId");
+  const raModalAccountId = document.getElementById("raModalAccountId");
+  const raModalIdentifier = document.getElementById("raModalIdentifier");
+  const raModalHolderName = document.getElementById("raModalHolderName");
+  const raModalDescription = document.getElementById("raModalDescription");
+  const raModalDisplayOrder = document.getElementById("raModalDisplayOrder");
+  const raModalIsActive = document.getElementById("raModalIsActive");
+  const raModalSaveBtn = document.getElementById("raModalSaveBtn");
+  const raModalSaveText = document.getElementById("raModalSaveText");
+
+  async function loadAdminPaymentMethods() {
+    if (!adminPaymentsCardsGrid) return;
+    adminPaymentsCardsGrid.innerHTML = `
+      <div class="admin-cards-state loading-state">
+        <div class="state-icon-wrap"><i class="fas fa-circle-notch fa-spin"></i></div>
+        <h4>Loading Payment Methods...</h4>
+        <p>Fetching administrator configured electronic payment channels.</p>
+      </div>
+    `;
+
+    try {
+      const res = await fetch("/api/admin/payment-methods", { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success") {
+        adminPaymentsCardsGrid.innerHTML = `
+          <div class="admin-cards-state empty-state">
+            <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+            <h4>Unable to Load Methods</h4>
+            <p>${escapeHtml(data.message || "Failed to retrieve payment methods.")}</p>
+          </div>
+        `;
+        return;
+      }
+
+      cachedPaymentMethods = data.payment_methods || [];
+      renderAdminPaymentMethods();
+    } catch (_) {
+      adminPaymentsCardsGrid.innerHTML = `
+        <div class="admin-cards-state empty-state">
+          <div class="state-icon-wrap"><i class="fas fa-triangle-exclamation"></i></div>
+          <h4>Network Error</h4>
+          <p>Failed to communicate with payment methods service.</p>
+        </div>
+      `;
+    }
+  }
+
+  function renderAdminPaymentMethods() {
+    if (!adminPaymentsCardsGrid) return;
+    const searchVal = adminPaymentSearchInput ? adminPaymentSearchInput.value.trim().toLowerCase() : "";
+    const statusVal = adminPaymentStatusFilter ? adminPaymentStatusFilter.value : "all";
+
+    let filtered = cachedPaymentMethods.filter(m => {
+      if (statusVal === "active" && !m.is_active) return false;
+      if (statusVal === "inactive" && m.is_active) return false;
+      if (searchVal) {
+        const matchName = (m.display_name || "").toLowerCase().includes(searchVal);
+        const matchSlug = (m.name || "").toLowerCase().includes(searchVal);
+        const matchType = (m.provider_type || "").toLowerCase().includes(searchVal);
+        const matchAccount = (m.accounts || []).some(a => 
+          (a.account_identifier || "").toLowerCase().includes(searchVal) || 
+          (a.account_holder_name || "").toLowerCase().includes(searchVal)
+        );
+        return matchName || matchSlug || matchType || matchAccount;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      adminPaymentsCardsGrid.innerHTML = `
+        <div class="admin-cards-state empty-state">
+          <div class="state-icon-wrap"><i class="fas fa-wallet"></i></div>
+          <h4>No Payment Methods Found</h4>
+          <p>No payment channels match your filter criteria. Click "Add Payment Method" to configure one.</p>
+        </div>
+      `;
+      return;
+    }
+
+    let cardsHtml = "";
+    filtered.forEach(m => {
+      const accounts = m.accounts || [];
+      let accountsHtml = "";
+      if (accounts.length === 0) {
+        accountsHtml = `<div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px 0;"><i class="fas fa-triangle-exclamation"></i> No receiving accounts configured. Users cannot select this method.</div>`;
+      } else {
+        accounts.forEach(a => {
+          accountsHtml += `
+            <div class="payment-account-row">
+              <div class="account-row-info">
+                <span class="account-row-id">${escapeHtml(a.account_identifier)}</span>
+                <span class="account-row-holder">${escapeHtml(a.account_holder_name)} ${a.description ? `• ${escapeHtml(a.description)}` : ''}</span>
+              </div>
+              <div class="account-row-actions">
+                <span class="sub-badge ${a.is_active ? 'active' : 'canceled'}" style="font-size:0.68rem; padding: 1px 6px;">
+                  ${a.is_active ? 'Active' : 'Inactive'}
+                </span>
+                <button type="button" class="btn-acc-action edit" data-edit-acc-id="${a.id}" data-method-id="${m.id}" title="Edit Account">
+                  <i class="fas fa-pencil"></i>
+                </button>
+                <button type="button" class="btn-acc-action toggle ${a.is_active ? '' : 'inactive'}" data-toggle-acc-id="${a.id}" title="Toggle Active Status">
+                  <i class="fas ${a.is_active ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+                </button>
+                <button type="button" class="btn-acc-action delete" data-del-acc-id="${a.id}" data-acc-label="${escapeHtml(a.account_identifier)}" title="Delete Account">
+                  <i class="fas fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      cardsHtml += `
+        <div class="admin-payment-card ${m.is_active ? '' : 'inactive'}" data-method-id="${m.id}">
+          <div class="payment-card-header">
+            <div class="payment-card-title-wrap">
+              <div class="payment-card-icon"><i class="${escapeHtml(m.logo_icon || 'fas fa-wallet')}"></i></div>
+              <div>
+                <h4 class="payment-card-name">${escapeHtml(m.display_name)}</h4>
+                <span class="payment-card-slug">Slug: <code>${escapeHtml(m.name)}</code></span>
+              </div>
+            </div>
+            <div class="payment-card-badges">
+              <span class="sub-badge ${m.is_active ? 'active' : 'canceled'}">${m.is_active ? 'Active' : 'Disabled'}</span>
+              <span class="account-type-badge">${escapeHtml(m.provider_type || 'Wallet')}</span>
+            </div>
+          </div>
+          ${m.description ? `<p class="payment-desc-text">${escapeHtml(m.description)}</p>` : ''}
+          <div class="payment-accounts-section">
+            <div class="payment-accounts-header">
+              <span class="payment-accounts-title">Receiving Accounts (${accounts.length})</span>
+              <button type="button" class="btn-add-account-sm" data-add-acc-method-id="${m.id}">
+                <i class="fas fa-plus"></i> Add Account
+              </button>
+            </div>
+            <div class="payment-accounts-list">
+              ${accountsHtml}
+            </div>
+          </div>
+          <div class="payment-card-footer">
+            <button type="button" class="btn-admin-action activate" data-edit-method-id="${m.id}">
+              <i class="fas fa-pen-to-square"></i> Edit
+            </button>
+            <button type="button" class="btn-admin-action details" data-toggle-method-id="${m.id}">
+              <i class="fas ${m.is_active ? 'fa-eye-slash' : 'fa-eye'}"></i> ${m.is_active ? 'Deactivate' : 'Activate'}
+            </button>
+            <button type="button" class="btn-admin-action cancel" data-del-method-id="${m.id}" data-method-name="${escapeHtml(m.display_name)}" style="margin-left:auto;">
+              <i class="fas fa-trash-can"></i> Delete
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    adminPaymentsCardsGrid.innerHTML = cardsHtml;
+    bindAdminPaymentActions();
+  }
+
+  function bindAdminPaymentActions() {
+    if (!adminPaymentsCardsGrid) return;
+
+    // Add Account to Method
+    adminPaymentsCardsGrid.querySelectorAll("[data-add-acc-method-id]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mId = parseInt(btn.getAttribute("data-add-acc-method-id"));
+        openReceivingAccountModal(mId, null, null);
+      });
+    });
+
+    // Edit Account
+    adminPaymentsCardsGrid.querySelectorAll("[data-edit-acc-id]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mId = parseInt(btn.getAttribute("data-method-id"));
+        const accId = parseInt(btn.getAttribute("data-edit-acc-id"));
+        const method = cachedPaymentMethods.find(m => m.id === mId);
+        const acc = method ? (method.accounts || []).find(a => a.id === accId) : null;
+        openReceivingAccountModal(mId, accId, acc);
+      });
+    });
+
+    // Toggle Account Status
+    adminPaymentsCardsGrid.querySelectorAll("[data-toggle-acc-id]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const accId = parseInt(btn.getAttribute("data-toggle-acc-id"));
+        btn.disabled = true;
+        try {
+          const res = await fetch(`/api/admin/receiving-accounts/${accId}/toggle`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin"
+          });
+          const data = await res.json();
+          if (res.ok && data.status === "success") {
+            loadAdminPaymentMethods();
+          } else {
+            alert(data.message || "Failed to toggle account.");
+          }
+        } catch (_) {
+          alert("Network error toggling account.");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Delete Account
+    adminPaymentsCardsGrid.querySelectorAll("[data-del-acc-id]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const accId = parseInt(btn.getAttribute("data-del-acc-id"));
+        const accLabel = btn.getAttribute("data-acc-label") || `#${accId}`;
+        const confirmRes = await showAdminConfirmationModal({
+          title: "Delete Receiving Account",
+          badge: "Account Deletion",
+          badgeIcon: "fa-trash-can",
+          targetName: `Account: ${accLabel}`,
+          targetMeta: `#${accId}`,
+          consequencesText: "Deleting this receiving account will remove it from future user checkouts. Past subscription records that used this account will maintain historical integrity.",
+          isDestructive: true,
+          confirmText: "Delete Account",
+          confirmIcon: "fa-trash-can"
+        });
+        if (!confirmRes.confirmed) return;
+
+        try {
+          const res = await fetch(`/api/admin/receiving-accounts/${accId}`, {
+            method: "DELETE",
+            credentials: "same-origin"
+          });
+          const data = await res.json();
+          if (res.ok && data.status === "success") {
+            loadAdminPaymentMethods();
+          } else {
+            alert(data.message || "Failed to delete account.");
+          }
+        } catch (_) {
+          alert("Network error deleting account.");
+        }
+      });
+    });
+
+    // Edit Method
+    adminPaymentsCardsGrid.querySelectorAll("[data-edit-method-id]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mId = parseInt(btn.getAttribute("data-edit-method-id"));
+        const method = cachedPaymentMethods.find(m => m.id === mId);
+        openPaymentMethodModal(mId, method);
+      });
+    });
+
+    // Toggle Method Status
+    adminPaymentsCardsGrid.querySelectorAll("[data-toggle-method-id]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const mId = parseInt(btn.getAttribute("data-toggle-method-id"));
+        btn.disabled = true;
+        try {
+          const res = await fetch(`/api/admin/payment-methods/${mId}/toggle`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin"
+          });
+          const data = await res.json();
+          if (res.ok && data.status === "success") {
+            loadAdminPaymentMethods();
+          } else {
+            alert(data.message || "Failed to toggle payment method.");
+          }
+        } catch (_) {
+          alert("Network error toggling payment method.");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Delete Method
+    adminPaymentsCardsGrid.querySelectorAll("[data-del-method-id]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const mId = parseInt(btn.getAttribute("data-del-method-id"));
+        const mName = btn.getAttribute("data-method-name") || `#${mId}`;
+        const confirmRes = await showAdminConfirmationModal({
+          title: "Delete Payment Method",
+          badge: "Method Deletion",
+          badgeIcon: "fa-trash-can",
+          targetName: `Payment Method: ${mName}`,
+          targetMeta: `#${mId}`,
+          consequencesText: "Deleting this payment method and its receiving accounts removes it entirely from checkout. Past subscription records that used this method will preserve their historical snapshots.",
+          isDestructive: true,
+          confirmText: "Delete Method",
+          confirmIcon: "fa-trash-can"
+        });
+        if (!confirmRes.confirmed) return;
+
+        try {
+          const res = await fetch(`/api/admin/payment-methods/${mId}`, {
+            method: "DELETE",
+            credentials: "same-origin"
+          });
+          const data = await res.json();
+          if (res.ok && data.status === "success") {
+            loadAdminPaymentMethods();
+          } else {
+            alert(data.message || "Failed to delete payment method.");
+          }
+        } catch (_) {
+          alert("Network error deleting payment method.");
+        }
+      });
+    });
+  }
+
+  // Modals Open / Close Logic
+  function openPaymentMethodModal(methodId, data) {
+    if (!adminPaymentMethodModal) return;
+    if (adminPaymentMethodModalAlert) adminPaymentMethodModalAlert.style.display = "none";
+    if (adminPaymentMethodForm) adminPaymentMethodForm.reset();
+
+    if (methodId && data) {
+      if (adminPaymentMethodModalTitle) adminPaymentMethodModalTitle.textContent = "Edit Payment Method";
+      if (pmModalSaveText) pmModalSaveText.textContent = "Update Payment Method";
+      if (pmModalMethodId) pmModalMethodId.value = methodId;
+      if (pmModalDisplayName) pmModalDisplayName.value = data.display_name || "";
+      if (pmModalName) pmModalName.value = data.name || "";
+      if (pmModalProviderType) pmModalProviderType.value = data.provider_type || "electronic_wallet";
+      if (pmModalIcon) pmModalIcon.value = data.logo_icon || "fas fa-wallet";
+      if (pmModalDisplayOrder) pmModalDisplayOrder.value = data.display_order || 0;
+      if (pmModalIsActive) pmModalIsActive.checked = data.is_active !== false;
+      if (pmModalDescription) pmModalDescription.value = data.description || "";
+      if (pmModalInstructions) pmModalInstructions.value = data.instructions || "";
+    } else {
+      if (adminPaymentMethodModalTitle) adminPaymentMethodModalTitle.textContent = "Create Payment Method";
+      if (pmModalSaveText) pmModalSaveText.textContent = "Save Payment Method";
+      if (pmModalMethodId) pmModalMethodId.value = "";
+      if (pmModalIsActive) pmModalIsActive.checked = true;
+      if (pmModalIcon) pmModalIcon.value = "fas fa-wallet";
+      if (pmModalDisplayOrder) pmModalDisplayOrder.value = 0;
+    }
+    adminPaymentMethodModal.style.display = "flex";
+  }
+
+  function closePaymentMethodModal() {
+    if (adminPaymentMethodModal) adminPaymentMethodModal.style.display = "none";
+  }
+
+  if (adminPaymentMethodModalCloseBtn) adminPaymentMethodModalCloseBtn.addEventListener("click", closePaymentMethodModal);
+  if (adminPaymentMethodModalBackdrop) adminPaymentMethodModalBackdrop.addEventListener("click", closePaymentMethodModal);
+  if (pmModalCancelBtn) pmModalCancelBtn.addEventListener("click", closePaymentMethodModal);
+  if (adminCreatePaymentMethodBtn) adminCreatePaymentMethodBtn.addEventListener("click", () => openPaymentMethodModal(null, null));
+
+  if (adminPaymentMethodForm) {
+    adminPaymentMethodForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const methodId = pmModalMethodId ? pmModalMethodId.value : "";
+      const displayName = pmModalDisplayName ? pmModalDisplayName.value.trim() : "";
+      const name = pmModalName ? pmModalName.value.trim() : "";
+      const providerType = pmModalProviderType ? pmModalProviderType.value : "electronic_wallet";
+      const icon = pmModalIcon ? pmModalIcon.value.trim() : "fas fa-wallet";
+      const displayOrder = pmModalDisplayOrder ? parseInt(pmModalDisplayOrder.value || "0") : 0;
+      const isActive = pmModalIsActive ? pmModalIsActive.checked : true;
+      const desc = pmModalDescription ? pmModalDescription.value.trim() : "";
+      const instructions = pmModalInstructions ? pmModalInstructions.value.trim() : "";
+
+      if (!displayName) {
+        if (adminPaymentMethodModalAlert) {
+          adminPaymentMethodModalAlert.className = "auth-alert error";
+          adminPaymentMethodModalAlert.textContent = "Payment method display name is required.";
+          adminPaymentMethodModalAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (pmModalSaveBtn) {
+        pmModalSaveBtn.disabled = true;
+        pmModalSaveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+      }
+
+      const payload = {
+        display_name: displayName,
+        name: name,
+        provider_type: providerType,
+        logo_icon: icon,
+        display_order: displayOrder,
+        is_active: isActive,
+        description: desc,
+        instructions: instructions
+      };
+
+      const url = methodId ? `/api/admin/payment-methods/${methodId}` : "/api/admin/payment-methods";
+      const method = methodId ? "PUT" : "POST";
+
+      try {
+        const res = await fetch(url, {
+          method: method,
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          closePaymentMethodModal();
+          loadAdminPaymentMethods();
+        } else {
+          if (adminPaymentMethodModalAlert) {
+            adminPaymentMethodModalAlert.className = "auth-alert error";
+            adminPaymentMethodModalAlert.textContent = data.message || "Failed to save payment method.";
+            adminPaymentMethodModalAlert.style.display = "block";
+          }
+        }
+      } catch (_) {
+        if (adminPaymentMethodModalAlert) {
+          adminPaymentMethodModalAlert.className = "auth-alert error";
+          adminPaymentMethodModalAlert.textContent = "Network error saving payment method.";
+          adminPaymentMethodModalAlert.style.display = "block";
+        }
+      } finally {
+        if (pmModalSaveBtn) {
+          pmModalSaveBtn.disabled = false;
+          pmModalSaveBtn.innerHTML = `<span id="pmModalSaveText">${methodId ? 'Update Payment Method' : 'Save Payment Method'}</span>`;
+        }
+      }
+    });
+  }
+
+  // Receiving Account Modal
+  function openReceivingAccountModal(methodId, accountId, data) {
+    if (!adminReceivingAccountModal) return;
+    if (adminReceivingAccountModalAlert) adminReceivingAccountModalAlert.style.display = "none";
+    if (adminReceivingAccountForm) adminReceivingAccountForm.reset();
+
+    if (raModalMethodId) raModalMethodId.value = methodId || "";
+    if (raModalAccountId) raModalAccountId.value = accountId || "";
+
+    if (accountId && data) {
+      if (adminReceivingAccountModalTitle) adminReceivingAccountModalTitle.textContent = "Edit Receiving Account";
+      if (raModalSaveText) raModalSaveText.textContent = "Update Account";
+      if (raModalIdentifier) raModalIdentifier.value = data.account_identifier || "";
+      if (raModalHolderName) raModalHolderName.value = data.account_holder_name || "";
+      if (raModalDescription) raModalDescription.value = data.description || "";
+      if (raModalDisplayOrder) raModalDisplayOrder.value = data.display_order || 0;
+      if (raModalIsActive) raModalIsActive.checked = data.is_active !== false;
+    } else {
+      if (adminReceivingAccountModalTitle) adminReceivingAccountModalTitle.textContent = "Add Receiving Account";
+      if (raModalSaveText) raModalSaveText.textContent = "Save Account";
+      if (raModalIsActive) raModalIsActive.checked = true;
+      if (raModalDisplayOrder) raModalDisplayOrder.value = 0;
+    }
+    adminReceivingAccountModal.style.display = "flex";
+  }
+
+  function closeReceivingAccountModal() {
+    if (adminReceivingAccountModal) adminReceivingAccountModal.style.display = "none";
+  }
+
+  if (adminReceivingAccountModalCloseBtn) adminReceivingAccountModalCloseBtn.addEventListener("click", closeReceivingAccountModal);
+  if (adminReceivingAccountModalBackdrop) adminReceivingAccountModalBackdrop.addEventListener("click", closeReceivingAccountModal);
+  if (raModalCancelBtn) raModalCancelBtn.addEventListener("click", closeReceivingAccountModal);
+
+  if (adminReceivingAccountForm) {
+    adminReceivingAccountForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const methodId = raModalMethodId ? raModalMethodId.value : "";
+      const accountId = raModalAccountId ? raModalAccountId.value : "";
+      const identifier = raModalIdentifier ? raModalIdentifier.value.trim() : "";
+      const holder = raModalHolderName ? raModalHolderName.value.trim() : "";
+      const desc = raModalDescription ? raModalDescription.value.trim() : "";
+      const displayOrder = raModalDisplayOrder ? parseInt(raModalDisplayOrder.value || "0") : 0;
+      const isActive = raModalIsActive ? raModalIsActive.checked : true;
+
+      if (!identifier || !holder) {
+        if (adminReceivingAccountModalAlert) {
+          adminReceivingAccountModalAlert.className = "auth-alert error";
+          adminReceivingAccountModalAlert.textContent = "Account identifier and account holder name are required.";
+          adminReceivingAccountModalAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (raModalSaveBtn) {
+        raModalSaveBtn.disabled = true;
+        raModalSaveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+      }
+
+      const payload = {
+        account_identifier: identifier,
+        account_holder_name: holder,
+        description: desc,
+        display_order: displayOrder,
+        is_active: isActive
+      };
+
+      const url = accountId ? `/api/admin/receiving-accounts/${accountId}` : `/api/admin/payment-methods/${methodId}/accounts`;
+      const method = accountId ? "PUT" : "POST";
+
+      try {
+        const res = await fetch(url, {
+          method: method,
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          closeReceivingAccountModal();
+          loadAdminPaymentMethods();
+        } else {
+          if (adminReceivingAccountModalAlert) {
+            adminReceivingAccountModalAlert.className = "auth-alert error";
+            adminReceivingAccountModalAlert.textContent = data.message || "Failed to save receiving account.";
+            adminReceivingAccountModalAlert.style.display = "block";
+          }
+        }
+      } catch (_) {
+        if (adminReceivingAccountModalAlert) {
+          adminReceivingAccountModalAlert.className = "auth-alert error";
+          adminReceivingAccountModalAlert.textContent = "Network error saving account.";
+          adminReceivingAccountModalAlert.style.display = "block";
+        }
+      } finally {
+        if (raModalSaveBtn) {
+          raModalSaveBtn.disabled = false;
+          raModalSaveBtn.innerHTML = `<span id="raModalSaveText">${accountId ? 'Update Account' : 'Save Account'}</span>`;
+        }
+      }
+    });
+  }
+
+  // Filter & Refresh Listeners for Admin Payment Methods
+  if (adminPaymentSearchInput) adminPaymentSearchInput.addEventListener("input", renderAdminPaymentMethods);
+  if (adminPaymentStatusFilter) adminPaymentStatusFilter.addEventListener("change", renderAdminPaymentMethods);
+  if (refreshPaymentsBtn) refreshPaymentsBtn.addEventListener("click", () => {
+    loadAdminPaymentMethods();
+    loadAdminMetrics();
+  });
 
   // Admin Profile Update Form Handler
   const adminProfileForm = document.getElementById("adminProfileForm");

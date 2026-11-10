@@ -101,7 +101,7 @@
   }
 
   // ============================================================================
-  // 3. Existing Session Detection (Non-destructive)
+  // 3. Existing Session Detection (Automatic Navigation for Authenticated Users)
   // ============================================================================
   async function checkCurrentSession() {
     try {
@@ -114,10 +114,15 @@
           const text = document.getElementById("authSessionText");
           const link = document.getElementById("authSessionLink");
 
+          const urlParams = new URLSearchParams(window.location.search);
+          const redirectParam = urlParams.get("redirect") || urlParams.get("next");
+          const destination = (redirectParam && redirectParam.startsWith("/"))
+            ? redirectParam
+            : (data.landing_url || (user.role === "Admin" ? "/?view=admin" : (data.has_active_subscription ? "/?view=dashboard" : "/?view=plans")));
+
           if (banner && text) {
-            text.textContent = `Signed in as ${user.full_name || user.username} (${user.role}).`;
+            text.textContent = `Signed in as ${user.full_name || user.username} (${user.role}). Redirecting...`;
             if (link) {
-              const destination = data.landing_url || (user.role === "Admin" ? "/?view=admin" : "/?view=plans");
               link.setAttribute("href", destination);
               if (user.role === "Admin") {
                 link.textContent = "Go to Admin Console \u2192";
@@ -129,6 +134,12 @@
             }
             banner.style.display = "flex";
           }
+
+          // Automatically navigate authenticated user to their destination without requiring manual click
+          window.setTimeout(() => {
+            window.location.replace(destination);
+          }, 200);
+          return;
         }
       } else if (res.status === 403) {
         const data = await res.json().catch(() => ({}));
@@ -144,6 +155,10 @@
             }
             banner.style.display = "flex";
           }
+          window.setTimeout(() => {
+            window.location.replace("/?view=suspended");
+          }, 200);
+          return;
         }
       }
     } catch (_) {
@@ -326,8 +341,8 @@
           }
 
           window.setTimeout(() => {
-            window.location.href = destination;
-          }, 350);
+            window.location.replace(destination);
+          }, 200);
         } else {
           setSubmittingState(false);
           const errMsg = data.message || "Invalid credentials.";
@@ -452,8 +467,8 @@
           showAlert("Account created successfully! Preparing your security environment...", "success");
           const destination = data.redirect || "/?view=plans";
           window.setTimeout(() => {
-            window.location.href = destination;
-          }, 450);
+            window.location.replace(destination);
+          }, 250);
         } else {
           setSubmittingState(false);
           const errMsg = data.message || "Failed to create account. Please try again.";

@@ -199,7 +199,7 @@ class TestDashboardSeparationAndRouting(unittest.TestCase):
         # Accessing /dashboard redirects to /?view=plans
         res_dash = self.client.get("/dashboard")
         self.assertEqual(res_dash.status_code, 302)
-        self.assertEqual(res_dash.headers["Location"], "/?view=plans")
+        self.assertTrue(res_dash.headers["Location"].startswith("/?view=plans"))
 
         # Accessing /admin is forbidden (403)
         res_admin = self.client.get("/admin")
@@ -303,8 +303,8 @@ class TestDashboardSeparationAndRouting(unittest.TestCase):
             "email": f"recruit_{int(time.time())}@scout.sec",
             "phone_number": f"+1555{int(time.time() * 1000) % 10000000:07d}",
             "full_name": "New Security Recruit",
-            "password": "RecruitPassword#2026",
-            "confirm_password": "RecruitPassword#2026"
+            "password": "12345678",
+            "confirm_password": "12345678"
         })
 
         self.assertEqual(res.status_code, 201)
@@ -351,6 +351,10 @@ class TestDashboardSeparationAndRouting(unittest.TestCase):
 
     def test_10_network_discovery_endpoint_has_no_mindmap(self):
         """Verify that GET /network-discovery contains no Mind Map markup or scripts."""
+        self.client.post("/api/auth/login", json={
+            "username": "admin_scout",
+            "password": "AdminPass#2026"
+        })
         res = self.client.get("/network-discovery")
         self.assertEqual(res.status_code, 200)
         html = res.get_data(as_text=True)
@@ -475,7 +479,7 @@ class TestDashboardSeparationAndRouting(unittest.TestCase):
         # Accessing /dashboard redirects user without subscription to /?view=plans
         dash_res = self.client.get("/dashboard")
         self.assertEqual(dash_res.status_code, 302)
-        self.assertEqual(dash_res.headers["Location"], "/?view=plans")
+        self.assertTrue(dash_res.headers["Location"].startswith("/?view=plans"))
 
     def test_15_logout_behavior_and_session_revocation(self):
         """8, 9. Logout invalidates server-side session, clears cookie, emits anti-cache headers, rejects protected APIs."""

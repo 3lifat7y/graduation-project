@@ -150,6 +150,7 @@ class TestAdminNavigationAndUsersManagementAuditFix(unittest.TestCase):
     # =========================================================================
     def test_part2_network_discovery_sidebar_and_shell(self):
         """Verifies Network Discovery page contains unified sidebar and top navbar shell."""
+        self._login_admin()
         resp = self.client.get("/network-discovery")
         self.assertEqual(resp.status_code, 200)
         html = resp.get_data(as_text=True)

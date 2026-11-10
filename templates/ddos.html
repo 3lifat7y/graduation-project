@@ -84,12 +84,17 @@
         <a href="/?view=admin-subs" class="sidebar-nav-item admin-nav-item" data-nav="admin-subs" data-tooltip="Subscriptions Registry">
           <i class="fas fa-id-card nav-icon"></i>
           <span class="nav-text">Subscriptions</span>
-          <span class="nav-badge-pill admin-badge" id="sidebarPendingBadge" style="display:none;">0</span>
+        </a>
+        <a href="/?view=admin-payments" class="sidebar-nav-item admin-nav-item" data-nav="admin-payments" data-tooltip="Payment Methods & Accounts">
+          <i class="fas fa-wallet nav-icon"></i>
+          <span class="nav-text">Payment Methods</span>
         </a>
         <a href="/?view=admin-requests" class="sidebar-nav-item admin-nav-item" data-nav="admin-requests" data-tooltip="Pending Requests & Approvals">
-          <i class="fas fa-user-clock nav-icon"></i>
+          <span class="nav-icon-wrapper">
+            <i class="fas fa-user-clock nav-icon"></i>
+            <span class="sidebar-notification-dot" id="sidebarRequestsDot" style="display:none;" aria-label="Pending subscription requests indicator"></span>
+          </span>
           <span class="nav-text">Pending Requests</span>
-          <span class="nav-badge-pill admin-badge" id="sidebarRequestsBadge" style="display:none;">0</span>
         </a>
 
         <div class="sidebar-section-label">GOVERNANCE & SECURITY</div>
@@ -115,7 +120,7 @@
         <a href="/?view=plans" class="sidebar-nav-item" id="sidebarPlansNavItem" data-nav="plans" data-tooltip="Subscription Plans">
           <i class="fas fa-gem nav-icon"></i>
           <span class="nav-text">Subscription Plans</span>
-          <span class="nav-badge-pill" id="sidebarUserPendingBadge" style="display:none;">Pending</span>
+          <span class="nav-badge-pill" id="sidebarUserPendingBadge" style="display:none;"></span>
         </a>
 
         <a href="/?view=profile" class="sidebar-nav-item" id="sidebarProfileNavItem" data-nav="profile" data-tooltip="Profile & Security">
@@ -2396,21 +2401,177 @@
           <!-- Subscription Notification Alert -->
           <div class="sub-alert-box" id="subAlertBox" style="display:none;"></div>
 
-          <!-- Dynamic Plans Grid -->
-          <div class="plans-grid" id="plansCatalogGrid">
-            <div class="plans-loading-placeholder">
-              <i class="fas fa-circle-notch fa-spin"></i> Loading subscription catalog...
+          <!-- Catalog Container -->
+          <div id="userPlansCatalogContainer">
+            <!-- Dynamic Plans Grid -->
+            <div class="plans-grid" id="plansCatalogGrid">
+              <div class="plans-loading-placeholder">
+                <i class="fas fa-circle-notch fa-spin"></i> Loading subscription catalog...
+              </div>
+            </div>
+
+            <!-- Subscription Lifecycle & Manual Approval Notice -->
+            <div class="sub-lifecycle-notice">
+              <div class="notice-icon"><i class="fas fa-user-shield"></i></div>
+              <div class="notice-text">
+                <h5>Audit-Ready Provisioning Workflow</h5>
+                <p>
+                  To maintain strict operational security, plan selections transition through a <strong>Pending Approval</strong> state. A designated SCOUT Security Administrator reviews and activates account subscriptions directly in the administration console.
+                </p>
+              </div>
             </div>
           </div>
 
-          <!-- Subscription Lifecycle & Manual Approval Notice -->
-          <div class="sub-lifecycle-notice">
-            <div class="notice-icon"><i class="fas fa-user-shield"></i></div>
-            <div class="notice-text">
-              <h5>Audit-Ready Provisioning Workflow</h5>
-              <p>
-                To maintain strict operational security, plan selections transition through a <strong>Pending Approval</strong> state. A designated SCOUT Security Administrator reviews and activates account subscriptions directly in the administration console.
-              </p>
+          <!-- Dedicated User Checkout & Payment Verification View -->
+          <div class="checkout-view-container" id="checkoutView" style="display:none;">
+            <div class="checkout-header-bar">
+              <button type="button" class="btn-checkout-back" id="checkoutBackBtn">
+                <i class="fas fa-arrow-left"></i> Back to Plans Catalog
+              </button>
+              <div class="checkout-security-badge">
+                <i class="fas fa-shield-halved"></i> Manual Payment Verification
+              </div>
+            </div>
+
+            <div class="checkout-grid">
+              <!-- Left Column: Selected Plan Dossier -->
+              <div class="checkout-card checkout-plan-summary">
+                <div class="checkout-card-header">
+                  <div class="checkout-step-badge">Selected Plan</div>
+                  <h3 id="checkoutPlanName">Plan Name</h3>
+                  <p id="checkoutPlanDesc" class="checkout-plan-desc">Plan Description</p>
+                </div>
+                <div class="checkout-pricing-box">
+                  <div class="checkout-price-row">
+                    <span class="checkout-price-label">Plan Price:</span>
+                    <span class="checkout-price-val" id="checkoutPlanPrice">$0.00</span>
+                  </div>
+                  <div class="checkout-price-row">
+                    <span class="checkout-price-label">Duration:</span>
+                    <span class="checkout-duration-val" id="checkoutPlanDuration">30 Days</span>
+                  </div>
+                  <div class="checkout-price-divider"></div>
+                  <div class="checkout-price-row checkout-total-row">
+                    <span class="checkout-total-label">Total Amount Due:</span>
+                    <span class="checkout-total-val" id="checkoutTotalDue">$0.00</span>
+                  </div>
+                </div>
+                <div class="checkout-features-list-wrap">
+                  <div class="checkout-section-subheading"><i class="fas fa-list-check"></i> Included Entitlements</div>
+                  <ul class="checkout-features-list" id="checkoutFeaturesList">
+                    <!-- Populated dynamically -->
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Right Column: Payment Method, Account, Instructions & Receipt Upload -->
+              <div class="checkout-card checkout-action-panel">
+                <!-- Step 1: Payment Method Selection -->
+                <div class="checkout-step-section">
+                  <div class="checkout-step-title">
+                    <span class="checkout-step-number">1</span>
+                    <span>Select Electronic Payment Method</span>
+                  </div>
+                  <p class="checkout-step-hint">Choose your preferred transfer method (e.g. InstaPay, Vodafone Cash, or Mobile Wallet).</p>
+                  <div class="checkout-methods-grid" id="checkoutMethodsGrid">
+                    <!-- Populated dynamically -->
+                  </div>
+                </div>
+
+                <!-- Step 2: Receiving Account Details & Transfer Instructions -->
+                <div class="checkout-step-section" id="checkoutAccountSection" style="display:none;">
+                  <div class="checkout-step-title">
+                    <span class="checkout-step-number">2</span>
+                    <span>Transfer to Receiving Account</span>
+                  </div>
+                  <div class="checkout-instructions-box" id="checkoutInstructionsBox">
+                    <i class="fas fa-circle-info"></i>
+                    <span id="checkoutInstructionsText">Transfer instructions...</span>
+                  </div>
+
+                  <!-- Multiple Accounts Selector (if more than 1) -->
+                  <div class="checkout-account-selector-wrap" id="checkoutAccountSelectWrap" style="display:none;">
+                    <label class="checkout-field-label" for="checkoutAccountSelect">Select Receiving Account:</label>
+                    <select id="checkoutAccountSelect" class="checkout-select"></select>
+                  </div>
+
+                  <!-- Account Details Box with Copy Button -->
+                  <div class="checkout-receiving-account-card">
+                    <div class="account-card-top">
+                      <div class="account-card-holder-wrap">
+                        <span class="account-label">Account Holder:</span>
+                        <strong class="account-holder-name" id="checkoutAccountHolder">—</strong>
+                      </div>
+                      <span class="account-type-badge" id="checkoutAccountProviderBadge">Wallet</span>
+                    </div>
+                    <div class="account-card-identifier-row">
+                      <div class="account-identifier-wrap">
+                        <span class="account-label">Transfer To / Identifier:</span>
+                        <span class="account-identifier-text" id="checkoutAccountIdentifier">—</span>
+                      </div>
+                      <button type="button" class="btn-copy-account" id="checkoutCopyAccountBtn" title="Copy transfer identifier to clipboard">
+                        <i class="fas fa-copy"></i>
+                        <span id="copyAccountBtnText">Copy</span>
+                      </button>
+                    </div>
+                    <div class="account-card-desc" id="checkoutAccountDesc"></div>
+                  </div>
+                </div>
+
+                <!-- Step 3: Receipt Upload -->
+                <div class="checkout-step-section" id="checkoutUploadSection" style="display:none;">
+                  <div class="checkout-step-title">
+                    <span class="checkout-step-number">3</span>
+                    <span>Upload Payment Receipt</span>
+                  </div>
+                  <p class="checkout-step-hint">Take a screenshot or receipt of the completed transaction and upload it below for verification.</p>
+
+                  <div class="receipt-dropzone" id="receiptDropzone">
+                    <input type="file" id="receiptFileInput" accept=".jpg,.jpeg,.png,.webp" style="display:none;" />
+                    <div class="dropzone-idle" id="dropzoneIdle">
+                      <i class="fas fa-cloud-arrow-up dropzone-icon"></i>
+                      <div class="dropzone-text">
+                        <strong>Click to browse</strong> or drag & drop receipt image here
+                      </div>
+                      <div class="dropzone-subtext">Supported formats: JPG, JPEG, PNG, WEBP (Max 5 MB)</div>
+                    </div>
+                    <div class="dropzone-preview" id="dropzonePreview" style="display:none;">
+                      <img id="receiptPreviewImg" src="" alt="Receipt Preview" class="receipt-preview-thumbnail" />
+                      <div class="receipt-preview-info">
+                        <div class="receipt-preview-name" id="receiptPreviewName">receipt.png</div>
+                        <div class="receipt-preview-size" id="receiptPreviewSize">124 KB</div>
+                        <button type="button" class="btn-receipt-replace" id="replaceReceiptBtn">
+                          <i class="fas fa-arrow-rotate-left"></i> Choose Another Image
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Optional Reference & Notes -->
+                  <div class="checkout-form-row">
+                    <div class="checkout-field-wrap">
+                      <label class="checkout-field-label" for="checkoutTxRef">Transaction Reference Number <span class="optional-label">(Optional)</span></label>
+                      <input type="text" id="checkoutTxRef" class="checkout-input" placeholder="e.g. Reference No., Transaction ID, or Mobile number" />
+                    </div>
+                  </div>
+                  <div class="checkout-form-row">
+                    <div class="checkout-field-wrap">
+                      <label class="checkout-field-label" for="checkoutNotes">Payment Notes <span class="optional-label">(Optional)</span></label>
+                      <textarea id="checkoutNotes" class="checkout-textarea" rows="2" placeholder="Add any details to assist administrator verification (e.g. bank used, sender name)..."></textarea>
+                    </div>
+                  </div>
+
+                  <!-- Validation Error Box -->
+                  <div class="checkout-alert-box error" id="checkoutAlertBox" style="display:none;"></div>
+
+                  <!-- Submit Action -->
+                  <div class="checkout-submit-wrap">
+                    <button type="button" class="btn-submit-checkout" id="submitCheckoutBtn">
+                      <i class="fas fa-file-shield"></i> Submit Payment for Verification
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2679,7 +2840,7 @@
               <div class="panel-header-row">
                 <div class="panel-title-wrap">
                   <h3>Global Subscription Registry</h3>
-                  <p>Inspect active, pending, expired, and canceled subscriptions across all accounts.</p>
+                  <p>Inspect active, expired, and canceled subscriptions across all accounts.</p>
                 </div>
                 <div class="panel-actions-group">
                   <div class="admin-search-wrap">
@@ -2687,9 +2848,8 @@
                     <input type="text" id="adminSubSearchInput" class="admin-search-input" placeholder="Search by user, email, sub ID..." />
                   </div>
                   <select id="adminSubStatusFilter" class="admin-filter-select">
-                    <option value="all">All Statuses</option>
+                    <option value="all">All Subscriptions</option>
                     <option value="active">Active Only</option>
-                    <option value="pending">Pending Only</option>
                     <option value="expired">Expired Only</option>
                     <option value="canceled">Canceled Only</option>
                   </select>
@@ -2801,6 +2961,41 @@
               <table id="adminPlansTable" style="display:none;" aria-hidden="true">
                 <tbody id="adminPlansTbody"></tbody>
               </table>
+            </div>
+
+            <!-- Panel 4.5: Payment Methods & Receiving Accounts -->
+            <div class="admin-panel" id="adminPanelPayments" style="display:none;">
+              <div class="panel-header-row">
+                <div class="panel-title-wrap">
+                  <h3>Payment Methods & Receiving Accounts</h3>
+                  <p>Configure electronic wallets, InstaPay, mobile cash providers, receiving accounts, and instructions.</p>
+                </div>
+                <div class="panel-actions-group">
+                  <div class="admin-search-wrap">
+                    <i class="fas fa-search admin-search-icon"></i>
+                    <input type="text" id="adminPaymentSearchInput" class="admin-search-input" placeholder="Search methods or accounts..." />
+                  </div>
+                  <select id="adminPaymentStatusFilter" class="admin-filter-select">
+                    <option value="all">All Methods</option>
+                    <option value="active">Active Only</option>
+                    <option value="inactive">Inactive Only</option>
+                  </select>
+                  <button type="button" class="btn-admin-refresh" id="refreshPaymentsBtn" title="Refresh payment methods">
+                    <i class="fas fa-rotate"></i> Refresh
+                  </button>
+                  <button type="button" class="btn-admin-primary-action" id="adminCreatePaymentMethodBtn" title="Create a new payment method">
+                    <i class="fas fa-plus"></i> Add Payment Method
+                  </button>
+                </div>
+              </div>
+              <!-- Responsive Payment Methods Cards Grid -->
+              <div class="admin-payments-card-container">
+                <div class="admin-payments-cards-grid" id="adminPaymentsCardsGrid">
+                  <div class="admin-cards-loading">
+                    <i class="fas fa-circle-notch fa-spin"></i> Loading payment methods...
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Panel 5: Audit Logs -->
@@ -3862,6 +4057,53 @@
                   </div>
                 </div>
 
+                <!-- Payment Verification Dossier Card -->
+                <div class="management-card" id="fpReqPaymentCard" style="display:none;">
+                  <h3 class="management-card-title"><i class="fas fa-file-invoice-dollar"></i> Manual Payment Verification Evidence</h3>
+                  <div class="management-dossier-grid">
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-wallet"></i> Payment Method</span>
+                      <span class="management-dossier-val" id="fpReqDossierPayMethod">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-arrow-right-to-bracket"></i> Receiving Identifier</span>
+                      <span class="management-dossier-val" id="fpReqDossierPayAccount">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-user-tag"></i> Receiving Account Holder</span>
+                      <span class="management-dossier-val" id="fpReqDossierPayHolder">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-money-bill-wave"></i> Payment Amount</span>
+                      <span class="management-dossier-val font-semibold" id="fpReqDossierPayAmount">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-barcode"></i> Transaction Reference</span>
+                      <span class="management-dossier-val" id="fpReqDossierTxRef">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-shield"></i> Verification Status</span>
+                      <span class="management-dossier-val" id="fpReqDossierPayStatus">—</span>
+                    </div>
+                  </div>
+                  <div class="management-notes-box" id="fpReqNotesWrap" style="margin-top:14px; display:none;">
+                    <span class="management-dossier-label"><i class="fas fa-comment-dots"></i> User Payment Notes:</span>
+                    <p class="management-notes-text" id="fpReqDossierNotes">—</p>
+                  </div>
+                  <!-- Receipt Thumbnail & Inspection Action -->
+                  <div class="management-receipt-preview-wrap" id="fpReqReceiptWrap" style="margin-top:16px;">
+                    <div class="receipt-preview-header">
+                      <span class="management-dossier-label"><i class="fas fa-image"></i> Payment Receipt Screenshot:</span>
+                      <button type="button" class="btn-receipt-inspect" id="fpReqInspectReceiptBtn">
+                        <i class="fas fa-magnifying-glass-plus"></i> Open Full-Screen Viewer
+                      </button>
+                    </div>
+                    <div class="receipt-image-container">
+                      <img id="fpReqReceiptImg" src="" alt="Payment Receipt" class="management-receipt-img" />
+                    </div>
+                  </div>
+                </div>
+
                 <div class="management-card">
                   <h3 class="management-card-title"><i class="fas fa-user-check"></i> Administrative Authorization Decision</h3>
                   <div class="management-form-group">
@@ -3870,9 +4112,11 @@
                   </div>
 
                   <div class="management-actions-footer">
-                    <button type="button" class="btn-management-secondary" data-back-target="admin-requests">Cancel</button>
+                    <button type="button" class="btn-management-secondary" data-back-target="admin-requests">
+                      <i class="fas fa-xmark"></i> Cancel
+                    </button>
                     <button type="button" class="btn-management-danger" id="fpReqRejectBtn">
-                      <i class="fas fa-xmark"></i> Reject Request
+                      <i class="fas fa-ban"></i> Reject Request
                     </button>
                     <button type="button" class="btn-management-primary" id="fpReqApproveBtn">
                       <i class="fas fa-check"></i> Approve & Activate
@@ -4618,6 +4862,208 @@
               <tr><td colspan="6" class="text-center py-3 text-muted">No audit records logged for this subscription.</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Payment Method Modal (Create / Edit) -->
+  <div class="auth-modal" id="adminPaymentMethodModal" role="dialog" aria-modal="true" aria-labelledby="adminPaymentMethodModalTitle" style="display:none; z-index: 10460;">
+    <div class="auth-modal-backdrop" id="adminPaymentMethodModalBackdrop"></div>
+    <div class="auth-modal-dialog" style="max-width: 580px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-wallet"></i> Payment Configuration</div>
+        <h3 class="auth-modal-title" id="adminPaymentMethodModalTitle">Configure Payment Method</h3>
+        <p class="auth-modal-subtitle">Define an electronic payment method, wallet, or transfer channel for user subscriptions.</p>
+        <button type="button" class="auth-modal-close" id="adminPaymentMethodModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminPaymentMethodModalAlert" style="display:none;"></div>
+        <form id="adminPaymentMethodForm" novalidate>
+          <input type="hidden" id="pmModalMethodId" value="" />
+          <div class="auth-form-group">
+            <label for="pmModalDisplayName" class="auth-form-label">Display Name *</label>
+            <div class="auth-input-wrap">
+              <i class="fas fa-signature auth-field-icon"></i>
+              <input type="text" id="pmModalDisplayName" class="auth-input" placeholder="e.g. InstaPay, Vodafone Cash, WE Pay" required />
+            </div>
+          </div>
+          <div class="auth-form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="auth-form-group">
+              <label for="pmModalName" class="auth-form-label">Slug / Key Identifier</label>
+              <div class="auth-input-wrap">
+                <i class="fas fa-tag auth-field-icon"></i>
+                <input type="text" id="pmModalName" class="auth-input" placeholder="e.g. instapay (auto-generated if empty)" />
+              </div>
+            </div>
+            <div class="auth-form-group">
+              <label for="pmModalProviderType" class="auth-form-label">Provider Type *</label>
+              <div class="auth-input-wrap">
+                <i class="fas fa-network-wired auth-field-icon"></i>
+                <select id="pmModalProviderType" class="auth-input" style="padding-left:36px;">
+                  <option value="instapay">InstaPay / Bank IPA</option>
+                  <option value="vodafone_cash">Vodafone Cash</option>
+                  <option value="orange_cash">Orange Cash</option>
+                  <option value="etisalat_cash">Etisalat Cash</option>
+                  <option value="we_pay">WE Pay</option>
+                  <option value="electronic_wallet">Electronic Wallet</option>
+                  <option value="bank_transfer">Bank Wire / Transfer</option>
+                  <option value="other">Other Payment Method</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="auth-form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="auth-form-group">
+              <label for="pmModalIcon" class="auth-form-label">FontAwesome Icon Class</label>
+              <div class="auth-input-wrap">
+                <i class="fas fa-icons auth-field-icon"></i>
+                <input type="text" id="pmModalIcon" class="auth-input" placeholder="e.g. fas fa-wallet, fas fa-bolt" value="fas fa-wallet" />
+              </div>
+            </div>
+            <div class="auth-form-group">
+              <label for="pmModalDisplayOrder" class="auth-form-label">Display Order</label>
+              <div class="auth-input-wrap">
+                <i class="fas fa-arrow-down-1-9 auth-field-icon"></i>
+                <input type="number" id="pmModalDisplayOrder" class="auth-input" placeholder="0" value="0" min="0" />
+              </div>
+            </div>
+          </div>
+          <div class="auth-form-group">
+            <label for="pmModalDescription" class="auth-form-label">Short Description</label>
+            <div class="auth-input-wrap">
+              <i class="fas fa-info-circle auth-field-icon"></i>
+              <input type="text" id="pmModalDescription" class="auth-input" placeholder="Brief note explaining payment method" />
+            </div>
+          </div>
+          <div class="auth-form-group">
+            <label for="pmModalInstructions" class="auth-form-label">Payment Instructions</label>
+            <textarea id="pmModalInstructions" class="auth-input" rows="3" placeholder="Step-by-step transfer instructions shown to the user during checkout..."></textarea>
+          </div>
+          <div class="auth-form-group checkbox-group" style="margin-top: 8px;">
+            <label class="auth-checkbox-label">
+              <input type="checkbox" id="pmModalIsActive" checked />
+              <span>Active (Available for checkout if it has active receiving accounts)</span>
+            </label>
+          </div>
+          <div class="plan-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+            <button type="button" class="btn-admin-action cancel" id="pmModalCancelBtn">Cancel</button>
+            <button type="button" class="btn-auth-submit" id="pmModalSaveBtn" style="padding: 8px 18px;">
+              <span id="pmModalSaveText">Save Payment Method</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Receiving Account Modal (Add / Edit) -->
+  <div class="auth-modal" id="adminReceivingAccountModal" role="dialog" aria-modal="true" aria-labelledby="adminReceivingAccountModalTitle" style="display:none; z-index: 10470;">
+    <div class="auth-modal-backdrop" id="adminReceivingAccountModalBackdrop"></div>
+    <div class="auth-modal-dialog" style="max-width: 520px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-receipt"></i> Account Details</div>
+        <h3 class="auth-modal-title" id="adminReceivingAccountModalTitle">Configure Receiving Account</h3>
+        <p class="auth-modal-subtitle">Specify destination identifier (phone, IPA, or account) where users transfer money.</p>
+        <button type="button" class="auth-modal-close" id="adminReceivingAccountModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminReceivingAccountModalAlert" style="display:none;"></div>
+        <form id="adminReceivingAccountForm" novalidate>
+          <input type="hidden" id="raModalMethodId" value="" />
+          <input type="hidden" id="raModalAccountId" value="" />
+          <div class="auth-form-group">
+            <label for="raModalIdentifier" class="auth-form-label">Receiving Identifier (Phone / IPA / Wallet ID) *</label>
+            <div class="auth-input-wrap">
+              <i class="fas fa-hashtag auth-field-icon"></i>
+              <input type="text" id="raModalIdentifier" class="auth-input" placeholder="e.g. 01012345678 or handle@instapay" required />
+            </div>
+          </div>
+          <div class="auth-form-group">
+            <label for="raModalHolderName" class="auth-form-label">Account Holder Name *</label>
+            <div class="auth-input-wrap">
+              <i class="fas fa-user auth-field-icon"></i>
+              <input type="text" id="raModalHolderName" class="auth-input" placeholder="e.g. SCOUT Security Operations Hub" required />
+            </div>
+          </div>
+          <div class="auth-form-row" style="display:grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+            <div class="auth-form-group">
+              <label for="raModalDescription" class="auth-form-label">Account Description / Notes</label>
+              <div class="auth-input-wrap">
+                <i class="fas fa-info auth-field-icon"></i>
+                <input type="text" id="raModalDescription" class="auth-input" placeholder="e.g. Primary Corporate Wallet" />
+              </div>
+            </div>
+            <div class="auth-form-group">
+              <label for="raModalDisplayOrder" class="auth-form-label">Order</label>
+              <div class="auth-input-wrap">
+                <i class="fas fa-sort-numeric-down auth-field-icon"></i>
+                <input type="number" id="raModalDisplayOrder" class="auth-input" value="0" min="0" />
+              </div>
+            </div>
+          </div>
+          <div class="auth-form-group checkbox-group" style="margin-top: 8px;">
+            <label class="auth-checkbox-label">
+              <input type="checkbox" id="raModalIsActive" checked />
+              <span>Active (Shown to users in checkout)</span>
+            </label>
+          </div>
+          <div class="plan-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+            <button type="button" class="btn-admin-action cancel" id="raModalCancelBtn">Cancel</button>
+            <button type="button" class="btn-auth-submit" id="raModalSaveBtn" style="padding: 8px 18px;">
+              <span id="raModalSaveText">Save Account</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Receipt Image Viewer Lightbox -->
+  <div class="auth-modal receipt-viewer-modal" id="receiptViewerModal" role="dialog" aria-modal="true" aria-labelledby="receiptViewerModalTitle" style="display:none; z-index: 10600;">
+    <div class="auth-modal-backdrop" id="receiptViewerModalBackdrop"></div>
+    <div class="auth-modal-dialog receipt-viewer-dialog">
+      <div class="auth-modal-header receipt-viewer-header">
+        <div class="auth-modal-badge"><i class="fas fa-file-invoice"></i> Payment Verification Evidence</div>
+        <h3 class="auth-modal-title" id="receiptViewerModalTitle">Payment Receipt Image</h3>
+        <button type="button" class="auth-modal-close" id="receiptViewerModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body receipt-viewer-body">
+        <div class="receipt-viewer-img-container">
+          <img id="receiptViewerImg" src="" alt="Payment Receipt" class="receipt-viewer-image" />
+        </div>
+        <div class="receipt-viewer-meta-bar" id="receiptViewerMetaBar">
+          <span id="receiptViewerMetaFilename"><i class="fas fa-file"></i> receipt.png</span>
+          <a id="receiptViewerDownloadBtn" href="" download class="btn-receipt-download">
+            <i class="fas fa-download"></i> Download Full Image
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Reject Request with Reason -->
+  <div class="auth-modal" id="rejectRequestModal" role="dialog" aria-modal="true" aria-labelledby="rejectRequestModalTitle" style="display:none; z-index: 10520;">
+    <div class="auth-modal-backdrop" id="rejectRequestModalBackdrop"></div>
+    <div class="auth-modal-dialog" style="max-width: 500px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge" style="background: rgba(239,68,68,0.15); color: #ef4444;"><i class="fas fa-ban"></i> Request Rejection</div>
+        <h3 class="auth-modal-title" id="rejectRequestModalTitle">Reject Subscription Request</h3>
+        <p class="auth-modal-subtitle">Specify a reason for declining this request. The user will be notified and may resubmit.</p>
+        <button type="button" class="auth-modal-close" id="rejectRequestModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="rejectRequestModalAlert" style="display:none;"></div>
+        <input type="hidden" id="rejectModalReqId" value="" />
+        <div class="auth-form-group">
+          <label for="rejectRequestReasonInput" class="auth-form-label">Reason for Rejection *</label>
+          <textarea id="rejectRequestReasonInput" class="auth-input" rows="3" placeholder="e.g. Receipt is unreadable / blurred, incorrect transfer amount, or transaction not found." required></textarea>
+        </div>
+        <div class="plan-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+          <button type="button" class="btn-admin-action cancel" id="rejectRequestModalCancelBtn">Cancel</button>
+          <button type="button" class="btn-admin-action reject" id="confirmRejectRequestModalBtn" style="padding: 8px 18px;">
+            <i class="fas fa-ban"></i> Reject Request
+          </button>
         </div>
       </div>
     </div>

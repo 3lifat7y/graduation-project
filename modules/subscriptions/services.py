@@ -74,8 +74,10 @@ def activate_subscription(
     notes: Optional[str] = None
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """
-    Approves and activates a subscription.
+    Approves and activates a subscription request.
     Transition: Pending/Expired -> Active.
+    Enforces atomic database transaction, user and plan validation,
+    and safeguards against duplicate active subscriptions.
     """
     with get_db_session() as session:
         admin = session.query(User).filter_by(id=admin_id).first()
@@ -86,7 +88,7 @@ def activate_subscription(
         if not sub:
             return False, "Subscription record not found.", {}
 
-        # State transition validation
+        # State transition validation (prevent duplicate approvals)
         if sub.status == "active":
             return False, "Subscription is already active.", {}
         if sub.status == "rejected":
@@ -94,9 +96,29 @@ def activate_subscription(
         if sub.status == "canceled":
             return False, "Cannot activate a canceled subscription. Please use renewal instead.", {}
 
+        # Validate associated user and subscription plan
+        user = session.query(User).filter_by(id=sub.user_id).first()
+        if not user:
+            return False, "Associated user account not found.", {}
+        if not user.is_active:
+            return False, "Cannot activate subscription for an inactive or suspended user.", {}
+
+        plan = session.query(SubscriptionPlan).filter_by(id=sub.plan_id).first()
+        if not plan:
+            return False, "Associated subscription plan not found.", {}
+
+        # Prevent duplicate active subscriptions for the user
+        existing_actives = session.query(UserSubscription).filter(
+            UserSubscription.user_id == sub.user_id,
+            UserSubscription.status == "active",
+            UserSubscription.id != sub.id
+        ).all()
+        for old_sub in existing_actives:
+            old_sub.status = "canceled"
+            old_sub.cancellation_reason = f"Superceded by newly approved subscription #{sub.id} ({plan.name})."
+
         prev_status = sub.status
         now = utcnow()
-        plan = sub.plan
 
         # Calculate duration in days
         if duration_override_days and duration_override_days > 0:
@@ -112,6 +134,8 @@ def activate_subscription(
         end_date = start_date + timedelta(days=duration_days)
 
         sub.status = "active"
+        if sub.payment_status == "pending_verification":
+            sub.payment_status = "approved"
         sub.start_date = start_date
         sub.end_date = end_date
         sub.activated_at = now
@@ -125,7 +149,7 @@ def activate_subscription(
             action="ACTIVATED",
             previous_status=prev_status,
             new_status="active",
-            details=f"Admin '{admin.username}' activated subscription. Valid until {end_date.strftime('%Y-%m-%d')} ({duration_days} days)."
+            details=f"Admin '{admin.username}' approved request & activated subscription. Valid until {end_date.strftime('%Y-%m-%d')} ({duration_days} days)."
         )
         session.add(audit)
         session.flush()
@@ -162,7 +186,11 @@ def reject_subscription(
 
         prev_status = sub.status
         sub.status = "rejected"
-        sub.cancellation_reason = reason or "Request rejected by administrator."
+        if sub.payment_status == "pending_verification":
+            sub.payment_status = "rejected"
+        effective_reason = reason or "Request rejected by administrator."
+        sub.cancellation_reason = effective_reason
+        sub.rejection_reason = effective_reason
 
         audit = SubscriptionAuditLog(
             subscription_id=sub.id,

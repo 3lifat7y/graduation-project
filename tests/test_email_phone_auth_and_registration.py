@@ -72,7 +72,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         ts = int(time.time() * 1000)
         valid_email = f"operator_{ts}@scout-defense.io"
         valid_phone = f"+1555{ts % 10000000:07d}"
-        valid_pw = "SecurePass#2026!"
+        valid_pw = "87654321"
         valid_name = "Alex Security Analyst"
 
         # 4. Reject invalid email format
@@ -103,7 +103,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
             "email": valid_email,
             "phone_number": valid_phone,
             "password": valid_pw,
-            "confirm_password": "DifferentPassword#2026"
+            "confirm_password": "12345678"
         })
         self.assertEqual(mismatch_resp.status_code, 400)
         self.assertIn("do not match", mismatch_resp.get_json()["message"])
@@ -165,7 +165,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         test_email = f"dual_auth_{ts}@scout.local"
         test_phone_raw = f"+44 20 7946 {ts % 10000:04d}"
         norm_phone = normalize_phone_number(test_phone_raw)
-        password = "DualAuthPass#2026!"
+        password = "87654321"
         full_name = "Morgan Vance"
 
         # Register account
@@ -185,13 +185,11 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
             plan = session.query(SubscriptionPlan).first()
             if not plan:
                 plan = SubscriptionPlan(
+                    plan_code="standard-tier",
                     name="Standard Defense Tier",
-                    slug="standard-tier",
                     price=29.99,
-                    billing_period="monthly",
-                    tier_level=2,
-                    duration_days=30,
-                    features="live_monitoring,port_scanner"
+                    duration_value=30,
+                    duration_unit="days"
                 )
                 session.add(plan)
                 session.flush()
@@ -271,7 +269,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         ts = int(time.time() * 1000) + 200
         active_email = f"sec_active_{ts}@scout.local"
         active_phone = f"+1555{ts % 10000000:07d}"
-        password = "SecurePassword#2026"
+        password = "87654321"
 
         reg_res = self.client.post("/api/auth/register", json={
             "full_name": "Security Test User",
@@ -287,7 +285,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         # 10. Invalid credentials: Non-existent identifier (email)
         res_nonexistent_email = self.client.post("/api/auth/login", json={
             "identifier": "non_existent_account@nowhere.io",
-            "password": "RandomPassword#123"
+            "password": "99998888"
         })
         self.assertEqual(res_nonexistent_email.status_code, 401)
         msg_nonexistent = res_nonexistent_email.get_json()["message"]
@@ -297,7 +295,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         # 10. Invalid credentials: Non-existent identifier (phone number)
         res_nonexistent_phone = self.client.post("/api/auth/login", json={
             "identifier": "+19999999999",
-            "password": "RandomPassword#123"
+            "password": "99998888"
         })
         self.assertEqual(res_nonexistent_phone.status_code, 401)
         self.assertIn("Invalid credentials", res_nonexistent_phone.get_json()["message"])
@@ -305,7 +303,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         # 10. Invalid credentials: Valid user, wrong password
         res_wrong_pw = self.client.post("/api/auth/login", json={
             "identifier": active_email,
-            "password": "WrongPassword#999"
+            "password": "99998888"
         })
         self.assertEqual(res_wrong_pw.status_code, 401)
         # Message must be identical to non-existent account to prevent timing/content enumeration
@@ -396,7 +394,7 @@ class TestEmailPhoneAuthAndRegistration(unittest.TestCase):
         ts = int(time.time() * 1000) + 300
         u1_email = f"prof1_{ts}@scout.local"
         u1_phone = f"+1555{ts % 10000000:07d}"
-        password = "ProfilePassword#2026!"
+        password = "87654321"
 
         u2_email = f"prof2_{ts}@scout.local"
         u2_phone = f"+1555{((ts + 1) % 10000000):07d}"
