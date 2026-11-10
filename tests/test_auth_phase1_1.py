@@ -40,7 +40,11 @@ class TestPhase1DatabaseAndUser(unittest.TestCase):
     def tearDown(self):
         """Clean up temporary test database."""
         self.engine.dispose()
-        self.temp_dir.cleanup()
+        get_engine(reset=True)
+        try:
+            self.temp_dir.cleanup()
+        except Exception:
+            pass
 
     def test_01_user_model_password_hashing(self):
         """Verifies that User.set_password uses scrypt and check_password works accurately."""
@@ -99,29 +103,37 @@ class TestPhase1DatabaseAndUser(unittest.TestCase):
         self.assertEqual(user.session_version, 2)
 
     def test_05_password_strength_validation(self):
-        """Verifies enterprise password complexity rules."""
-        # Valid password
-        valid, msg = validate_password_strength("ScoutSec#2026")
+        """Verifies exactly 8-digit numeric password complexity rules."""
+        # Valid 8-digit numeric passwords
+        valid, msg = validate_password_strength("12345678")
+        self.assertTrue(valid)
+        valid, _ = validate_password_strength("98765432")
         self.assertTrue(valid)
 
-        # Missing uppercase
-        valid, _ = validate_password_strength("scoutsec#2026")
+        # Too short (< 8 digits)
+        valid, _ = validate_password_strength("1234567")
         self.assertFalse(valid)
 
-        # Missing lowercase
-        valid, _ = validate_password_strength("SCOUTSEC#2026")
+        # Too long (> 8 digits)
+        valid, _ = validate_password_strength("123456789")
         self.assertFalse(valid)
 
-        # Missing digit
-        valid, _ = validate_password_strength("ScoutSec#None")
+        # Contains letters
+        valid, _ = validate_password_strength("1234567a")
+        self.assertFalse(valid)
+        valid, _ = validate_password_strength("abcdefgh")
+        self.assertFalse(valid)
+        valid, _ = validate_password_strength("ABCDEFGH")
         self.assertFalse(valid)
 
-        # Missing special char
-        valid, _ = validate_password_strength("ScoutSec2026NoSpecial")
+        # Contains special characters
+        valid, _ = validate_password_strength("1234567!")
+        self.assertFalse(valid)
+        valid, _ = validate_password_strength("1234#567")
         self.assertFalse(valid)
 
-        # Too short (< 8 chars)
-        valid, _ = validate_password_strength("Sc#2026")
+        # Contains spaces
+        valid, _ = validate_password_strength("1234 567")
         self.assertFalse(valid)
 
     def test_06_admin_provisioning_helper(self):
@@ -133,7 +145,7 @@ class TestPhase1DatabaseAndUser(unittest.TestCase):
             success, msg = create_admin_user(
                 username="scout_admin",
                 email="admin@scout.local",
-                password="AdminMaster#2026",
+                password="12345678",
                 full_name="Lead SOC Architect"
             )
             self.assertTrue(success, f"create_admin_user failed: {msg}")
@@ -145,14 +157,14 @@ class TestPhase1DatabaseAndUser(unittest.TestCase):
             self.assertEqual(admin.role, "Admin")
             self.assertEqual(admin.email, "admin@scout.local")
             self.assertTrue(admin.is_active)
-            self.assertTrue(admin.check_password("AdminMaster#2026"))
+            self.assertTrue(admin.check_password("12345678"))
             session.close()
 
             # Attempting to re-create duplicate admin fails gracefully
             success2, msg2 = create_admin_user(
                 username="scout_admin",
                 email="admin2@scout.local",
-                password="AdminMaster#2026"
+                password="12345678"
             )
             self.assertFalse(success2)
             self.assertIn("already exists", msg2)

@@ -191,6 +191,7 @@
     const regPassword = document.getElementById("regPassword");
     const regConfirm = document.getElementById("regConfirmPassword");
     const ruleLength = document.getElementById("pwdRuleLength");
+    const ruleDigits = document.getElementById("pwdRuleDigits");
     const ruleCase = document.getElementById("pwdRuleCase");
     const ruleNumSpecial = document.getElementById("pwdRuleNumSpecial");
 
@@ -199,19 +200,18 @@
     function evaluateRules() {
       const val = regPassword.value || "";
 
-      // 1. Min 8 characters
-      const lenOk = val.length >= 8;
+      // 1. Exactly 8 digits
+      const lenOk = val.length === 8;
       updateRuleState(ruleLength, lenOk);
 
-      // 2. Uppercase & lowercase
-      const caseOk = /[A-Z]/.test(val) && /[a-z]/.test(val);
-      updateRuleState(ruleCase, caseOk);
+      // 2. Numbers only (0-9)
+      const digitsOk = val.length > 0 && /^\d+$/.test(val);
+      updateRuleState(ruleDigits, digitsOk);
 
-      // 3. Number & special character
-      const numSpecialOk = /\d/.test(val) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(val);
-      updateRuleState(ruleNumSpecial, numSpecialOk);
+      if (ruleCase) updateRuleState(ruleCase, digitsOk);
+      if (ruleNumSpecial) updateRuleState(ruleNumSpecial, lenOk && digitsOk);
 
-      return lenOk && caseOk && numSpecialOk;
+      return lenOk && digitsOk;
     }
 
     function updateRuleState(element, isValid) {
@@ -401,26 +401,14 @@
         return;
       }
 
-      if (password.length < 8) {
-        showAlert("Password must be at least 8 characters long.", "error");
+      if (password.length !== 8) {
+        showAlert("Password must be exactly 8 digits long.", "error");
         if (passwordInput) passwordInput.focus();
         return;
       }
 
-      if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
-        showAlert("Password must include both uppercase and lowercase letters.", "error");
-        if (passwordInput) passwordInput.focus();
-        return;
-      }
-
-      if (!/\d/.test(password)) {
-        showAlert("Password must include at least one numeric digit (0-9).", "error");
-        if (passwordInput) passwordInput.focus();
-        return;
-      }
-
-      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-        showAlert("Password must include at least one special character.", "error");
+      if (!/^\d{8}$/.test(password)) {
+        showAlert("Password must contain numbers only (0-9) with no letters, spaces, or special characters.", "error");
         if (passwordInput) passwordInput.focus();
         return;
       }

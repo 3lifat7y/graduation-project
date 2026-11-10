@@ -11126,10 +11126,11 @@ body.auth-admin .user-role-badge {
 }
 
 /* 4. Unified Cyber Auth Modal */
-.auth-modal-overlay {
+.auth-modal-overlay,
+.auth-modal {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 10450;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11146,19 +11147,34 @@ body.auth-admin .user-role-badge {
   animation: modalFadeIn 0.2s ease-out;
 }
 
-.auth-modal-card {
+.auth-modal-card,
+.auth-modal-dialog {
   position: relative;
   width: 100%;
-  max-width: 480px;
+  max-width: 580px;
   background: var(--bg-surface, #18181B);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.14));
   border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(163, 230, 53, 0.15);
-  padding: 28px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(163, 230, 53, 0.15);
+  padding: 26px;
   box-sizing: border-box;
   animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 2;
   overflow: hidden;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-modal-dialog.modal-lg {
+  max-width: 840px;
+  width: 92%;
+}
+
+.auth-modal-dialog .auth-modal-body {
+  overflow-y: auto;
+  max-height: calc(90vh - 120px);
+  padding-right: 6px;
 }
 
 .auth-modal-header {
@@ -12552,14 +12568,14 @@ body.auth-admin .user-role-badge {
   line-height: 1;
 }
 
-/* Admin Tabs Bar */
+/* Admin Tabs Bar - Removed in favor of primary Sidebar navigation */
 .admin-tabs-bar {
-  display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-  margin-bottom: 24px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
 .admin-tab-btn {
@@ -13689,27 +13705,22 @@ body.anonymous-landing .top-nav-health-pill {
 
 .admin-users-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   width: 100%;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 1200px) {
+  .admin-users-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+}
+
+@media (max-width: 768px) {
   .admin-users-cards-grid {
     grid-template-columns: 1fr;
     gap: 16px;
-  }
-}
-
-@media (min-width: 641px) and (max-width: 1100px) {
-  .admin-users-cards-grid {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  }
-}
-
-@media (min-width: 1600px) {
-  .admin-users-cards-grid {
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   }
 }
 
@@ -13718,10 +13729,12 @@ body.anonymous-landing .top-nav-health-pill {
   background: var(--bg-surface, #121215);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
   border-radius: 14px;
-  padding: 22px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  height: 100%;
+  box-sizing: border-box;
   position: relative;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
@@ -15934,3 +15947,551 @@ body.auth-page {
     font-size: 1.3rem;
   }
 }
+
+/* Light Theme Adaptations for Modals and Dossier */
+[data-theme="light"] .auth-modal-dialog,
+[data-theme="light"] .auth-modal-card {
+  background: #FFFFFF !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(132, 204, 22, 0.25) !important;
+  color: #09090B !important;
+}
+
+[data-theme="light"] .auth-modal-backdrop {
+  background: rgba(0, 0, 0, 0.52) !important;
+}
+
+[data-theme="light"] .auth-modal-title {
+  color: #09090B !important;
+}
+
+[data-theme="light"] .auth-modal-subtitle {
+  color: #64748B !important;
+}
+
+[data-theme="light"] .dossier-item {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .dossier-label {
+  color: #64748B !important;
+}
+
+[data-theme="light"] .dossier-val {
+  color: #0F172A !important;
+}
+
+[data-theme="light"] .dossier-edit-section {
+  background: #F8FAFC !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Toast Notification System */
+.scout-toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.scout-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  animation: toastSlideIn 0.25s ease-out;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  max-width: 380px;
+}
+
+.scout-toast.success {
+  background: #064E3B;
+  color: #34D399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.scout-toast.error {
+  background: #7F1D1D;
+  color: #F87171;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+}
+
+.scout-toast.info {
+  background: #0C4A6E;
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Extend Subscription Preview Box */
+.extend-preview-box {
+  transition: all 0.2s ease;
+}
+
+[data-theme="light"] .extend-preview-box {
+  background: rgba(14, 165, 233, 0.08) !important;
+  border-color: rgba(14, 165, 233, 0.25) !important;
+}
+
+[data-theme="light"] .extend-preview-box strong {
+  color: #0F172A !important;
+}
+
+[data-theme="light"] #extendNewExpiryDisplay {
+  color: #15803D !important;
+}
+
+[data-theme="light"] #extendDeltaDisplay {
+  color: #0284C7 !important;
+}
+
+/* ==============================================================================
+   SCOUT UI/UX Audit & Professional SaaS Design System Refinements
+   ============================================================================== */
+
+/* 1. Global Keyboard Accessibility & Focus Rings (WCAG 2.1 AA) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex="0"]:focus-visible {
+  outline: 2px solid var(--accent, #A3E635) !important;
+  outline-offset: 2px !important;
+}
+
+[data-theme="light"] button:focus-visible,
+[data-theme="light"] a:focus-visible,
+[data-theme="light"] input:focus-visible,
+[data-theme="light"] select:focus-visible,
+[data-theme="light"] textarea:focus-visible,
+[data-theme="light"] [role="button"]:focus-visible,
+[data-theme="light"] [tabindex="0"]:focus-visible {
+  outline: 2px solid #18181B !important;
+  outline-offset: 2px !important;
+}
+
+/* 2. Unified Button System & Semantic Styling */
+.btn-admin-action {
+  padding: 6px 13px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--transition-fast, 0.15s ease);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.btn-admin-action.details {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38BDF8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.btn-admin-action.details:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38BDF8;
+  color: #7DD3FC;
+  transform: translateY(-1px);
+}
+
+.btn-admin-action.disabled-locked {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  background: rgba(239, 68, 68, 0.08);
+  color: #EF4444;
+  border: 1px dashed rgba(239, 68, 68, 0.3);
+}
+
+/* Light Theme Overrides for Admin Actions */
+[data-theme="light"] .btn-admin-action.activate {
+  background: #DCFCE7 !important;
+  color: #15803D !important;
+  border: 1px solid #86EFAC !important;
+}
+
+[data-theme="light"] .btn-admin-action.activate:hover {
+  background: #16A34A !important;
+  color: #FFFFFF !important;
+  border-color: #16A34A !important;
+}
+
+[data-theme="light"] .btn-admin-action.reject {
+  background: #FEE2E2 !important;
+  color: #991B1B !important;
+  border: 1px solid #FCA5A5 !important;
+}
+
+[data-theme="light"] .btn-admin-action.reject:hover {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+  border-color: #DC2626 !important;
+}
+
+[data-theme="light"] .btn-admin-action.cancel {
+  background: #F1F5F9 !important;
+  color: #334155 !important;
+  border: 1px solid #CBD5E1 !important;
+}
+
+[data-theme="light"] .btn-admin-action.cancel:hover {
+  background: #E2E8F0 !important;
+  color: #0F172A !important;
+  border-color: #94A3B8 !important;
+}
+
+[data-theme="light"] .btn-admin-action.dates {
+  background: #EFF6FF !important;
+  color: #1D4ED8 !important;
+  border: 1px solid #BFDBFE !important;
+}
+
+[data-theme="light"] .btn-admin-action.dates:hover {
+  background: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #2563EB !important;
+}
+
+[data-theme="light"] .btn-admin-action.details {
+  background: #F0F9FF !important;
+  color: #0369A1 !important;
+  border: 1px solid #BAE6FD !important;
+}
+
+[data-theme="light"] .btn-admin-action.details:hover {
+  background: #0284C7 !important;
+  color: #FFFFFF !important;
+  border-color: #0284C7 !important;
+}
+
+[data-theme="light"] .btn-admin-action.disabled-locked {
+  background: #FEF2F2 !important;
+  color: #991B1B !important;
+  border: 1px dashed #FCA5A5 !important;
+}
+
+/* User Card Actions */
+.btn-card-action.btn-card-edit {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+}
+
+.btn-card-action.btn-card-edit:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38BDF8;
+  color: #7DD3FC;
+  transform: translateY(-1px);
+}
+
+[data-theme="light"] .btn-card-action.btn-card-edit {
+  background: #F0F9FF !important;
+  color: #0369A1 !important;
+  border: 1px solid #BAE6FD !important;
+}
+
+[data-theme="light"] .btn-card-action.btn-card-edit:hover {
+  background: #0284C7 !important;
+  color: #FFFFFF !important;
+  border-color: #0284C7 !important;
+}
+
+[data-theme="light"] .btn-card-action.btn-card-suspend {
+  background: #FEE2E2 !important;
+  color: #991B1B !important;
+  border-color: #FCA5A5 !important;
+}
+
+[data-theme="light"] .btn-card-action.btn-card-suspend:hover {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+  border-color: #DC2626 !important;
+}
+
+[data-theme="light"] .btn-card-action.btn-card-activate {
+  background: #DCFCE7 !important;
+  color: #15803D !important;
+  border-color: #86EFAC !important;
+}
+
+[data-theme="light"] .btn-card-action.btn-card-activate:hover {
+  background: #16A34A !important;
+  color: #FFFFFF !important;
+  border-color: #16A34A !important;
+}
+
+/* Standardized Primary Admin Action Buttons */
+.btn-admin-primary-action {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm, 8px);
+  font-family: var(--font-display, 'Plus Jakarta Sans', sans-serif);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+[data-theme="dark"] .btn-admin-primary-action {
+  background: var(--brand-accent, #A3E635);
+  color: #09090B !important;
+  border-color: var(--brand-accent, #A3E635);
+  box-shadow: 0 2px 10px rgba(163, 230, 53, 0.25);
+}
+
+[data-theme="dark"] .btn-admin-primary-action:hover {
+  background: #B4F04E;
+  border-color: #B4F04E;
+  box-shadow: 0 4px 18px rgba(163, 230, 53, 0.4);
+  transform: translateY(-1px);
+}
+
+[data-theme="light"] .btn-admin-primary-action {
+  background: #18181B !important;
+  color: #FAFAFA !important;
+  border-color: #18181B !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="light"] .btn-admin-primary-action:hover {
+  background: #27272A !important;
+  color: #FFFFFF !important;
+  border-color: #27272A !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+  transform: translateY(-1px);
+}
+
+/* Live Monitoring Controls High Contrast in Dark & Light Modes */
+[data-theme="dark"] .check-btn {
+  background: #A3E635 !important;
+  color: #09090B !important;
+  border-color: #A3E635 !important;
+}
+
+[data-theme="dark"] .check-btn i {
+  color: #09090B !important;
+}
+
+[data-theme="dark"] .rescan-btn i {
+  color: #A3E635 !important;
+}
+
+[data-theme="light"] .btn-dash-action {
+  background: #18181B !important;
+  color: #FAFAFA !important;
+  border-color: #18181B !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .btn-dash-action:hover {
+  background: #27272A !important;
+  color: #FFFFFF !important;
+  border-color: #27272A !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Port Scanner Mode Selector Contrast Fix */
+[data-theme="dark"] .ps-mode-tab.active {
+  color: #09090B !important;
+}
+
+[data-theme="dark"] .ps-mode-tab.active i {
+  color: #09090B !important;
+}
+
+[data-theme="dark"] .ps-mode-tab.active .ps-mode-pill {
+  background: rgba(9, 9, 11, 0.18) !important;
+  color: #09090B !important;
+  border-color: rgba(9, 9, 11, 0.25) !important;
+}
+
+/* 3. Status Badges High Contrast in Light Theme */
+[data-theme="light"] .sub-badge.active {
+  background: #DCFCE7 !important;
+  color: #15803D !important;
+  border-color: #86EFAC !important;
+}
+
+[data-theme="light"] .sub-badge.pending {
+  background: #FEF3C7 !important;
+  color: #B45309 !important;
+  border-color: #FCD34D !important;
+}
+
+[data-theme="light"] .sub-badge.expired {
+  background: #FEE2E2 !important;
+  color: #B91C1C !important;
+  border-color: #FCA5A5 !important;
+}
+
+[data-theme="light"] .sub-badge.canceled,
+[data-theme="light"] .sub-badge.rejected {
+  background: #F1F5F9 !important;
+  color: #334155 !important;
+  border-color: #CBD5E1 !important;
+}
+
+/* 4. Responsive Toolbars & Headers Layout */
+.panel-actions-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .panel-header-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .panel-actions-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .admin-search-wrap,
+  .admin-filter-select,
+  .btn-admin-refresh,
+  .btn-admin-primary-action {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+/* 5. User Dashboard Light Theme Surfaces */
+[data-theme="light"] .user-dash-header-card,
+[data-theme="light"] .user-dash-profile-card,
+[data-theme="light"] .user-dash-sub-details-card,
+[data-theme="light"] .user-dash-threat-summary-card,
+[data-theme="light"] .dash-tool-card {
+  background: #FFFFFF !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="light"] .user-dash-role-badge,
+[data-theme="light"] .profile-security-badge {
+  background: rgba(21, 128, 61, 0.1) !important;
+  border-color: rgba(21, 128, 61, 0.25) !important;
+  color: #15803D !important;
+}
+
+[data-theme="light"] .user-dash-avatar {
+  background: rgba(21, 128, 61, 0.1) !important;
+  border-color: #15803D !important;
+  color: #15803D !important;
+}
+
+[data-theme="light"] .dash-input {
+  background: #FAFAFA !important;
+  border-color: #E4E4E7 !important;
+  color: #09090B !important;
+}
+
+[data-theme="light"] .dash-input:focus {
+  border-color: #18181B !important;
+  box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.12) !important;
+}
+
+/* 6. Confirmation Modal Surfaces */
+.confirm-target-box {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  margin-bottom: 14px;
+}
+
+.confirm-target-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted, #A1A1AA);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.confirm-target-display {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary, #F4F4F5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.confirm-consequences-box {
+  padding: 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--text-primary, #F4F4F5);
+}
+
+[data-theme="light"] .confirm-target-box {
+  background: #F8FAFC !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .confirm-target-display {
+  color: #09090B !important;
+}
+
+[data-theme="light"] .confirm-consequences-box {
+  background: #FEF2F2 !important;
+  border-color: rgba(220, 38, 38, 0.25) !important;
+  color: #991B1B !important;
+}
+
+/* 7. Live Monitoring Radar & Workstation Light Theme Support */
+[data-theme="light"] .radar-box {
+  background: #F4F4F5 !important;
+  border-color: #D4D4D8 !important;
+}
+
+[data-theme="light"] .radar-ring {
+  border-color: #E4E4E7 !important;
+}
+
+[data-theme="light"] .radar-crosshair-h,
+[data-theme="light"] .radar-crosshair-v {
+  background: #E4E4E7 !important;
+}
+
+[data-theme="light"] .radar-center-icon {
+  color: #52525B !important;
+}
+
+[data-theme="light"] .admin-cards-state .state-icon-wrap {
+  color: #15803D !important;
+}
+

@@ -199,6 +199,25 @@ document.addEventListener("DOMContentLoaded", () => {
       .replace(/'/g, "&#039;");
   }
 
+  function showToast(message, type = "info") {
+    let container = document.querySelector(".scout-toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.className = "scout-toast-container";
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement("div");
+    toast.className = `scout-toast ${type}`;
+    const icon = type === "success" ? "fa-circle-check" : (type === "error" ? "fa-triangle-exclamation" : "fa-circle-info");
+    toast.innerHTML = `<i class="fas ${icon}"></i> <span>${escapeHtml(message)}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(10px)";
+      setTimeout(() => toast.remove(), 250);
+    }, 4000);
+  }
+
   function updateLiveTrafficStream(incomingPackets, isCapturing, totalCaptured) {
     if (liveStreamBadge && liveStreamStatusText) {
       if (isCapturing) {
@@ -2821,6 +2840,24 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      if (password.length !== 8) {
+        if (registerAlert) {
+          registerAlert.className = "auth-alert error";
+          registerAlert.textContent = "Password must be exactly 8 digits long.";
+          registerAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (!/^\d{8}$/.test(password)) {
+        if (registerAlert) {
+          registerAlert.className = "auth-alert error";
+          registerAlert.textContent = "Password must contain numbers only (0-9) with no letters, spaces, or special characters.";
+          registerAlert.style.display = "block";
+        }
+        return;
+      }
+
       if (submitBtn) {
         submitBtn.disabled = true;
         const btnText = submitBtn.querySelector(".auth-btn-text");
@@ -5253,15 +5290,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const plansCatalogGrid = document.getElementById("plansCatalogGrid");
   const subUserRole = document.getElementById("subUserRole");
 
-  // Date Formatter Helper
-  function formatUtcDate(dateStr) {
+  // Date Formatter Helper (Strict UTC, prevents day/month shifting across timezones)
+  function formatUtcDate(dateStr, includeTime = false) {
     if (!dateStr) return "—";
     try {
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      if (isNaN(d.getTime())) return String(dateStr);
+      const options = {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      };
+      if (includeTime) {
+        options.hour = "2-digit";
+        options.minute = "2-digit";
+        options.second = "2-digit";
+        options.hour12 = false;
+        return new Intl.DateTimeFormat("en-US", options).format(d) + " UTC";
+      }
+      return new Intl.DateTimeFormat("en-US", options).format(d);
     } catch (_) {
-      return dateStr;
+      return String(dateStr);
     }
   }
 
@@ -5546,6 +5596,20 @@ document.addEventListener("DOMContentLoaded", () => {
           if (userPwMsg) {
             userPwMsg.style.color = "#EF4444";
             userPwMsg.textContent = "New passwords do not match.";
+          }
+          return;
+        }
+        if (newPw.length !== 8) {
+          if (userPwMsg) {
+            userPwMsg.style.color = "#EF4444";
+            userPwMsg.textContent = "New password must be exactly 8 digits long.";
+          }
+          return;
+        }
+        if (!/^\d{8}$/.test(newPw)) {
+          if (userPwMsg) {
+            userPwMsg.style.color = "#EF4444";
+            userPwMsg.textContent = "New password must contain numbers only (0-9) with no letters, spaces, or special characters.";
           }
           return;
         }
@@ -5917,15 +5981,27 @@ document.addEventListener("DOMContentLoaded", () => {
   adminShortcutBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       const jumpTarget = btn.getAttribute("data-jump-tab");
-      const targetTab = document.querySelector(`.admin-tab-btn[data-admin-tab="${jumpTarget}"]`);
-      if (targetTab) targetTab.click();
+      activateAdminTab(jumpTarget, true);
     });
   });
 
   const adminRefreshAllBtn = document.getElementById("adminRefreshAllBtn");
   if (adminRefreshAllBtn) {
-    adminRefreshAllBtn.addEventListener("click", () => {
-      loadAdminDashboard();
+    adminRefreshAllBtn.addEventListener("click", async () => {
+      const icon = adminRefreshAllBtn.querySelector("i");
+      if (icon) icon.classList.add("fa-spin");
+      adminRefreshAllBtn.disabled = true;
+      try {
+        await loadAdminDashboard();
+        if (typeof showToast === "function") {
+          showToast("Platform telemetry and administrative data refreshed.", "info");
+        }
+      } finally {
+        setTimeout(() => {
+          if (icon) icon.classList.remove("fa-spin");
+          adminRefreshAllBtn.disabled = false;
+        }, 300);
+      }
     });
   }
 
@@ -6365,6 +6441,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = document.getElementById("dossierPlanSubsTbody");
     const actionsToolbar = document.getElementById("adminPlanDetailsActions");
 
+    if (dId) dId.textContent = `#${planId}`;
+    if (dCode) dCode.textContent = "Loading...";
+    if (dPrice) dPrice.textContent = "—";
+    if (dDur) dDur.textContent = "—";
+    if (dStatus) { dStatus.textContent = "Loading..."; dStatus.className = "dossier-val text-muted"; }
+    if (dTotal) dTotal.textContent = "—";
+    if (dActive) dActive.textContent = "—";
+    if (dCreated) dCreated.textContent = "—";
+    if (dDesc) dDesc.textContent = "Loading specifications...";
+    if (featGrid) featGrid.innerHTML = `<div class="text-muted py-2"><i class="fas fa-circle-notch fa-spin"></i> Loading entitlements...</div>`;
+    if (actionsToolbar) actionsToolbar.innerHTML = "";
+
     if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading plan records...</td></tr>`;
 
     try {
@@ -6463,7 +6551,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const pArchiveBtn = document.getElementById("planDetailsArchiveBtn");
         if (pArchiveBtn) {
           pArchiveBtn.onclick = async () => {
-            await togglePlanActive(p.id, !p.is_active, pArchiveBtn);
+            await togglePlanActive(p.id, !p.is_active, pArchiveBtn, p.name);
             openPlanDetailsModal(p.id);
           };
         }
@@ -6527,6 +6615,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const actionsToolbar = document.getElementById("adminSubDetailsActions");
     const auditTbody = document.getElementById("adminSubAuditTbody");
 
+    // Skeleton / initial state
+    if (dId) dId.textContent = `#${subId}`;
+    if (dUser) dUser.textContent = "Loading...";
+    if (dEmail) dEmail.textContent = "—";
+    if (dPlan) dPlan.textContent = "—";
+    if (dStatus) dStatus.innerHTML = `<span class="sub-badge text-muted">Loading...</span>`;
+    if (dStart) dStart.textContent = "—";
+    if (dEnd) dEnd.textContent = "—";
+    if (dRem) dRem.textContent = "—";
+    if (notesInput) notesInput.value = "";
+    if (actionsToolbar) actionsToolbar.innerHTML = "";
     if (auditTbody) auditTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading audit history...</td></tr>`;
 
     try {
@@ -6594,6 +6693,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 notesMsg.style.color = "#10B981";
                 notesMsg.textContent = "Notes saved successfully.";
               }
+              if (typeof showToast === "function") showToast("Subscription notes saved successfully.", "success");
+              loadAdminSubscriptions();
               openSubDetailsModal(s.id);
             } else {
               if (notesMsg) {
@@ -6678,7 +6779,7 @@ document.addEventListener("DOMContentLoaded", () => {
           extBtn.onclick = () => {
             adminSubDetailsModal.style.display = "none";
             document.body.style.overflow = "";
-            openAdminExtendModal({ id: s.id, user: opName, plan: planName });
+            openAdminExtendModal({ id: s.id, user: opName, plan: planName, endDate: s.end_date, status: s.status });
           };
         }
         const datesBtn = document.getElementById("modalSubDatesBtn");
@@ -6722,7 +6823,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
           auditTbody.innerHTML = logs.map(l => `
             <tr>
-              <td><small>${formatUtcDate(l.timestamp)}</small></td>
+              <td><small>${formatUtcDate(l.timestamp, true)}</small></td>
               <td><span class="user-role-badge ${l.action === 'ACTIVATED' ? 'admin-badge' : ''}">${escapeHtml(l.action)}</span></td>
               <td>${l.previous_status ? `<span class="sub-badge ${l.previous_status}">${escapeHtml(l.previous_status)}</span>` : '—'}</td>
               <td>${l.new_status ? `<span class="sub-badge ${l.new_status}">${escapeHtml(l.new_status)}</span>` : '—'}</td>
@@ -6868,7 +6969,7 @@ document.addEventListener("DOMContentLoaded", () => {
               </div>
             </div>
             <div class="request-card-footer">
-              <button type="button" class="btn-admin-action" data-sub-details-id="${r.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Request Details & Dossier">
+              <button type="button" class="btn-admin-action details" data-sub-details-id="${r.id}" title="View Request Details & Dossier">
                 <i class="fas fa-folder-open"></i> Details
               </button>
               <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
@@ -6896,7 +6997,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <td><span class="sub-badge pending">Pending</span></td>
             <td>
               <div class="admin-action-btn-group">
-                <button type="button" class="btn-admin-action" data-sub-details-id="${r.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Request Details">
+                <button type="button" class="btn-admin-action details" data-sub-details-id="${r.id}" title="View Request Details">
                   <i class="fas fa-folder-open"></i> Details
                 </button>
                 <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
@@ -7030,7 +7131,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const statusIcon = s.status === "active" ? "fa-circle-check" : (s.status === "pending" ? "fa-clock" : (s.status === "expired" ? "fa-circle-exclamation" : "fa-ban"));
 
         let actionBtns = `
-          <button type="button" class="btn-admin-action" data-sub-details-id="${s.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Subscription Details & Audit Dossier">
+          <button type="button" class="btn-admin-action details" data-sub-details-id="${s.id}" title="View Subscription Details & Audit Dossier">
             <i class="fas fa-folder-open"></i> Details
           </button>
           <button type="button" class="btn-admin-action dates" data-dates-id="${s.id}" data-start="${s.start_date || ''}" data-end="${s.end_date || ''}" title="Adjust subscription dates">
@@ -7051,7 +7152,7 @@ document.addEventListener("DOMContentLoaded", () => {
           `;
         } else if (s.status === "active") {
           actionBtns += `
-            <button type="button" class="btn-admin-action activate" data-extend-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Extend active subscription">
+            <button type="button" class="btn-admin-action activate" data-extend-id="${s.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" data-end="${s.end_date || ''}" data-status="${s.status || ''}" title="Extend active subscription">
               <i class="fas fa-calendar-plus"></i> Extend
             </button>
             <button type="button" class="btn-admin-action cancel" data-canc-id="${s.id}" title="Cancel subscription">
@@ -7181,7 +7282,9 @@ document.addEventListener("DOMContentLoaded", () => {
             openAdminExtendModal({
               id: btn.getAttribute("data-extend-id"),
               user: btn.getAttribute("data-user"),
-              plan: btn.getAttribute("data-plan")
+              plan: btn.getAttribute("data-plan"),
+              endDate: btn.getAttribute("data-end"),
+              status: btn.getAttribute("data-status")
             });
           });
         });
@@ -7320,7 +7423,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <button type="button" class="btn-card-action btn-card-details" data-view-user="${u.id}" title="View operator dossier, credentials, and full subscription lifecycle">
             <i class="fas fa-folder-open"></i> Details
           </button>
-          <button type="button" class="btn-card-action" data-edit-user="${u.id}" style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.3);" title="Edit operator profile details">
+          <button type="button" class="btn-card-action btn-card-edit" data-edit-user="${u.id}" title="Edit operator profile details">
             <i class="fas fa-pen-to-square"></i> Edit
           </button>
         `;
@@ -7336,20 +7439,6 @@ document.addEventListener("DOMContentLoaded", () => {
             cardActionsHtml += `
               <button type="button" class="btn-card-action btn-card-activate" data-user-toggle="${u.id}" data-action="activate" data-name="${escapeHtml(u.full_name || u.username || 'Operator')}" title="Reactivate operator account and permit login access">
                 <i class="fas fa-user-check"></i> Restore
-              </button>
-            `;
-          }
-
-          if (isAdmin) {
-            cardActionsHtml += `
-              <button type="button" class="btn-card-action btn-card-role-demote" data-user-role="${u.id}" data-new-role="User" title="Demote administrator to standard user">
-                <i class="fas fa-arrow-down"></i> Demote
-              </button>
-            `;
-          } else {
-            cardActionsHtml += `
-              <button type="button" class="btn-card-action btn-card-role-promote" data-user-role="${u.id}" data-new-role="Admin" title="Promote operator to Administrator">
-                <i class="fas fa-arrow-up"></i> Make Admin
               </button>
             `;
           }
@@ -7545,7 +7634,21 @@ document.addEventListener("DOMContentLoaded", () => {
         confirmIcon: "fa-user-lock"
       });
       if (!confirmRes.confirmed) return;
+    } else {
+      const confirmRes = await showAdminConfirmationModal({
+        title: "Reactivate Operator Account",
+        badge: "Account Moderation",
+        badgeIcon: "fa-user-check",
+        targetName: username || `Operator #${userId}`,
+        targetMeta: `#${userId}`,
+        consequencesText: "Reactivating this operator will restore account access and allow the operator to log in immediately.",
+        isDestructive: false,
+        confirmText: "Reactivate Account",
+        confirmIcon: "fa-user-check"
+      });
+      if (!confirmRes.confirmed) return;
     }
+
     const origHtml = btn ? btn.innerHTML : "";
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
     try {
@@ -7556,15 +7659,22 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ is_active: targetActive })
       });
       const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || `Failed to ${actionText} operator.`);
+      if (!res.ok || data.status !== "success") {
+        showToast(data.message || `Failed to ${actionText} operator.`, "error");
       } else {
-        if (typeof showToast === "function") showToast(data.message || `Account ${actionText}d successfully.`, "success");
+        showToast(data.message || `Account ${actionText}d successfully.`, "success");
       }
       await loadAdminUsers();
       if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+      // If user details modal is open for this user, refresh it in-place
+      if (adminUserDetailsModal && adminUserDetailsModal.style.display !== "none") {
+        const dId = document.getElementById("dossierUserId");
+        if (dId && dId.textContent === `#${userId}`) {
+          openAdminUserDetails(userId);
+        }
+      }
     } catch (_) {
-      alert(`Network error attempting to ${actionText} account.`);
+      showToast(`Network error attempting to ${actionText} account.`, "error");
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
     }
@@ -7595,14 +7705,14 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.message || "Failed to delete/archive user.");
+        showToast(data.message || "Failed to delete/archive user.", "error");
       } else {
-        if (typeof showToast === "function") showToast(data.message || "User account successfully processed.", "success");
+        showToast(data.message || "User account successfully processed.", "success");
         await loadAdminUsers();
         if (typeof loadAdminMetrics === "function") loadAdminMetrics();
       }
     } catch (_) {
-      alert("Network error processing user deletion.");
+      showToast("Network error processing user deletion.", "error");
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
     }
@@ -7630,6 +7740,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const dLogin = document.getElementById("dossierLastLogin");
     const actionsToolbar = document.getElementById("adminDossierActions");
     const historyTbody = document.getElementById("adminUserSubsHistoryTbody");
+
+    if (dId) dId.textContent = `#${userId}`;
+    if (dUser) dUser.textContent = "Loading...";
+    if (dEmail) dEmail.textContent = "Loading...";
+    if (dName) dName.textContent = "Loading...";
+    if (dRole) dRole.textContent = "Loading...";
+    if (dStatus) {
+      dStatus.textContent = "Loading...";
+      dStatus.className = "dossier-val text-muted";
+    }
+    if (dCreated) dCreated.textContent = "Loading...";
+    if (dLogin) dLogin.textContent = "Loading...";
 
     if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading subscription history...</td></tr>`;
 
@@ -7727,24 +7849,14 @@ document.addEventListener("DOMContentLoaded", () => {
             <button type="button" class="btn-admin-action ${u.is_active ? 'reject' : 'activate'}" id="dossierToggleStatusBtn">
               <i class="fas ${u.is_active ? 'fa-user-lock' : 'fa-user-check'}"></i> ${u.is_active ? 'Suspend Account' : 'Reactivate Account'}
             </button>
-            <button type="button" class="btn-admin-action cancel" id="dossierToggleRoleBtn">
-              <i class="fas ${u.role === 'Admin' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i> ${u.role === 'Admin' ? 'Demote to User' : 'Promote to Admin'}
-            </button>
-            <button type="button" class="btn-admin-action" id="dossierDeleteBtn" style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);">
+            <button type="button" class="btn-admin-action cancel" id="dossierDeleteBtn" title="Delete or archive operator account">
               <i class="fas fa-trash-can"></i> Delete / Archive Account
             </button>
           `;
           const toggleStatusBtn = document.getElementById("dossierToggleStatusBtn");
           if (toggleStatusBtn) {
             toggleStatusBtn.addEventListener("click", () => {
-              toggleUserActive(u.id, !u.is_active, toggleStatusBtn).then(() => openAdminUserDetails(u.id));
-            });
-          }
-          const toggleRoleBtn = document.getElementById("dossierToggleRoleBtn");
-          if (toggleRoleBtn) {
-            toggleRoleBtn.addEventListener("click", () => {
-              const targetRole = u.role === "Admin" ? "User" : "Admin";
-              toggleUserRole(u.id, targetRole, toggleRoleBtn).then(() => openAdminUserDetails(u.id));
+              toggleUserActive(u.id, !u.is_active, toggleStatusBtn, u.full_name || u.username);
             });
           }
           const deleteBtn = document.getElementById("dossierDeleteBtn");
@@ -7765,10 +7877,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   if (typeof loadAdminUsers === "function") loadAdminUsers();
                   if (typeof loadAdminMetrics === "function") loadAdminMetrics();
                 } else {
-                  alert(dData.message || "Failed to delete/archive user.");
+                  showToast(dData.message || "Failed to delete/archive user.", "error");
                 }
               } catch (err) {
-                alert("Network error processing user deletion.");
+                showToast("Network error processing user deletion.", "error");
               } finally {
                 deleteBtn.disabled = false;
               }
@@ -7822,6 +7934,138 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ============================================================================
+  // Create User Modal Controller
+  // ============================================================================
+  const adminCreateUserBtn = document.getElementById("adminCreateUserBtn");
+  const adminCreateUserModal = document.getElementById("adminCreateUserModal");
+  const adminCreateUserModalCloseBtn = document.getElementById("adminCreateUserModalCloseBtn");
+  const adminCreateUserModalBackdrop = document.getElementById("adminCreateUserModalBackdrop");
+  const adminCreateUserCancelBtn = document.getElementById("adminCreateUserCancelBtn");
+  const adminCreateUserSubmitBtn = document.getElementById("adminCreateUserSubmitBtn");
+  const adminCreateUserAlert = document.getElementById("adminCreateUserAlert");
+  const adminCreateFullName = document.getElementById("adminCreateFullName");
+  const adminCreateEmail = document.getElementById("adminCreateEmail");
+  const adminCreatePhone = document.getElementById("adminCreatePhone");
+  const adminCreateRole = document.getElementById("adminCreateRole");
+  const adminCreatePassword = document.getElementById("adminCreatePassword");
+  const adminCreateConfirmPassword = document.getElementById("adminCreateConfirmPassword");
+
+  function openCreateUserModal() {
+    if (!adminCreateUserModal) return;
+    if (adminCreateUserAlert) {
+      adminCreateUserAlert.style.display = "none";
+      adminCreateUserAlert.textContent = "";
+    }
+    if (adminCreateFullName) adminCreateFullName.value = "";
+    if (adminCreateEmail) adminCreateEmail.value = "";
+    if (adminCreatePhone) adminCreatePhone.value = "";
+    if (adminCreateRole) adminCreateRole.value = "User";
+    if (adminCreatePassword) adminCreatePassword.value = "";
+    if (adminCreateConfirmPassword) adminCreateConfirmPassword.value = "";
+    adminCreateUserModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+    if (adminCreateFullName) adminCreateFullName.focus();
+  }
+
+  function closeCreateUserModal() {
+    if (!adminCreateUserModal) return;
+    adminCreateUserModal.style.display = "none";
+    document.body.style.overflow = "";
+  }
+
+  if (adminCreateUserBtn) adminCreateUserBtn.addEventListener("click", openCreateUserModal);
+  if (adminCreateUserModalCloseBtn) adminCreateUserModalCloseBtn.addEventListener("click", closeCreateUserModal);
+  if (adminCreateUserModalBackdrop) adminCreateUserModalBackdrop.addEventListener("click", closeCreateUserModal);
+  if (adminCreateUserCancelBtn) adminCreateUserCancelBtn.addEventListener("click", closeCreateUserModal);
+
+  if (adminCreateUserSubmitBtn) {
+    adminCreateUserSubmitBtn.addEventListener("click", async () => {
+      const fullName = adminCreateFullName ? adminCreateFullName.value.trim() : "";
+      const email = adminCreateEmail ? adminCreateEmail.value.trim().toLowerCase() : "";
+      const phone = adminCreatePhone ? adminCreatePhone.value.trim() : "";
+      const role = adminCreateRole ? adminCreateRole.value : "User";
+      const password = adminCreatePassword ? adminCreatePassword.value : "";
+      const confirmPassword = adminCreateConfirmPassword ? adminCreateConfirmPassword.value : "";
+
+      const showError = (msg) => {
+        if (adminCreateUserAlert) {
+          adminCreateUserAlert.className = "auth-alert error";
+          adminCreateUserAlert.textContent = msg;
+          adminCreateUserAlert.style.display = "block";
+        }
+      };
+
+      if (!email) {
+        showError("Email address is required.");
+        if (adminCreateEmail) adminCreateEmail.focus();
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        showError("Please enter a valid email address.");
+        if (adminCreateEmail) adminCreateEmail.focus();
+        return;
+      }
+      if (!password) {
+        showError("Temporary password is required.");
+        if (adminCreatePassword) adminCreatePassword.focus();
+        return;
+      }
+      if (password.length !== 8) {
+        showError("Password must be exactly 8 digits long.");
+        if (adminCreatePassword) adminCreatePassword.focus();
+        return;
+      }
+      if (!/^\d{8}$/.test(password)) {
+        showError("Password must contain numbers only (0-9) with no letters, spaces, or special characters.");
+        if (adminCreatePassword) adminCreatePassword.focus();
+        return;
+      }
+      if (password !== confirmPassword) {
+        showError("Passwords do not match.");
+        if (adminCreateConfirmPassword) adminCreateConfirmPassword.focus();
+        return;
+      }
+
+      adminCreateUserSubmitBtn.disabled = true;
+      const origHtml = adminCreateUserSubmitBtn.innerHTML;
+      adminCreateUserSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Creating...';
+
+      try {
+        const resp = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            full_name: fullName,
+            email: email,
+            phone_number: phone,
+            role: role,
+            password: password,
+            confirm_password: confirmPassword
+          })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || data.status !== "success") {
+          showError(data.message || "Failed to create user account.");
+          return;
+        }
+
+        showToast(data.message || `User account created successfully (${role}).`, "success");
+        closeCreateUserModal();
+        await loadAdminUsers();
+        if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+      } catch (err) {
+        showError("Network error while creating user account.");
+      } finally {
+        adminCreateUserSubmitBtn.disabled = false;
+        adminCreateUserSubmitBtn.innerHTML = origHtml;
+      }
+    });
+  }
+
 
 
   // Load Plan Catalog for Admin with Responsive Card-Based Layout and Fallback Table Sync
@@ -7830,7 +8074,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const cardsGrid = document.getElementById("adminPlansCardsGrid");
     const tbody = document.getElementById("adminPlansTbody");
     const plansMetric = document.getElementById("adminMetricPlans");
+    const searchInput = document.getElementById("adminPlanSearchInput");
+    const statusFilter = document.getElementById("adminPlanStatusFilter");
     if (!cardsGrid && !tbody) return;
+
+    const searchVal = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const filterStatus = statusFilter ? statusFilter.value : "all";
 
     if (cardsGrid) {
       cardsGrid.innerHTML = `
@@ -7846,7 +8095,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const res = await fetch("/api/admin/plans", { credentials: "same-origin" });
+      const params = new URLSearchParams();
+      if (filterStatus === "active") params.set("status", "active");
+      if (filterStatus === "archived") params.set("status", "archived");
+      if (searchVal) params.set("search", searchVal);
+      const url = params.toString() ? `/api/admin/plans?${params.toString()}` : `/api/admin/plans`;
+
+      const res = await fetch(url, { credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok || data.status !== "success") {
         if (cardsGrid) {
@@ -7864,19 +8119,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const plans = data.plans || [];
       adminPlansCache = plans;
-      if (plansMetric) plansMetric.textContent = plans.filter(p => p.is_active).length;
+      if (plansMetric && filterStatus === "all" && !searchVal) {
+        plansMetric.textContent = plans.filter(p => p.is_active).length;
+      }
 
       if (plans.length === 0) {
         if (cardsGrid) {
           cardsGrid.innerHTML = `
             <div class="admin-cards-state empty-state">
               <div class="state-icon-wrap"><i class="fas fa-layer-group"></i></div>
-              <h4>No Subscription Plans Configured</h4>
-              <p>No plans have been created yet. Click "Create New Plan" to configure your first subscription tier.</p>
+              <h4>No Subscription Plans Found</h4>
+              <p>${searchVal || filterStatus !== 'all' ? 'No subscription plans match the selected filter or search query.' : 'No plans have been created yet. Click "Create New Plan" to configure your first subscription tier.'}</p>
             </div>
           `;
         }
-        if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">No plans configured yet. Click "Create New Plan" to add one.</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">No plans found matching query or filter.</td></tr>`;
         return;
       }
 
@@ -7932,7 +8189,7 @@ document.addEventListener("DOMContentLoaded", () => {
               </ul>
             </div>
             <div class="plan-card-footer">
-              <button type="button" class="btn-admin-action" data-plan-details-id="${p.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Plan Specifications & Subscribers">
+              <button type="button" class="btn-admin-action details" data-plan-details-id="${p.id}" title="View Plan Specifications & Subscribers">
                 <i class="fas fa-folder-open"></i> Details
               </button>
               <button type="button" class="btn-admin-action dates" data-plan-edit-id="${p.id}" title="Edit plan parameters">
@@ -7942,7 +8199,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <i class="fas ${p.is_active ? 'fa-box-archive' : 'fa-box-open'}"></i> ${p.is_active ? 'Archive Plan' : 'Restore Plan'}
               </button>
               ${subsCount > 0 ? `
-                <button type="button" class="btn-admin-action" disabled style="opacity: 0.45; cursor: not-allowed; background: rgba(239, 68, 68, 0.08); color: #EF4444; border: 1px dashed rgba(239, 68, 68, 0.3);" title="Cannot delete: ${subsCount} subscription(s) reference this plan. Archive the plan instead.">
+                <button type="button" class="btn-admin-action disabled-locked" disabled title="Cannot delete: ${subsCount} subscription(s) reference this plan. Archive the plan instead.">
                   <i class="fas fa-trash-can"></i> Delete Plan
                 </button>
               ` : `
@@ -7965,7 +8222,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <td><span class="sub-badge ${p.is_active ? 'active' : 'expired'}">${p.is_active ? 'Active' : 'Archived'}</span></td>
             <td>
               <div class="admin-action-btn-group">
-                <button type="button" class="btn-admin-action" data-plan-details-id="${p.id}" style="background: rgba(163, 230, 53, 0.15); color: #A3E635; border: 1px solid rgba(163, 230, 53, 0.3);" title="View Plan Specifications">
+                <button type="button" class="btn-admin-action details" data-plan-details-id="${p.id}" title="View Plan Specifications">
                   <i class="fas fa-folder-open"></i> Details
                 </button>
                 <button type="button" class="btn-admin-action dates" data-plan-edit-id="${p.id}" title="Edit plan parameters">
@@ -7975,7 +8232,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   <i class="fas ${p.is_active ? 'fa-box-archive' : 'fa-box-open'}"></i> ${p.is_active ? 'Archive' : 'Restore'}
                 </button>
                 ${subsCount > 0 ? `
-                  <button type="button" class="btn-admin-action" disabled style="opacity: 0.45; cursor: not-allowed; background: rgba(239, 68, 68, 0.08); color: #EF4444; border: 1px dashed rgba(239, 68, 68, 0.3);" title="Cannot delete: ${subsCount} subscription(s) reference this plan. Archive the plan instead.">
+                  <button type="button" class="btn-admin-action disabled-locked" disabled title="Cannot delete: ${subsCount} subscription(s) reference this plan. Archive the plan instead.">
                     <i class="fas fa-trash-can"></i>
                   </button>
                 ` : `
@@ -8216,6 +8473,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminPlanForm = document.getElementById("adminPlanForm");
   const adminPlanAlert = document.getElementById("adminPlanAlert");
 
+  const refreshPlansBtn = document.getElementById("refreshPlansBtn");
+  if (refreshPlansBtn) {
+    refreshPlansBtn.addEventListener("click", () => {
+      loadAdminPlans();
+      loadAdminMetrics();
+    });
+  }
+
+  const adminPlanSearchInput = document.getElementById("adminPlanSearchInput");
+  if (adminPlanSearchInput) {
+    let planDebounce;
+    adminPlanSearchInput.addEventListener("input", () => {
+      clearTimeout(planDebounce);
+      planDebounce = setTimeout(loadAdminPlans, 300);
+    });
+  }
+
+  const adminPlanStatusFilter = document.getElementById("adminPlanStatusFilter");
+  if (adminPlanStatusFilter) {
+    adminPlanStatusFilter.addEventListener("change", loadAdminPlans);
+  }
+
   if (adminCreatePlanBtn) {
     adminCreatePlanBtn.addEventListener("click", () => {
       openCreatePlanModal();
@@ -8319,9 +8598,15 @@ document.addEventListener("DOMContentLoaded", () => {
         if (res.ok && data.status === "success") {
           if (adminPlanModal) adminPlanModal.style.display = "none";
           document.body.style.overflow = "";
+          if (typeof showToast === "function") {
+            showToast(data.message || (mode === "edit" ? "Plan updated successfully." : "Plan created successfully."), "success");
+          }
           loadAdminPlans();
           loadAdminMetrics();
           loadPublicHomepagePlans();
+          if (mode === "edit" && dbId && adminPlanDetailsModal && adminPlanDetailsModal.style.display !== "none") {
+            openPlanDetailsModal(dbId);
+          }
         } else {
           if (adminPlanAlert) {
             adminPlanAlert.className = "auth-alert error";
@@ -8341,6 +8626,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Helper to convert UTC ISO string to <input type="datetime-local"> format without timezone drift
+  function toUtcDatetimeLocal(isoStr) {
+    if (!isoStr) return "";
+    try {
+      const dt = new Date(isoStr);
+      if (isNaN(dt.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}T${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function fromUtcDatetimeLocal(localStr) {
+    if (!localStr) return null;
+    return `${localStr}:00Z`;
+  }
+
   // Admin Date Adjustment Modal
   const adminDateModal = document.getElementById("adminDateModal");
   const adminDateModalCloseBtn = document.getElementById("adminDateModalCloseBtn");
@@ -8351,14 +8654,16 @@ document.addEventListener("DOMContentLoaded", () => {
   function openAdminDateModal(subId, startIso, endIso) {
     if (!adminDateModal) return;
     const subIdInput = document.getElementById("dateSubId");
+    const startInput = document.getElementById("dateNewStartDate");
     const endInput = document.getElementById("dateNewEndDate");
+    const reasonInput = document.getElementById("dateAdjustmentReason");
+
     if (subIdInput) subIdInput.value = subId;
-    if (endInput && endIso) {
-      try {
-        endInput.value = new Date(endIso).toISOString().slice(0, 16);
-      } catch (_) {}
-    }
+    if (startInput) startInput.value = toUtcDatetimeLocal(startIso);
+    if (endInput) endInput.value = toUtcDatetimeLocal(endIso);
+    if (reasonInput) reasonInput.value = "Administrative date adjustment under approved SLA policy";
     if (adminDateAlert) adminDateAlert.style.display = "none";
+
     adminDateModal.style.display = "flex";
     document.body.style.overflow = "hidden";
   }
@@ -8380,23 +8685,48 @@ document.addEventListener("DOMContentLoaded", () => {
     adminDateForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const subId = document.getElementById("dateSubId")?.value;
+      const startVal = document.getElementById("dateNewStartDate")?.value;
       const endVal = document.getElementById("dateNewEndDate")?.value;
+      const reasonVal = document.getElementById("dateAdjustmentReason")?.value?.trim() || "Administrative date adjustment under approved SLA policy";
       if (!subId || !endVal) return;
 
+      if (startVal && endVal && new Date(fromUtcDatetimeLocal(endVal)) <= new Date(fromUtcDatetimeLocal(startVal))) {
+        if (adminDateAlert) {
+          adminDateAlert.className = "auth-alert error";
+          adminDateAlert.textContent = "New expiration date must be later than the start date.";
+          adminDateAlert.style.display = "block";
+        }
+        return;
+      }
+
+      const submitBtn = document.getElementById("adminDateSubmitBtn");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...'; }
+
       try {
+        const payload = {
+          end_date: fromUtcDatetimeLocal(endVal),
+          reason: reasonVal
+        };
+        if (startVal) {
+          payload.start_date = fromUtcDatetimeLocal(startVal);
+        }
+
         const res = await fetch(`/api/admin/subscriptions/${subId}/adjust-dates`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({
-            end_date: new Date(endVal).toISOString()
-          })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (res.ok && data.status === "success") {
           if (adminDateModal) adminDateModal.style.display = "none";
           document.body.style.overflow = "";
+          if (typeof showToast === "function") showToast(data.message || "Subscription dates updated successfully.", "success");
           loadAdminSubscriptions();
+          loadAdminMetrics();
+          if (adminSubDetailsModal && adminSubDetailsModal.style.display !== "none") {
+            openSubDetailsModal(subId);
+          }
         } else {
           if (adminDateAlert) {
             adminDateAlert.className = "auth-alert error";
@@ -8409,6 +8739,11 @@ document.addEventListener("DOMContentLoaded", () => {
           adminDateAlert.className = "auth-alert error";
           adminDateAlert.textContent = "Network error adjusting dates.";
           adminDateAlert.style.display = "block";
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span class="auth-btn-text">Apply Date Adjustment</span> <i class="fas fa-check auth-btn-icon"></i>';
         }
       }
     });
@@ -8470,8 +8805,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (res.ok && data.status === "success") {
           if (adminRenewSubModal) adminRenewSubModal.style.display = "none";
           document.body.style.overflow = "";
+          if (typeof showToast === "function") showToast(data.message || "Subscription renewed successfully.", "success");
           loadAdminSubscriptions();
           loadAdminMetrics();
+          if (adminSubDetailsModal && adminSubDetailsModal.style.display !== "none") {
+            openSubDetailsModal(subId);
+          }
         } else {
           if (adminRenewSubAlert) {
             adminRenewSubAlert.className = "auth-alert error";
@@ -8498,8 +8837,59 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminExtendSubForm = document.getElementById("adminExtendSubForm");
   const adminExtendSubAlert = document.getElementById("adminExtendSubAlert");
 
+  let currentExtendSubInfo = null;
+
+  function updateExtendCalculationPreview() {
+    if (!currentExtendSubInfo) return;
+    const valInput = document.getElementById("extendDurationValue");
+    const unitInput = document.getElementById("extendDurationUnit");
+    const currentExpiryEl = document.getElementById("extendCurrentExpiryDisplay");
+    const deltaEl = document.getElementById("extendDeltaDisplay");
+    const newExpiryEl = document.getElementById("extendNewExpiryDisplay");
+
+    const val = parseInt(valInput?.value || "0", 10);
+    const unit = unitInput?.value || "days";
+
+    let daysToAdd = 0;
+    if (unit === "months") daysToAdd = val * 30;
+    else if (unit === "years") daysToAdd = val * 365;
+    else daysToAdd = val;
+
+    if (deltaEl) deltaEl.textContent = `+${daysToAdd} Day${daysToAdd === 1 ? '' : 's'}`;
+
+    const now = new Date();
+    let baseDate = now;
+    if (currentExtendSubInfo.endDate) {
+      const parsedEnd = new Date(currentExtendSubInfo.endDate);
+      if (!isNaN(parsedEnd.getTime())) {
+        if (currentExtendSubInfo.status === "active" && parsedEnd > now) {
+          baseDate = parsedEnd;
+        }
+      }
+    }
+
+    if (currentExpiryEl) {
+      currentExpiryEl.textContent = currentExtendSubInfo.endDate ? formatUtcDate(currentExtendSubInfo.endDate) : "None (Starts Immediately)";
+    }
+
+    if (daysToAdd <= 0 || isNaN(daysToAdd)) {
+      if (newExpiryEl) {
+        newExpiryEl.textContent = "Invalid duration";
+        newExpiryEl.style.color = "#EF4444";
+      }
+      return;
+    }
+
+    const calculatedNewEnd = new Date(baseDate.getTime() + daysToAdd * 86400000);
+    if (newExpiryEl) {
+      newExpiryEl.textContent = formatUtcDate(calculatedNewEnd.toISOString());
+      newExpiryEl.style.color = "#A3E635";
+    }
+  }
+
   function openAdminExtendModal(subInfo) {
     if (!adminExtendSubModal || !subInfo) return;
+    currentExtendSubInfo = subInfo;
     const idInput = document.getElementById("extendSubId");
     const targetDisp = document.getElementById("extendSubTargetDisplay");
     const valInput = document.getElementById("extendDurationValue");
@@ -8512,6 +8902,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (unitInput) unitInput.value = "days";
     if (notesInput) notesInput.value = "Administrative extension courtesy grant";
     if (adminExtendSubAlert) adminExtendSubAlert.style.display = "none";
+
+    updateExtendCalculationPreview();
 
     adminExtendSubModal.style.display = "flex";
     document.body.style.overflow = "hidden";
@@ -8530,6 +8922,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const extendValInput = document.getElementById("extendDurationValue");
+  if (extendValInput) extendValInput.addEventListener("input", updateExtendCalculationPreview);
+
+  const extendUnitInput = document.getElementById("extendDurationUnit");
+  if (extendUnitInput) extendUnitInput.addEventListener("change", updateExtendCalculationPreview);
+
   // Duration Presets (+7d, +30d, +90d)
   document.querySelectorAll(".duration-presets-group .preset-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -8539,6 +8937,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const unitInput = document.getElementById("extendDurationUnit");
       if (valInput && val) valInput.value = val;
       if (unitInput && unit) unitInput.value = unit;
+      updateExtendCalculationPreview();
     });
   });
 
@@ -8550,6 +8949,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const durationUnit = document.getElementById("extendDurationUnit")?.value || "days";
       const notes = document.getElementById("extendSubNotes")?.value?.trim();
       if (!subId) return;
+
+      if (durationValue <= 0 || isNaN(durationValue)) {
+        if (adminExtendSubAlert) {
+          adminExtendSubAlert.className = "auth-alert error";
+          adminExtendSubAlert.textContent = "Extension duration must be a positive integer.";
+          adminExtendSubAlert.style.display = "block";
+        }
+        return;
+      }
 
       const submitBtn = document.getElementById("adminExtendSubSubmitBtn");
       if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Extending...'; }
@@ -8569,8 +8977,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (res.ok && data.status === "success") {
           if (adminExtendSubModal) adminExtendSubModal.style.display = "none";
           document.body.style.overflow = "";
+          if (typeof showToast === "function") showToast(data.message || "Subscription extended successfully.", "success");
           loadAdminSubscriptions();
           loadAdminMetrics();
+          if (adminSubDetailsModal && adminSubDetailsModal.style.display !== "none") {
+            openSubDetailsModal(subId);
+          }
         } else {
           if (adminExtendSubAlert) {
             adminExtendSubAlert.className = "auth-alert error";
@@ -8763,7 +9175,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let rowsHtml = "";
       for (const log of logs) {
-        const timeStr = log.timestamp ? formatUtcDate(log.timestamp) : "—";
+        const timeStr = log.timestamp ? formatUtcDate(log.timestamp, true) : "—";
         const action = (log.action || "UNKNOWN").toUpperCase();
 
         let badgeClass = "badge-muted";
@@ -8909,12 +9321,22 @@ document.addEventListener("DOMContentLoaded", () => {
       id: "adminMetricPlansCard",
       action: () => {
         activateAdminTab("plans", true);
+        const planFilter = document.getElementById("adminPlanStatusFilter");
+        if (planFilter) {
+          planFilter.value = "active";
+          loadAdminPlans();
+        }
       }
     },
     {
       id: "adminMetricInactivePlansCard",
       action: () => {
         activateAdminTab("plans", true);
+        const planFilter = document.getElementById("adminPlanStatusFilter");
+        if (planFilter) {
+          planFilter.value = "archived";
+          loadAdminPlans();
+        }
       }
     }
   ];
@@ -9023,6 +9445,24 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      if (newPwd.length !== 8) {
+        if (adminPasswordAlert) {
+          adminPasswordAlert.className = "auth-alert error";
+          adminPasswordAlert.textContent = "New password must be exactly 8 digits long.";
+          adminPasswordAlert.style.display = "block";
+        }
+        return;
+      }
+
+      if (!/^\d{8}$/.test(newPwd)) {
+        if (adminPasswordAlert) {
+          adminPasswordAlert.className = "auth-alert error";
+          adminPasswordAlert.textContent = "New password must contain numbers only (0-9) with no letters, spaces, or special characters.";
+          adminPasswordAlert.style.display = "block";
+        }
+        return;
+      }
+
       if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Updating...'; }
 
       try {
@@ -9062,6 +9502,28 @@ document.addEventListener("DOMContentLoaded", () => {
           submitBtn.disabled = false;
           submitBtn.innerHTML = '<span class="auth-btn-text">Update Password</span> <i class="fas fa-lock auth-btn-icon"></i>';
         }
+      }
+    });
+  }
+
+  // Real-time guidance for Admin Password Update
+  const adminNewPasswordInput = document.getElementById("adminNewPasswordInput");
+  const adminPwdRuleLength = document.getElementById("adminPwdRuleLength");
+  const adminPwdRuleDigits = document.getElementById("adminPwdRuleDigits");
+  if (adminNewPasswordInput) {
+    adminNewPasswordInput.addEventListener("input", () => {
+      const val = adminNewPasswordInput.value || "";
+      const lenOk = val.length === 8;
+      const digitsOk = val.length > 0 && /^\d+$/.test(val);
+      if (adminPwdRuleLength) {
+        adminPwdRuleLength.classList.toggle("valid", lenOk);
+        const icon = adminPwdRuleLength.querySelector("i");
+        if (icon) icon.className = lenOk ? "fas fa-circle-check" : "fas fa-circle-dot";
+      }
+      if (adminPwdRuleDigits) {
+        adminPwdRuleDigits.classList.toggle("valid", digitsOk);
+        const icon = adminPwdRuleDigits.querySelector("i");
+        if (icon) icon.className = digitsOk ? "fas fa-circle-check" : "fas fa-circle-dot";
       }
     });
   }

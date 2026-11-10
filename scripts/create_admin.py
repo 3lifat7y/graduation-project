@@ -20,24 +20,26 @@ if str(PROJECT_ROOT) not in sys.path:
 from modules.auth.db import init_db, get_db_session
 from modules.auth.models import User
 
-PASSWORD_REGEX = re.compile(
-    r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]).{8,}$"
-)
+PASSWORD_REGEX = re.compile(r"^\d{8}$")
 
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
-    """Validates that password meets enterprise cybersecurity strength requirements."""
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters long."
-    if not re.search(r"[A-Z]", password):
-        return False, "Password must include at least one uppercase letter (A-Z)."
-    if not re.search(r"[a-z]", password):
-        return False, "Password must include at least one lowercase letter (a-z)."
-    if not re.search(r"\d", password):
-        return False, "Password must include at least one numeric digit (0-9)."
-    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]", password):
-        return False, "Password must include at least one special character."
-    return True, "Password meets complexity requirements."
+    """
+    Validates that password meets SCOUT password policy:
+    - Contain exactly 8 characters.
+    - Accept numeric digits only (0–9).
+    - Reject letters (uppercase and lowercase).
+    - Reject special characters.
+    - Reject spaces.
+    - Not accept fewer or more than 8 digits.
+    """
+    if not password:
+        return False, "Password is required."
+    if len(password) != 8:
+        return False, "Password must be exactly 8 digits long."
+    if not password.isdigit() or not PASSWORD_REGEX.fullmatch(password):
+        return False, "Password must contain numbers only (0-9) with no letters, spaces, or special characters."
+    return True, "Password meets requirements (exactly 8 digits)."
 
 
 def create_admin_user(username: str, email: str, password: str, full_name: str = "SCOUT Administrator") -> tuple[bool, str]:
@@ -87,7 +89,7 @@ def main():
     parser = argparse.ArgumentParser(description="SCOUT Initial Admin Account Provisioning CLI")
     parser.add_argument("--username", help="Administrator username (3-30 alphanumeric characters)")
     parser.add_argument("--email", help="Administrator email address")
-    parser.add_argument("--password", help="Administrator password (optional, prompted securely if omitted)")
+    parser.add_argument("--password", help="Administrator password (exactly 8 numeric digits, prompted securely if omitted)")
     parser.add_argument("--full-name", default="SCOUT System Admin", help="Full name or operational display title")
     args = parser.parse_args()
 

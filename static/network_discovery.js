@@ -1627,9 +1627,122 @@
     }
   }
 
-  // 10. Initialize Page
+  // 10. Shared Shell & Identity Synchronization
+  async function initAuth() {
+    const sidebarAdminNavGroup = document.getElementById('sidebarAdminNavGroup');
+    const sidebarUserNavGroup = document.getElementById('sidebarUserNavGroup');
+    const sidebarPendingBadge = document.getElementById('sidebarPendingBadge');
+    const sidebarRequestsBadge = document.getElementById('sidebarRequestsBadge');
+    const publicAuthActions = document.getElementById('publicAuthActions');
+    const userProfileMenu = document.getElementById('userProfileMenu');
+    const userProfileDropdownBtn = document.getElementById('userProfileDropdownBtn');
+    const userDropdownCard = document.getElementById('userDropdownCard');
+    const navUserAvatar = document.getElementById('navUserAvatar');
+    const navUserName = document.getElementById('navUserName');
+    const navUserRoleBadge = document.getElementById('navUserRoleBadge');
+    const dropdownUserTitle = document.getElementById('dropdownUserTitle');
+    const dropdownUserEmail = document.getElementById('dropdownUserEmail');
+    const dropdownAdminLink = document.getElementById('dropdownAdminLink');
+    const dropdownDashboardLink = document.getElementById('dropdownDashboardLink');
+    const signOutBtn = document.getElementById('signOutBtn');
+
+    if (userProfileDropdownBtn && userDropdownCard) {
+      userProfileDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = userDropdownCard.style.display === 'block';
+        userDropdownCard.style.display = isOpen ? 'none' : 'block';
+        userProfileDropdownBtn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+      });
+      document.addEventListener('click', (e) => {
+        if (userProfileMenu && !userProfileMenu.contains(e.target)) {
+          userDropdownCard.style.display = 'none';
+          userProfileDropdownBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    if (signOutBtn) {
+      signOutBtn.addEventListener('click', async () => {
+        try {
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+        } catch (_) {}
+        window.location.href = '/login';
+      });
+    }
+
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        const user = data.user;
+        if (user) {
+          if (user.role === 'Admin') {
+            document.body.classList.add('auth-admin', 'auth-authenticated');
+            document.body.classList.remove('auth-anonymous');
+            if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = 'block';
+            if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = 'none';
+            if (dropdownAdminLink) dropdownAdminLink.style.display = 'flex';
+            if (dropdownDashboardLink) dropdownDashboardLink.style.display = 'none';
+
+            // Fetch pending metrics for badges
+            try {
+              const mRes = await fetch('/api/admin/metrics', { credentials: 'same-origin' });
+              if (mRes.ok) {
+                const mData = await mRes.json();
+                const count = mData.metrics ? mData.metrics.pending_subscriptions : 0;
+                if (sidebarPendingBadge) {
+                  sidebarPendingBadge.textContent = count;
+                  sidebarPendingBadge.style.display = count > 0 ? 'inline-block' : 'none';
+                }
+                if (sidebarRequestsBadge) {
+                  sidebarRequestsBadge.textContent = count;
+                  sidebarRequestsBadge.style.display = count > 0 ? 'inline-block' : 'none';
+                }
+              }
+            } catch (_) {}
+          } else {
+            document.body.classList.remove('auth-admin');
+            document.body.classList.add('auth-authenticated');
+            document.body.classList.remove('auth-anonymous');
+            if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = 'none';
+            if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = 'block';
+            if (dropdownAdminLink) dropdownAdminLink.style.display = 'none';
+            if (dropdownDashboardLink) dropdownDashboardLink.style.display = 'flex';
+          }
+
+          if (userProfileMenu) userProfileMenu.style.display = 'flex';
+          if (publicAuthActions) publicAuthActions.style.display = 'none';
+
+          const displayName = user.full_name || user.username || 'Operator';
+          if (navUserName) navUserName.textContent = displayName;
+          if (navUserRoleBadge) {
+            navUserRoleBadge.textContent = user.role;
+            navUserRoleBadge.className = `user-role-badge role-${user.role === 'Admin' ? 'admin' : 'user'}`;
+          }
+          if (dropdownUserTitle) dropdownUserTitle.textContent = displayName;
+          if (dropdownUserEmail) dropdownUserEmail.textContent = user.email;
+          if (navUserAvatar) {
+            const initials = displayName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'OP';
+            navUserAvatar.textContent = initials;
+          }
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // Anonymous visitor
+    document.body.classList.remove('auth-admin', 'auth-authenticated');
+    document.body.classList.add('auth-anonymous');
+    if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = 'none';
+    if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = 'none';
+    if (userProfileMenu) userProfileMenu.style.display = 'none';
+    if (publicAuthActions) publicAuthActions.style.display = 'flex';
+  }
+
+  // 11. Initialize Page
   document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    initAuth();
     initEventListeners();
     loadNetworkInfo();
     fetchScanStatus();

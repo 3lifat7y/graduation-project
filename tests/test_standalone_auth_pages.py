@@ -12,7 +12,7 @@ Verifies:
 import unittest
 import json
 from api import app
-from modules.auth.db import get_db_session
+from modules.auth.db import get_db_session, get_engine
 from modules.auth.models import User
 
 
@@ -20,7 +20,12 @@ class TestStandaloneAuthPages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         app.config["TESTING"] = True
+        get_engine(reset=True)
         cls.client = app.test_client()
+
+    @classmethod
+    def tearDownClass(cls):
+        get_engine(reset=True)
 
     def setUp(self):
         # Ensure a clean test user exists
@@ -107,8 +112,9 @@ class TestStandaloneAuthPages(unittest.TestCase):
         self.assertIn('id="regPassword"', html)
         self.assertIn('id="regConfirmPassword"', html)
         self.assertIn('id="pwdRuleLength"', html)
-        self.assertIn('id="pwdRuleCase"', html)
-        self.assertIn('id="pwdRuleNumSpecial"', html)
+        self.assertIn('id="pwdRuleDigits"', html)
+        self.assertNotIn('id="pwdRuleCase"', html)
+        self.assertNotIn('id="pwdRuleNumSpecial"', html)
         self.assertIn('id="registerSubmitBtn"', html)
 
 
@@ -200,8 +206,8 @@ class TestStandaloneAuthPages(unittest.TestCase):
             "full_name": "Duplicate Tester",
             "email": "admin@scout-soc.local",  # Already exists in scout.db
             "phone_number": "+15559876543",
-            "password": "ValidPassword#2026",
-            "confirm_password": "ValidPassword#2026"
+            "password": "12345678",
+            "confirm_password": "12345678"
         })
         self.assertEqual(dup_reg.status_code, 409)
 

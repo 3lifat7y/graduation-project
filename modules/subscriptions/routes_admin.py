@@ -4,6 +4,7 @@ Provides plan catalog CRUD, user account search/moderation, and activation contr
 """
 
 import re
+import secrets
 from typing import Dict, Any
 from flask import Blueprint, request, jsonify
 from sqlalchemy import func
@@ -12,6 +13,7 @@ from modules.auth.models import User, utcnow
 from modules.auth.db import get_db_session
 from modules.auth.decorators import admin_required
 from modules.auth.security import normalize_phone_number, is_valid_email
+from scripts.create_admin import validate_password_strength
 from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog
 from .services import sync_expired_subscriptions
 
@@ -77,9 +79,25 @@ def get_admin_metrics():
 @sub_admin_bp.route("/plans", methods=["GET"])
 @admin_required
 def list_admin_plans():
-    """Lists all subscription plans (both active and inactive) with subscription counts."""
+    """Lists subscription plans (both active and inactive) with subscription counts and optional filtering."""
+    status_filter = request.args.get("status", "").strip().lower()
+    search = request.args.get("search", "").strip().lower()
+
     with get_db_session() as session:
-        plans = session.query(SubscriptionPlan).order_by(SubscriptionPlan.id.asc()).all()
+        query = session.query(SubscriptionPlan)
+        if status_filter in ("active", "true", "1"):
+            query = query.filter_by(is_active=True)
+        elif status_filter in ("inactive", "archived", "false", "0"):
+            query = query.filter_by(is_active=False)
+
+        if search:
+            query = query.filter(
+                (func.lower(SubscriptionPlan.name).contains(search)) |
+                (func.lower(SubscriptionPlan.plan_code).contains(search)) |
+                (func.lower(SubscriptionPlan.description).contains(search))
+            )
+
+        plans = query.order_by(SubscriptionPlan.id.asc()).all()
         plan_list = []
         for p in plans:
             p_dict = p.to_dict()
@@ -408,6 +426,107 @@ def list_admin_users():
         "page": page,
         "per_page": per_page
     }), 200
+
+
+@sub_admin_bp.route("/users", methods=["POST"])
+@admin_required
+def create_admin_user():
+    """
+    Creates a new user or administrator account.
+    Validates required fields, email format, phone format, password strength, and uniqueness.
+    """
+    data = request.get_json(silent=True) or {}
+    full_name = str(data.get("full_name", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    phone_raw = str(data.get("phone_number") or data.get("phone") or "").strip()
+    role = str(data.get("role", "User")).strip()
+    password = str(data.get("password", ""))
+    confirm_password = str(data.get("confirm_password", ""))
+    username_candidate = str(data.get("username", "")).strip()
+
+    if not email or not password:
+        return jsonify({"status": "error", "message": "Email and password are required fields."}), 400
+
+    if not is_valid_email(email):
+        return jsonify({"status": "error", "message": "Invalid email address format."}), 400
+
+    if role not in ("User", "Admin"):
+        return jsonify({"status": "error", "message": "Role must be 'User' or 'Admin'."}), 400
+
+    if confirm_password and password != confirm_password:
+        return jsonify({"status": "error", "message": "Password and confirmation password do not match."}), 400
+
+    valid_pw, pw_msg = validate_password_strength(password)
+    if not valid_pw:
+        return jsonify({"status": "error", "message": pw_msg}), 400
+
+    normalized_phone = None
+    if phone_raw:
+        normalized_phone = normalize_phone_number(phone_raw)
+        if not normalized_phone:
+            return jsonify({
+                "status": "error",
+                "message": "Invalid phone number format. Please provide a valid phone number with 7-15 digits."
+            }), 400
+
+    with get_db_session() as session:
+        # Check duplicate email
+        existing_email = session.query(User).filter(func.lower(User.email) == email.lower()).first()
+        if existing_email:
+            return jsonify({
+                "status": "error",
+                "message": "An account with this email address already exists."
+            }), 409
+
+        # Check duplicate phone if provided
+        if normalized_phone:
+            phone_variants = [normalized_phone]
+            if normalized_phone.startswith("+"):
+                phone_variants.append(normalized_phone[1:])
+            else:
+                phone_variants.append("+" + normalized_phone)
+            existing_phone = session.query(User).filter(User.phone_number.in_(phone_variants)).first()
+            if existing_phone:
+                return jsonify({
+                    "status": "error",
+                    "message": "An account with this phone number already exists."
+                }), 409
+
+        # Handle username
+        if username_candidate:
+            if session.query(User).filter(func.lower(User.username) == username_candidate.lower()).first():
+                return jsonify({
+                    "status": "error",
+                    "message": "An account with this username already exists."
+                }), 409
+            assigned_username = username_candidate
+        else:
+            base = re.sub(r"[^a-zA-Z0-9_]", "", email.split("@")[0])[:20] or "user"
+            while True:
+                candidate = f"{base}_{secrets.token_hex(4)}"
+                if not session.query(User).filter(func.lower(User.username) == candidate.lower()).first():
+                    assigned_username = candidate
+                    break
+
+        new_user = User(
+            username=assigned_username,
+            email=email,
+            phone_number=normalized_phone,
+            full_name=full_name or assigned_username,
+            role=role,
+            is_active=True
+        )
+        new_user.set_password(password)
+        session.add(new_user)
+        session.flush()
+
+        user_dict = new_user.to_dict()
+
+    return jsonify({
+        "status": "success",
+        "message": f"User account '{new_user.email}' ({role}) created successfully.",
+        "user": user_dict
+    }), 201
 
 
 @sub_admin_bp.route("/users/<int:user_id>/status", methods=["PATCH", "POST"])

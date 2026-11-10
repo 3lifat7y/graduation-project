@@ -163,7 +163,7 @@
                   id="regPassword"
                   name="password"
                   class="auth-input"
-                  placeholder="Enter password"
+                  placeholder="Enter 8-digit password (0-9)"
                   autocomplete="new-password"
                   required
                 />
@@ -183,7 +183,7 @@
                   id="regConfirmPassword"
                   name="confirm_password"
                   class="auth-input"
-                  placeholder="Re-enter password"
+                  placeholder="Re-enter 8-digit password"
                   autocomplete="new-password"
                   required
                 />
@@ -197,15 +197,11 @@
           <div class="auth-pwd-guidance" id="pwdGuidance">
             <div class="guidance-item" id="pwdRuleLength">
               <i class="fas fa-circle-dot guidance-icon"></i>
-              <span>At least 8 characters</span>
+              <span>Exactly 8 digits</span>
             </div>
-            <div class="guidance-item" id="pwdRuleCase">
+            <div class="guidance-item" id="pwdRuleDigits">
               <i class="fas fa-circle-dot guidance-icon"></i>
-              <span>Uppercase &amp; lowercase letters</span>
-            </div>
-            <div class="guidance-item" id="pwdRuleNumSpecial">
-              <i class="fas fa-circle-dot guidance-icon"></i>
-              <span>Number &amp; special character (!@#$%^&amp;*...)</span>
+              <span>Numbers only (0–9)</span>
             </div>
           </div>
 

@@ -244,6 +244,14 @@ def adjust_subscription_dates(
         old_start = sub.start_date.isoformat() if sub.start_date else "None"
         old_end = sub.end_date.isoformat() if sub.end_date else "None"
 
+        effective_start = start_date or sub.start_date
+        effective_end = end_date or sub.end_date
+        if effective_start and effective_end:
+            eff_start_utc = ensure_utc(effective_start)
+            eff_end_utc = ensure_utc(effective_end)
+            if eff_end_utc <= eff_start_utc:
+                return False, "Expiration date must be later than the start date.", {}
+
         if start_date:
             sub.start_date = start_date
         if end_date:
@@ -286,6 +294,9 @@ def renew_subscription(
         sub = session.query(UserSubscription).filter_by(id=subscription_id).first()
         if not sub:
             return False, "Subscription record not found.", {}
+
+        if sub.status == "rejected":
+            return False, "Cannot extend a rejected subscription request.", {}
 
         prev_status = sub.status
         plan = sub.plan
@@ -352,6 +363,9 @@ def extend_subscription(
         sub = session.query(UserSubscription).filter_by(id=subscription_id).first()
         if not sub:
             return False, "Subscription record not found.", {}
+
+        if sub.status == "rejected":
+            return False, "Cannot extend a rejected subscription request.", {}
 
         prev_status = sub.status
         now = ensure_utc(utcnow())

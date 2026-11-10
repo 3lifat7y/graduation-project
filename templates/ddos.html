@@ -2202,11 +2202,11 @@
                     </div>
                     <div class="dash-form-group">
                       <label for="userDashNewPassword"><i class="fas fa-shield-alt"></i> New Password</label>
-                      <input type="password" id="userDashNewPassword" class="dash-input" placeholder="Min 8 chars, mixed case, digit/symbol" />
+                      <input type="password" id="userDashNewPassword" class="dash-input" placeholder="Exactly 8 digits (0-9)" />
                     </div>
                     <div class="dash-form-group">
                       <label for="userDashConfirmPassword"><i class="fas fa-shield-check"></i> Confirm Password</label>
-                      <input type="password" id="userDashConfirmPassword" class="dash-input" placeholder="Confirm new password" />
+                      <input type="password" id="userDashConfirmPassword" class="dash-input" placeholder="Confirm 8-digit password" />
                     </div>
                   </div>
                   <div class="form-actions-inline">
@@ -2281,32 +2281,6 @@
       <!-- Section 9: Administrative Management Console -->
       <section class="admin-console-section" id="admin-console" style="display:none;">
         <div class="section-container admin-dashboard-container">
-          <!-- Admin Tab Navigation (Persistent across all Admin Views) -->
-          <div class="admin-tabs-bar" role="tablist">
-            <button type="button" class="admin-tab-btn active" data-admin-tab="overview">
-              <i class="fas fa-gauge-high"></i> Platform Overview
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="users">
-              <i class="fas fa-users-gear"></i> Users
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="plans">
-              <i class="fas fa-gem"></i> Subscription Plans
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="subscriptions">
-              <i class="fas fa-id-card"></i> All Subscriptions
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="requests">
-              <i class="fas fa-user-clock"></i> Pending Requests
-              <span class="admin-tab-count" id="adminPendingCountBadge" style="display:none;">0</span>
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="audit">
-              <i class="fas fa-clipboard-list"></i> Audit Logs
-            </button>
-            <button type="button" class="admin-tab-btn" data-admin-tab="profile">
-              <i class="fas fa-user-shield"></i> Profile & Security
-            </button>
-          </div>
-
           <!-- Admin Panels Container -->
           <div class="admin-panels-container">
             <!-- Panel 0: Platform Overview (Appears ONLY on Platform Overview) -->
@@ -2633,6 +2607,9 @@
                   <button type="button" class="btn-admin-refresh" id="refreshUsersBtn">
                     <i class="fas fa-rotate"></i> Refresh
                   </button>
+                  <button type="button" class="btn-admin-primary-action" id="adminCreateUserBtn" title="Provision a new operator or administrator account">
+                    <i class="fas fa-user-plus"></i> Create User
+                  </button>
                 </div>
               </div>
               <!-- Responsive Operator Cards Grid (Card-based UI/UX) -->
@@ -2656,9 +2633,23 @@
                   <h3>Subscription Plans Catalog</h3>
                   <p>Configure plan tiers, pricing, duration, and feature entitlements.</p>
                 </div>
-                <button type="button" class="btn-auth-cta" id="adminCreatePlanBtn">
-                  <i class="fas fa-plus"></i> Create New Plan
-                </button>
+                <div class="panel-actions-group">
+                  <div class="admin-search-wrap">
+                    <i class="fas fa-search admin-search-icon"></i>
+                    <input type="text" id="adminPlanSearchInput" class="admin-search-input" placeholder="Search plans by name, code..." />
+                  </div>
+                  <select id="adminPlanStatusFilter" class="admin-filter-select">
+                    <option value="all">All Plans</option>
+                    <option value="active">Active in Catalog</option>
+                    <option value="archived">Archived / Hidden</option>
+                  </select>
+                  <button type="button" class="btn-admin-refresh" id="refreshPlansBtn" title="Refresh plan catalog">
+                    <i class="fas fa-rotate"></i> Refresh
+                  </button>
+                  <button type="button" class="btn-admin-primary-action" id="adminCreatePlanBtn" title="Create a new subscription plan">
+                    <i class="fas fa-plus"></i> Create New Plan
+                  </button>
+                </div>
               </div>
               <!-- Responsive Plan Cards Grid -->
               <div class="admin-plans-card-container">
@@ -2811,21 +2802,20 @@
                           <label for="adminNewPasswordInput" class="auth-label">New Password</label>
                           <div class="auth-input-wrap">
                             <i class="fas fa-shield auth-input-icon"></i>
-                            <input type="password" id="adminNewPasswordInput" class="auth-input" placeholder="Min 8 chars, 1 uppercase, 1 special" required />
+                            <input type="password" id="adminNewPasswordInput" class="auth-input" placeholder="Exactly 8 digits (0-9)" required />
                           </div>
                         </div>
                         <div class="auth-form-group">
                           <label for="adminConfirmPasswordInput" class="auth-label">Confirm New Password</label>
                           <div class="auth-input-wrap">
                             <i class="fas fa-shield-check auth-input-icon"></i>
-                            <input type="password" id="adminConfirmPasswordInput" class="auth-input" placeholder="Repeat new password" required />
+                            <input type="password" id="adminConfirmPasswordInput" class="auth-input" placeholder="Repeat 8-digit password" required />
                           </div>
                         </div>
                       </div>
                       <div class="auth-pwd-guidance" style="margin-bottom:12px;">
-                        <div class="guidance-item" id="adminPwdRuleLength"><i class="fas fa-circle-dot"></i> Min 8 characters</div>
-                        <div class="guidance-item" id="adminPwdRuleCase"><i class="fas fa-circle-dot"></i> Uppercase & lowercase</div>
-                        <div class="guidance-item" id="adminPwdRuleNumSpecial"><i class="fas fa-circle-dot"></i> Number & special character</div>
+                        <div class="guidance-item" id="adminPwdRuleLength"><i class="fas fa-circle-dot"></i> Exactly 8 digits</div>
+                        <div class="guidance-item" id="adminPwdRuleDigits"><i class="fas fa-circle-dot"></i> Numbers only (0–9)</div>
                       </div>
                       <button type="submit" class="btn-auth-submit" id="adminPasswordSubmitBtn">
                         <span class="auth-btn-text">Update Password</span>
@@ -2895,6 +2885,58 @@
   <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top of page">
     <i class="fas fa-arrow-up"></i>
   </button>
+
+  <!-- Modal: Admin Create User -->
+  <div class="auth-modal" id="adminCreateUserModal" role="dialog" aria-modal="true" aria-labelledby="adminCreateUserModalTitle" style="display:none; z-index: 10460;">
+    <div class="auth-modal-backdrop" id="adminCreateUserModalBackdrop"></div>
+    <div class="auth-modal-dialog" style="max-width: 540px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-badge"><i class="fas fa-user-plus"></i> Account Provisioning</div>
+        <h3 class="auth-modal-title" id="adminCreateUserModalTitle">Create New User</h3>
+        <p class="auth-modal-subtitle">Provision an operator or administrator account with immediate platform access.</p>
+        <button type="button" class="auth-modal-close" id="adminCreateUserModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminCreateUserAlert" style="display:none;"></div>
+        <form id="adminCreateUserForm" onsubmit="return false;">
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="adminCreateFullName" class="auth-label" style="display:block; margin-bottom: 5px; font-size: 0.82rem; font-weight: 600;"><i class="fas fa-id-card"></i> Full Name</label>
+            <input type="text" id="adminCreateFullName" class="auth-input" placeholder="e.g. Alex Morgan" style="width: 100%; box-sizing: border-box;" />
+          </div>
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="adminCreateEmail" class="auth-label" style="display:block; margin-bottom: 5px; font-size: 0.82rem; font-weight: 600;"><i class="fas fa-envelope"></i> Email Address <span style="color: #EF4444;">*</span></label>
+            <input type="email" id="adminCreateEmail" class="auth-input" placeholder="operator@domain.com" required style="width: 100%; box-sizing: border-box;" />
+          </div>
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="adminCreatePhone" class="auth-label" style="display:block; margin-bottom: 5px; font-size: 0.82rem; font-weight: 600;"><i class="fas fa-phone"></i> Phone Number</label>
+            <input type="tel" id="adminCreatePhone" class="auth-input" placeholder="+1 (555) 123-4567" style="width: 100%; box-sizing: border-box;" />
+          </div>
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="adminCreateRole" class="auth-label" style="display:block; margin-bottom: 5px; font-size: 0.82rem; font-weight: 600;"><i class="fas fa-shield-halved"></i> Role <span style="color: #EF4444;">*</span></label>
+            <select id="adminCreateRole" class="auth-input" style="width: 100%; box-sizing: border-box;">
+              <option value="User" selected>User (Standard Operator)</option>
+              <option value="Admin">Admin (Full Administrator)</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="adminCreatePassword" class="auth-label" style="display:block; margin-bottom: 5px; font-size: 0.82rem; font-weight: 600;"><i class="fas fa-lock"></i> Temporary Password <span style="color: #EF4444;">*</span></label>
+            <input type="password" id="adminCreatePassword" class="auth-input" placeholder="Exactly 8 digits (0-9)" required style="width: 100%; box-sizing: border-box;" />
+          </div>
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="adminCreateConfirmPassword" class="auth-label" style="display:block; margin-bottom: 5px; font-size: 0.82rem; font-weight: 600;"><i class="fas fa-lock"></i> Confirm Password <span style="color: #EF4444;">*</span></label>
+            <input type="password" id="adminCreateConfirmPassword" class="auth-input" placeholder="Re-enter 8-digit password" required style="width: 100%; box-sizing: border-box;" />
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+            <button type="button" class="btn-admin-action cancel" id="adminCreateUserCancelBtn">Cancel</button>
+            <button type="button" class="btn-auth-submit" id="adminCreateUserSubmitBtn" style="padding: 9px 20px;">
+              <span id="adminCreateUserSubmitText">Create Account</span>
+              <i class="fas fa-arrow-right auth-btn-icon" id="adminCreateUserSubmitIcon"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal: Admin User Details & History Drawer -->
   <div class="auth-modal" id="adminUserDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminUserDetailsModalTitle" style="display:none;">
@@ -3163,8 +3205,12 @@
             <input type="datetime-local" id="dateNewStartDate" class="auth-input" />
           </div>
           <div class="auth-form-group">
-            <label for="dateNewEndDate" class="auth-label">New Expiration Date (UTC)</label>
+            <label for="dateNewEndDate" class="auth-label">New Expiration Date (UTC) <span class="required-star">*</span></label>
             <input type="datetime-local" id="dateNewEndDate" class="auth-input" required />
+          </div>
+          <div class="auth-form-group">
+            <label for="dateAdjustmentReason" class="auth-label">Administrative Reason <span class="required-star">*</span></label>
+            <input type="text" id="dateAdjustmentReason" class="auth-input" placeholder="e.g. Authorized timeline adjustment under SLA policy" required />
           </div>
           <button type="submit" class="btn-auth-submit" id="adminDateSubmitBtn">
             <span class="auth-btn-text">Apply Date Adjustment</span>
@@ -3249,6 +3295,16 @@
             <button type="button" class="admin-shortcut-btn preset-btn" data-preset-val="30" data-preset-unit="days">+30 Days</button>
             <button type="button" class="admin-shortcut-btn preset-btn" data-preset-val="90" data-preset-unit="days">+90 Days</button>
           </div>
+          <div class="extend-preview-box" id="extendPreviewBox" style="padding: 12px 14px; border-radius: 8px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">
+              <span>Current Expiration: <strong id="extendCurrentExpiryDisplay" style="color: var(--text-primary); font-weight:600;">—</strong></span>
+              <span>Extension Term: <strong id="extendDeltaDisplay" style="color: #38BDF8; font-weight:600;">+30 Days</strong></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">New Expiration Date:</span>
+              <span id="extendNewExpiryDisplay" style="font-size: 0.95rem; font-weight: 700; color: #A3E635;">—</span>
+            </div>
+          </div>
           <div class="auth-form-group">
             <label for="extendSubNotes" class="auth-label">Administrative Reason / Notes</label>
             <input type="text" id="extendSubNotes" class="auth-input" placeholder="e.g. VIP extension courtesy grant" required />
@@ -3275,15 +3331,15 @@
       <div class="auth-modal-body">
         <div class="auth-alert" id="adminConfirmModalAlert" style="display:none;"></div>
         
-        <div class="confirm-target-box" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color, rgba(255,255,255,0.1)); margin-bottom: 14px;">
-          <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted, #A1A1AA); font-weight: 600; margin-bottom: 4px;" id="adminConfirmTargetLabel">Target Entity</div>
-          <div style="font-size: 1rem; font-weight: 700; color: var(--text-primary, #F4F4F5); display: flex; align-items: center; justify-content: space-between;" id="adminConfirmTargetDisplay">
+        <div class="confirm-target-box" id="adminConfirmTargetBox">
+          <div class="confirm-target-label" id="adminConfirmTargetLabel">Target Entity</div>
+          <div class="confirm-target-display" id="adminConfirmTargetDisplay">
             <span id="adminConfirmTargetName">—</span>
             <span class="plan-code-chip" id="adminConfirmTargetMeta">#—</span>
           </div>
         </div>
 
-        <div class="confirm-consequences-box" style="padding: 14px; border-radius: 8px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.5; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); color: var(--text-primary, #F4F4F5);" id="adminConfirmConsequencesBox">
+        <div class="confirm-consequences-box" id="adminConfirmConsequencesBox">
           <p id="adminConfirmConsequencesText" style="margin: 0;"></p>
         </div>
 
