@@ -26,7 +26,8 @@ import secrets
 from modules.common.network_detector import (
     auto_detect_primary_interface, check_capture_drivers,
     get_windows_network_adapters, get_active_routable_ip,
-    auto_detect_interface_with_rationale
+    auto_detect_interface_with_rationale, check_packet_capture_dependencies,
+    find_wireshark_installation, OFFICIAL_WIRESHARK_DOWNLOAD_URL, OFFICIAL_NPCAP_DOWNLOAD_URL
 )
 from modules.monitoring.capture_engine import (
     FlowStatsCollector, RollingFlowStatsCollector, capture_window_scapy,
@@ -1479,6 +1480,7 @@ def get_adapter_info():
                 driver_status["active_engine"] = "None"
                 driver_status["remediation_guide"] = "DDoS-Guard Service is not installed. Run 'service_manager.ps1 Install' as Administrator."
 
+        dep_status = check_packet_capture_dependencies()
         return jsonify({
             "status": "success",
             "adapter": adapter,
@@ -1487,7 +1489,8 @@ def get_adapter_info():
             "candidates": candidates,
             "driver_status": driver_status,
             "service_state": svc_state,
-            "available_adapters": available_adapters
+            "available_adapters": available_adapters,
+            "dependency_status": dep_status
         }), 200
     except Exception as e:
         log_diag("ADAPTER_INFO_WARN", f"Auto-detection rationale raised: {e}")
@@ -1497,6 +1500,7 @@ def get_adapter_info():
         except Exception:
             pass
         driver_status = check_capture_drivers()
+        dep_status = check_packet_capture_dependencies()
         return jsonify({
             "status": "warning" if available else "error",
             "message": str(e),
@@ -1506,7 +1510,8 @@ def get_adapter_info():
             "candidates": [],
             "driver_status": driver_status,
             "service_state": get_service_status(),
-            "available_adapters": available
+            "available_adapters": available,
+            "dependency_status": dep_status
         }), 200 if available else 500
 
 
@@ -1561,6 +1566,27 @@ def start_service_route():
         return jsonify(res), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/monitoring/dependencies', methods=['GET'])
+def get_monitoring_dependencies():
+    """Returns real-time packet capture dependency status (Wireshark, Npcap, Scapy, Permissions)."""
+    try:
+        force = request.args.get("force", "false").lower() in ("true", "1")
+        status = check_packet_capture_dependencies(force_refresh=force)
+        return jsonify(status), 200
+    except Exception as e:
+        return jsonify({
+            "ready": False,
+            "status": "ERROR",
+            "title": "Dependency Check Failed",
+            "message": f"Could not verify packet capture dependencies: {e}",
+            "remediation": "Check system logs or restart the application.",
+            "download_url": OFFICIAL_WIRESHARK_DOWNLOAD_URL,
+            "npcap_url": OFFICIAL_NPCAP_DOWNLOAD_URL,
+            "requires_restart": False,
+            "details": {}
+        }), 500
 
 
 @app.route('/api/scan', methods=['GET', 'POST'])
@@ -1643,6 +1669,24 @@ def start_scan():
             "live_packets": [],
             "error": None
         })
+
+        # Pre-flight check: verify packet capture engine dependencies before initializing hardware capture
+        dep_status = check_packet_capture_dependencies()
+        if not dep_status.get("ready"):
+            err_msg = dep_status.get("message") or "Packet capture component is missing or unavailable."
+            log_diag("DEPENDENCY_MISSING", f"Capture start rejected: {dep_status.get('status')} - {err_msg}")
+            current_scan_session.update({
+                "status": "error",
+                "label": "Capture Error",
+                "confidence": 0.0,
+                "error_type": "DEPENDENCY_MISSING",
+                "error": err_msg,
+                "message": err_msg,
+                "dependency_status": dep_status,
+                "download_url": dep_status.get("download_url", OFFICIAL_WIRESHARK_DOWNLOAD_URL),
+                "npcap_url": dep_status.get("npcap_url", OFFICIAL_NPCAP_DOWNLOAD_URL)
+            })
+            return jsonify(current_scan_session), 200
 
         # Resolve requested network adapter or auto-detect primary
         try:
@@ -1802,18 +1846,31 @@ def start_scan():
 
             if not svc_state.get("installed"):
                 if not driver_info.get("can_capture_live"):
-                    not_inst_msg = (
-                        "DDoS-Guard Windows Sniffer Service is not installed. "
-                        "Run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Install' as Administrator."
-                    )
-                    log_diag("SERVICE_NOT_INSTALLED", not_inst_msg)
-                    current_scan_session.update({
-                        "status": "error",
-                        "error_type": "SERVICE_NOT_INSTALLED",
-                        "error": not_inst_msg,
-                        "message": not_inst_msg,
-                        "service_state": svc_state
-                    })
+                    dep_check = check_packet_capture_dependencies()
+                    if not dep_check.get("ready"):
+                        not_inst_msg = dep_check.get("message")
+                        log_diag("DEPENDENCY_MISSING", not_inst_msg)
+                        current_scan_session.update({
+                            "status": "error",
+                            "error_type": "DEPENDENCY_MISSING",
+                            "error": not_inst_msg,
+                            "message": not_inst_msg,
+                            "service_state": svc_state,
+                            "dependency_status": dep_check
+                        })
+                    else:
+                        not_inst_msg = (
+                            "DDoS-Guard Windows Sniffer Service is not installed. "
+                            "Run 'powershell -ExecutionPolicy Bypass -File .\\service_manager.ps1 Install' as Administrator."
+                        )
+                        log_diag("SERVICE_NOT_INSTALLED", not_inst_msg)
+                        current_scan_session.update({
+                            "status": "error",
+                            "error_type": "SERVICE_NOT_INSTALLED",
+                            "error": not_inst_msg,
+                            "message": not_inst_msg,
+                            "service_state": svc_state
+                        })
                     return jsonify(current_scan_session), 200
                 else:
                     log_diag("STANDALONE_CAPTURE", f"Windows Service not installed. Running direct Scapy capture on [{adapter_name}] (idx={adapter_idx}).")

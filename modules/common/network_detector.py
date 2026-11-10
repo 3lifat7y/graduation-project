@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import json
+import re
 import socket
 import shutil
 import threading
@@ -22,6 +23,9 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+OFFICIAL_WIRESHARK_DOWNLOAD_URL = "https://www.wireshark.org/download.html"
+OFFICIAL_NPCAP_DOWNLOAD_URL = "https://npcap.com/"
 
 # Thread-safe in-memory cache for Windows network adapter discovery
 _adapter_cache_lock = threading.Lock()
@@ -57,6 +61,239 @@ def find_tshark_path() -> Optional[str]:
         if os.path.isfile(loc):
             return loc
     return None
+
+
+def find_wireshark_installation() -> Dict[str, Any]:
+    """
+    Locates Wireshark GUI or tshark executables in standard installation directories or system PATH.
+    Returns:
+        {
+            "installed": bool,
+            "path": Optional[str],
+            "tshark_path": Optional[str]
+        }
+    """
+    tshark = find_tshark_path()
+    ws_candidates = [
+        r"C:\Program Files\Wireshark\Wireshark.exe",
+        r"C:\Program Files (x86)\Wireshark\Wireshark.exe",
+        r"C:\Program Files\Wireshark\tshark.exe",
+        r"C:\Program Files (x86)\Wireshark\tshark.exe",
+        os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Wireshark", "Wireshark.exe"),
+        os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Wireshark", "Wireshark.exe"),
+    ]
+    ws_exe = None
+    for c in ws_candidates:
+        if os.path.isfile(c):
+            ws_exe = c
+            break
+
+    if not ws_exe:
+        which_ws = shutil.which("wireshark")
+        if which_ws and os.path.isfile(which_ws):
+            ws_exe = which_ws
+        elif tshark:
+            ws_exe = tshark
+
+    return {
+        "installed": bool(ws_exe or tshark),
+        "path": ws_exe or tshark,
+        "tshark_path": tshark
+    }
+
+
+def check_packet_capture_dependencies(
+    force_refresh: bool = False,
+    override_npcap_installed: Optional[bool] = None,
+    override_npcap_running: Optional[bool] = None,
+    override_wireshark_installed: Optional[bool] = None,
+    override_scapy_available: Optional[bool] = None,
+    override_admin: Optional[bool] = None
+) -> Dict[str, Any]:
+    """
+    Performs comprehensive verification of network packet capture dependencies:
+    1. Wireshark installation.
+    2. Npcap driver installation, DLL presence, and kernel driver service status.
+    3. Scapy library and pcap binding.
+    4. Network interface capture accessibility and permissions.
+    
+    Accepts overrides for robust test simulation without altering system state.
+    """
+    admin = is_admin_user() if override_admin is None else override_admin
+    ws_info = find_wireshark_installation()
+    if override_wireshark_installed is not None:
+        ws_info["installed"] = override_wireshark_installed
+        if not override_wireshark_installed:
+            ws_info["path"] = None
+            ws_info["tshark_path"] = None
+
+    # 1. Npcap DLLs and System Files
+    npcap_dlls = [
+        Path(r"C:\Windows\System32\Npcap\wpcap.dll"),
+        Path(r"C:\Windows\System32\Npcap\Packet.dll"),
+        Path(r"C:\Windows\System32\wpcap.dll"),
+        Path(r"C:\Windows\System32\Packet.dll"),
+        Path(r"C:\Windows\System32\drivers\npcap.sys"),
+        Path(r"C:\Program Files\Npcap"),
+        Path(r"C:\Program Files (x86)\Npcap"),
+    ]
+    dll_found = any(p.exists() for p in npcap_dlls)
+
+    # 2. Npcap Driver Service State via Windows Service Controller
+    svc_installed = False
+    svc_running = False
+    svc_state = "UNKNOWN"
+    if os.name == 'nt':
+        try:
+            r = subprocess.run(
+                ["sc.exe", "query", "npcap"],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            out = r.stdout or ""
+            err = r.stderr or ""
+            combined = (out + " " + err).lower()
+            if r.returncode == 0 or "STATE" in out:
+                svc_installed = True
+                m = re.search(r"STATE\s*:\s*\d+\s+([A-Z_]+)", out)
+                if m:
+                    svc_state = m.group(1)
+                    svc_running = (svc_state == "RUNNING")
+            elif "does not exist" in combined or "failed 1060" in combined:
+                svc_installed = False
+                svc_state = "NOT_INSTALLED"
+        except Exception as e:
+            svc_state = "ERROR"
+    else:
+        # Non-Windows POSIX environments (uses libpcap)
+        svc_installed = True
+        svc_running = True
+        svc_state = "N/A"
+
+    npcap_installed = (dll_found or svc_installed)
+    if override_npcap_installed is not None:
+        npcap_installed = override_npcap_installed
+        dll_found = override_npcap_installed
+        svc_installed = override_npcap_installed
+    if override_npcap_running is not None:
+        svc_running = override_npcap_running
+        if not override_npcap_running and svc_state == "RUNNING":
+            svc_state = "STOPPED"
+        elif override_npcap_running and svc_state != "RUNNING":
+            svc_state = "RUNNING"
+
+    # 3. Scapy Library & Interface Access
+    scapy_avail = False
+    use_pcap = False
+    iface_count = 0
+    try:
+        from scapy.all import conf
+        scapy_avail = True
+        use_pcap = bool(getattr(conf, "use_pcap", False))
+        ifaces = getattr(conf, "ifaces", {})
+        iface_count = len(ifaces) if ifaces else 0
+    except Exception:
+        pass
+
+    if override_scapy_available is not None:
+        scapy_avail = override_scapy_available
+        if not override_scapy_available:
+            use_pcap = False
+            iface_count = 0
+
+    # 4. Status determination & actionable guidance synthesis
+    ready = False
+    status_code = "READY"
+    title = "Capture Engine Ready"
+    message = "Packet capture driver (Npcap) and inspection engine are operational."
+    remediation = None
+    requires_restart = False
+
+    if not scapy_avail:
+        status_code = "SCAPY_MISSING"
+        title = "Capture Engine Not Ready"
+        message = "SCOUT cannot start Live Network Monitoring because the 'scapy' packet inspection library is missing."
+        remediation = "Run 'pip install scapy' in your Python environment."
+    elif not npcap_installed:
+        if ws_info.get("installed"):
+            status_code = "WIRESHARK_NO_NPCAP"
+            title = "Npcap Driver Missing"
+            message = (
+                "SCOUT cannot start Live Network Monitoring because the required Npcap packet capture driver is missing. "
+                "Wireshark is installed, but Npcap was not detected."
+            )
+            remediation = (
+                "Please install Npcap from the official website (https://npcap.com/) with 'WinPcap API-compatible Mode' enabled, "
+                "or re-run the Wireshark installer and ensure 'Install Npcap' is selected."
+            )
+        else:
+            status_code = "NPCAP_NOT_INSTALLED"
+            title = "Capture Engine Not Detected"
+            message = (
+                "SCOUT cannot start Live Network Monitoring because the required packet capture component is missing or unavailable. "
+                "Please install Wireshark with Npcap to enable live network packet capture."
+            )
+            remediation = (
+                "Download and install Wireshark from the official Wireshark download page. "
+                "Ensure that the Npcap packet capture library component is checked during installation."
+            )
+    elif os.name == 'nt' and svc_installed and not svc_running:
+        status_code = "NPCAP_SERVICE_NOT_RUNNING"
+        title = "Packet Capture Driver Unavailable"
+        message = (
+            "The Npcap packet capture driver is installed, but its kernel driver service is currently not running. "
+            "SCOUT cannot access physical network adapters until the driver service starts."
+        )
+        remediation = (
+            "Start the Npcap service by running 'net start npcap' as Administrator, "
+            "or restart your computer if Npcap was recently installed."
+        )
+        requires_restart = True
+    elif os.name == 'nt' and not admin and (not use_pcap or iface_count == 0):
+        status_code = "PERMISSIONS_REQUIRED"
+        title = "Elevated Capture Permissions Required"
+        message = (
+            "The Npcap capture driver is installed, but standard user permissions cannot access network interfaces. "
+            "Administrator rights are required to bind packet sniffers on Windows."
+        )
+        remediation = "Please launch SCOUT or your terminal with Administrator privileges ('Run as Administrator')."
+    elif iface_count == 0 and not admin:
+        status_code = "NO_INTERFACES"
+        title = "No Network Interfaces Found"
+        message = "No network adapters were discovered for packet capture. Connect an active Wi-Fi or Ethernet adapter."
+        remediation = "Ensure a physical or wireless network adapter is enabled and connected to a network."
+    else:
+        ready = True
+        status_code = "READY"
+        title = "Capture Engine Ready"
+        message = "Packet capture driver (Npcap) and Scapy engine are operational."
+
+    return {
+        "ready": ready,
+        "status": status_code,
+        "title": title,
+        "message": message,
+        "remediation": remediation,
+        "requires_restart": requires_restart,
+        "download_url": OFFICIAL_WIRESHARK_DOWNLOAD_URL,
+        "npcap_url": OFFICIAL_NPCAP_DOWNLOAD_URL,
+        "details": {
+            "wireshark": ws_info,
+            "npcap": {
+                "installed": npcap_installed,
+                "running": svc_running,
+                "state": svc_state,
+                "dll_found": dll_found
+            },
+            "scapy": {
+                "installed": scapy_avail,
+                "use_pcap": use_pcap,
+                "interface_count": iface_count
+            },
+            "is_admin": admin
+        }
+    }
 
 
 def get_active_routable_ip() -> Optional[str]:
@@ -490,11 +727,18 @@ def check_capture_drivers(tshark_path: Optional[str] = None) -> Dict[str, Any]:
         result["raw_socket_available"] = False
 
     # 5. Set Remediation Guide if live capture is not available in current session
+    deps = check_packet_capture_dependencies()
+    result["dependency_details"] = deps
+    result["download_url"] = deps.get("download_url", OFFICIAL_WIRESHARK_DOWNLOAD_URL)
+    result["npcap_url"] = deps.get("npcap_url", OFFICIAL_NPCAP_DOWNLOAD_URL)
+
     if not result["can_capture_live"]:
-        if not result["npcap_installed"]:
+        if deps.get("remediation"):
+            result["remediation_guide"] = deps["remediation"]
+        elif not result["npcap_installed"]:
             result["remediation_guide"] = (
-                "Npcap packet capture driver is not installed. "
-                "Please download and install Npcap from https://npcap.com (ensure 'Install Npcap in WinPcap API-compatible Mode' is enabled)."
+                f"Npcap packet capture driver is not installed. "
+                f"Please install Wireshark with Npcap ({OFFICIAL_WIRESHARK_DOWNLOAD_URL}) or download Npcap ({OFFICIAL_NPCAP_DOWNLOAD_URL})."
             )
         elif not result["is_admin"]:
             result["remediation_guide"] = (

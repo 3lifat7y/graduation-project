@@ -2364,13 +2364,31 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Update Active Link in Global Top Navbar
+  // Update Active Link in Global Top Navbar & Public Sidebar
   function setTopNavActive(navName) {
-    topNavLinks.forEach(link => {
-      if (link.getAttribute("data-top-nav") === navName) {
+    // 1. Top Navbar Links (Public Links & Tool Links)
+    const topLinks = document.querySelectorAll(".public-top-nav-links .public-nav-link, .top-nav-link");
+    topLinks.forEach(link => {
+      const isTarget = link.getAttribute("data-top-nav") === navName;
+      if (isTarget) {
         link.classList.add("active");
+        link.setAttribute("aria-current", "page");
       } else {
         link.classList.remove("active");
+        link.removeAttribute("aria-current");
+      }
+    });
+
+    // 2. Mobile Sidebar Links
+    const mobileLinks = document.querySelectorAll(".public-sidebar-nav-item");
+    mobileLinks.forEach(link => {
+      const isTarget = link.getAttribute("data-nav") === navName;
+      if (isTarget) {
+        link.classList.add("active");
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.classList.remove("active");
+        link.removeAttribute("aria-current");
       }
     });
   }
@@ -2406,10 +2424,20 @@ document.addEventListener("DOMContentLoaded", () => {
         metaTheme.setAttribute("content", isDark ? "#09090B" : "#FAFAFA");
       }
 
+      // Re-render SVG connectors for mindmap if active on page
+      if (typeof window.renderMindMapConnectors === "function") {
+        try { window.renderMindMapConnectors(); } catch (_) {}
+      }
+
+      // Notify external components of theme change
+      try {
+        window.dispatchEvent(new CustomEvent("scout-theme-changed", { detail: { theme } }));
+      } catch (_) {}
+
       if (animate) {
         window.setTimeout(() => {
           document.body.classList.remove("theme-transitioning");
-        }, 260);
+        }, 140);
       }
     }
 
@@ -3186,7 +3214,19 @@ document.addEventListener("DOMContentLoaded", () => {
       if (footerEl) footerEl.style.display = "block";
 
       setSidebarActive("home");
-      setTopNavActive("home");
+
+      // Check if URL has a section hash like #threat-intelligence or #team
+      const currentHash = window.location.hash ? window.location.hash.replace("#", "") : null;
+      let matchedNav = "home";
+      if (currentHash) {
+        for (const [nav, secId] of Object.entries(PUBLIC_SECTION_TARGETS)) {
+          if (secId === currentHash || nav === currentHash) {
+            matchedNav = nav;
+            break;
+          }
+        }
+      }
+      setTopNavActive(matchedNav);
 
       loadPublicHomepagePlans();
 
@@ -3196,36 +3236,117 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(window.initMindMap, 50);
       }
 
+      if (matchedNav !== "home" && PUBLIC_SECTION_TARGETS[matchedNav]) {
+        setTimeout(() => {
+          scrollToPublicSection(PUBLIC_SECTION_TARGETS[matchedNav], matchedNav);
+        }, 120);
+      }
+
       if (updateHistory && window.location.search) {
         history.pushState({ view: "landing" }, "", window.location.pathname + (window.location.hash || ""));
       }
     }
   }
 
-  // Intercept Navigation Link Clicks in Global Top Navbar
-  topNavLinks.forEach(link => {
-    link.addEventListener("click", (e) => {
-      const navTarget = link.getAttribute("data-top-nav");
-      if (navTarget === "monitoring") {
-        e.preventDefault();
-        switchView("monitoring");
-      } else if (navTarget === "port-scanner") {
-        e.preventDefault();
-        switchView("port-scanner");
-      } else if (navTarget === "home") {
-        if (document.body.classList.contains("dedicated-mode-monitoring") || document.body.classList.contains("dedicated-mode-port-scanner") || document.body.classList.contains("plans-view") || document.body.classList.contains("admin-view")) {
-          e.preventDefault();
-          switchView("landing");
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        } else {
-          document.body.classList.remove("mobile-sidebar-open");
-          if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
-          setSidebarActive("home");
-          setTopNavActive("home");
-        }
-      }
+  // ============================================================================
+  // Public Section Navigation Controller
+  // ============================================================================
+  const PUBLIC_SECTION_TARGETS = {
+    "home": "overview",
+    "threats": "threat-intelligence",
+    "architecture": "system-architecture",
+    "prevention": "prevention",
+    "pricing": "public-pricing",
+    "team": "team"
+  };
+
+  let isNavigatingViaClick = false;
+  let navClickLockTimer = null;
+
+  function scrollToPublicSection(sectionId, navName) {
+    const targetElement = document.getElementById(sectionId);
+    if (!targetElement) return;
+
+    // Immediately mark target link active
+    setTopNavActive(navName);
+
+    // Lock scrollspy during smooth scroll animation to prevent intermediate flickering
+    isNavigatingViaClick = true;
+    if (navClickLockTimer) clearTimeout(navClickLockTimer);
+
+    const navHeight = globalTopNavbar ? globalTopNavbar.getBoundingClientRect().height : 60;
+    const targetTop = targetElement.getBoundingClientRect().top + window.pageYOffset - navHeight - 16;
+    const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    window.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: prefersReduced ? "auto" : "smooth"
     });
-  });
+
+    // Update URL hash cleanly without jarring page jumps
+    if (window.history && window.history.pushState) {
+      window.history.pushState(null, "", `#${sectionId}`);
+    }
+
+    // Auto-close mobile sidebar drawer if open
+    document.body.classList.remove("mobile-sidebar-open");
+    if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
+    if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+
+    navClickLockTimer = setTimeout(() => {
+      isNavigatingViaClick = false;
+    }, prefersReduced ? 50 : 550);
+  }
+
+  // Intercept Navigation Link Clicks in Global Top Navbar & Public Sidebar
+  function initPublicNavLinks() {
+    const publicLinks = document.querySelectorAll(".public-top-nav-links .public-nav-link, .top-nav-link, .public-sidebar-nav-item");
+
+    publicLinks.forEach(link => {
+      link.addEventListener("click", (e) => {
+        const navTarget = link.getAttribute("data-top-nav") || link.getAttribute("data-nav");
+        if (!navTarget) return;
+
+        if (navTarget === "monitoring") {
+          e.preventDefault();
+          switchView("monitoring");
+          return;
+        }
+        if (navTarget === "port-scanner") {
+          e.preventDefault();
+          switchView("port-scanner");
+          return;
+        }
+        if (navTarget === "plans") {
+          e.preventDefault();
+          switchView("plans");
+          return;
+        }
+
+        const sectionId = PUBLIC_SECTION_TARGETS[navTarget];
+        if (!sectionId) return;
+
+        e.preventDefault();
+
+        const isInDedicatedView = document.body.classList.contains("dedicated-mode-monitoring") ||
+          document.body.classList.contains("dedicated-mode-port-scanner") ||
+          document.body.classList.contains("plans-view") ||
+          document.body.classList.contains("admin-view") ||
+          document.body.classList.contains("dashboard-view");
+
+        if (isInDedicatedView) {
+          switchView("landing", false);
+          setTimeout(() => {
+            scrollToPublicSection(sectionId, navTarget);
+          }, 80);
+        } else {
+          scrollToPublicSection(sectionId, navTarget);
+        }
+      });
+    });
+  }
+
+  initPublicNavLinks();
 
   // Helper to auto-close mobile drawer after navigation
   function autoCloseSidebarAfterNav() {
@@ -3443,7 +3564,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Listen to popstate (browser back/forward)
   window.addEventListener("popstate", () => {
-    switchView(getQueryView(), false);
+    const qView = getQueryView();
+    if (qView === "landing" && window.location.hash) {
+      const hash = window.location.hash.replace("#", "");
+      for (const [nav, secId] of Object.entries(PUBLIC_SECTION_TARGETS)) {
+        if (secId === hash || nav === hash) {
+          scrollToPublicSection(secId, nav);
+          return;
+        }
+      }
+    }
+    switchView(qView, false);
   });
 
   // Back To Top Button
@@ -3454,26 +3585,80 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         backToTopBtn.classList.remove("visible");
       }
-    });
+    }, { passive: true });
 
     backToTopBtn.addEventListener("click", () => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToPublicSection("overview", "home");
     });
   }
 
-  // ScrollSpy for Active Navigation Links on Landing Page
-  const navSections = document.querySelectorAll("section[id]");
+  // High-Performance ScrollSpy for Active Section Tracking on Landing Page
+  function initPublicScrollSpy() {
+    const trackedSections = [
+      { id: "overview", nav: "home" },
+      { id: "network-discovery-section", nav: "home" },
+      { id: "threat-intelligence", nav: "threats" },
+      { id: "system-architecture", nav: "architecture" },
+      { id: "prevention", nav: "prevention" },
+      { id: "public-pricing", nav: "pricing" },
+      { id: "team", nav: "team" }
+    ];
 
-  function highlightNavOnScroll() {
-    // Strictly restrict landing-page scrollspy to home-view to prevent
-    // clearing or disrupting active navigation state in admin, dashboard, or dedicated views.
-    if (!document.body.classList.contains("home-view")) {
-      return;
+    function evaluateActiveSection() {
+      if (isNavigatingViaClick) return;
+      if (!document.body.classList.contains("home-view")) return;
+
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+      // 1. If near the very top of the page, activate Home
+      if (scrollY < 100) {
+        setTopNavActive("home");
+        return;
+      }
+
+      // 2. If scrolled to the bottom of document, activate Team (last section)
+      const windowHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+      if (windowHeight + scrollY >= docHeight - 50) {
+        setTopNavActive("team");
+        return;
+      }
+
+      // 3. Mathematical active section detection:
+      // The section spanning across the reading threshold line (navbar height + 40px)
+      const readingLine = 100;
+      let activeNav = "home";
+
+      for (let i = 0; i < trackedSections.length; i++) {
+        const secEl = document.getElementById(trackedSections[i].id);
+        if (!secEl) continue;
+        const rect = secEl.getBoundingClientRect();
+        if (rect.top <= readingLine && rect.bottom > readingLine) {
+          activeNav = trackedSections[i].nav;
+          break;
+        }
+      }
+
+      setTopNavActive(activeNav);
     }
-    setSidebarActive("home");
+
+    // Passive, 60fps-throttled scroll listener using requestAnimationFrame
+    let scrollTicking = false;
+    window.addEventListener("scroll", () => {
+      if (!scrollTicking) {
+        window.requestAnimationFrame(() => {
+          evaluateActiveSection();
+          scrollTicking = false;
+        });
+        scrollTicking = true;
+      }
+    }, { passive: true });
+
+    // Initial evaluation on load
+    evaluateActiveSection();
   }
 
-  window.addEventListener("scroll", highlightNavOnScroll, { passive: true });
+  initPublicScrollSpy();
 
   const globalTopNavbar = document.getElementById("globalTopNavbar");
   if (globalTopNavbar) {
