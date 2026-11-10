@@ -2850,6 +2850,935 @@
                 </div>
               </div>
             </div>
+
+            <!-- ==============================================================================
+                 Dedicated Full-Page Management Views (Part 1, 2, 3 & 6)
+                 Occupies full width and height of admin console content area inside app shell
+                 ============================================================================== -->
+
+            <!-- 1. Dedicated Page: Create User -->
+            <div class="admin-panel full-page-management-view" id="adminPageUserCreate" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-users" class="breadcrumb-link" data-back-target="admin-users"><i class="fas fa-users-gear"></i> Users</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Create New User</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" data-back-target="admin-users">
+                    <i class="fas fa-arrow-left"></i> Back to Users
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-user-plus"></i> Identity Provisioning</div>
+                  <h2 class="management-title">Create New User Account</h2>
+                  <p class="management-subtitle">Provision an operator or administrator account with immediate platform credentials.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageCreateUserAlert" style="display:none;"></div>
+
+              <div class="management-card">
+                <h3 class="management-card-title"><i class="fas fa-id-card"></i> Account Details & Clearance</h3>
+                <form id="fullPageCreateUserForm" onsubmit="return false;">
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fullPageCreateFullName" class="management-label">Full Name</label>
+                      <input type="text" id="fullPageCreateFullName" class="management-input" placeholder="e.g. Alex Morgan" />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fullPageCreateEmail" class="management-label">Email Address <span class="required-star">*</span></label>
+                      <input type="email" id="fullPageCreateEmail" class="management-input" placeholder="operator@domain.com" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fullPageCreatePhone" class="management-label">Phone Number</label>
+                      <input type="tel" id="fullPageCreatePhone" class="management-input" placeholder="+1 (555) 123-4567" />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fullPageCreateRole" class="management-label">Platform Role <span class="required-star">*</span></label>
+                      <select id="fullPageCreateRole" class="management-select">
+                        <option value="User" selected>Operator (User)</option>
+                        <option value="Admin">System Administrator (Root Clearance)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fullPageCreatePassword" class="management-label">Initial Password <span class="required-star">*</span></label>
+                      <input type="password" id="fullPageCreatePassword" class="management-input" placeholder="Exactly 8 digits (0–9)" required />
+                      <div class="management-help-text"><i class="fas fa-shield-halved"></i> Must contain exactly 8 numeric digits (0–9). Letters and special characters are rejected.</div>
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fullPageCreateConfirmPassword" class="management-label">Confirm Password <span class="required-star">*</span></label>
+                      <input type="password" id="fullPageCreateConfirmPassword" class="management-input" placeholder="Repeat 8 digits" required />
+                    </div>
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" data-back-target="admin-users">Cancel</button>
+                    <button type="button" class="btn-management-primary" id="fullPageCreateUserSubmitBtn">
+                      <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 2. Dedicated Page: User Details -->
+            <div class="admin-panel full-page-management-view" id="adminPageUserDetails" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-users" class="breadcrumb-link" data-back-target="admin-users"><i class="fas fa-users-gear"></i> Users</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current" id="fpBreadcrumbUserName">User Dossier</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" data-back-target="admin-users">
+                    <i class="fas fa-arrow-left"></i> Back to Users
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-id-badge"></i> Operator Dossier</div>
+                  <h2 class="management-title" id="fpUserDetailsTitle">User Dossier & Profile Telemetry</h2>
+                  <p class="management-subtitle">Account profile overview, operational security metrics, and assigned subscription history.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageUserDetailsAlert" style="display:none;"></div>
+
+              <div id="fpUserDetailsContent">
+                <!-- Profile & Identity Telemetry Card -->
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-user-shield"></i> Profile & Identity Telemetry</h3>
+                  <div class="management-dossier-grid">
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-hashtag"></i> User ID</span>
+                      <span class="management-dossier-val" id="fpDossierUserId">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-user"></i> Username</span>
+                      <span class="management-dossier-val" id="fpDossierUsername">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-envelope"></i> Email</span>
+                      <span class="management-dossier-val" id="fpDossierEmail">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-phone"></i> Phone Number</span>
+                      <span class="management-dossier-val" id="fpDossierPhone">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-signature"></i> Full Name</span>
+                      <span class="management-dossier-val" id="fpDossierFullName">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-shield-halved"></i> Role</span>
+                      <span class="management-dossier-val" id="fpDossierRole">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-circle-check"></i> Account Status</span>
+                      <span class="management-dossier-val" id="fpDossierStatus">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-calendar-plus"></i> Member Since</span>
+                      <span class="management-dossier-val" id="fpDossierCreated">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-clock-rotate-left"></i> Last Login</span>
+                      <span class="management-dossier-val" id="fpDossierLastLogin">—</span>
+                    </div>
+                  </div>
+
+                  <div class="management-actions-footer" id="fpDossierActions">
+                    <!-- Populated dynamically with Edit User, Suspend, Delete -->
+                  </div>
+                </div>
+
+                <!-- Assigned Subscriptions & Audit History Card -->
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-clock-rotate-left"></i> Assigned Subscriptions & Historical Log</h3>
+                  <div class="admin-table-container">
+                    <table class="admin-table" style="width:100%;">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Plan Name</th>
+                          <th>Status</th>
+                          <th>Start Date</th>
+                          <th>End Date</th>
+                          <th>Notes / Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody id="fpUserSubsTableBody">
+                        <tr><td colspan="6" class="text-center py-3 text-muted">No historical subscription records found.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error Box when user ID is invalid -->
+              <div id="fpUserDetailsError" class="management-card" style="display:none; text-align:center; padding: 40px 20px;">
+                <i class="fas fa-triangle-exclamation" style="font-size: 2.5rem; color: #EF4444; margin-bottom: 14px;"></i>
+                <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 8px;">User Record Not Found</h3>
+                <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 20px auto;" id="fpUserDetailsErrorMsg">
+                  The requested operator ID does not exist or has been removed.
+                </p>
+                <button type="button" class="btn-management-primary" data-back-target="admin-users">
+                  <i class="fas fa-arrow-left"></i> Return to Users Table
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Dedicated Page: Edit User -->
+            <div class="admin-panel full-page-management-view" id="adminPageUserEdit" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-users" class="breadcrumb-link" data-back-target="admin-users"><i class="fas fa-users-gear"></i> Users</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <a href="#" class="breadcrumb-link" id="fpEditBreadcrumbDossier"><span id="fpEditBreadcrumbName">User Dossier</span></a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Edit Account</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" id="fpEditBackToDossierBtn">
+                    <i class="fas fa-arrow-left"></i> Back to User Dossier
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-user-pen"></i> Operator Administration</div>
+                  <h2 class="management-title">Edit Operator Account</h2>
+                  <p class="management-subtitle">Update operator profile credentials, contact info, and clearance parameters.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageUserEditAlert" style="display:none;"></div>
+
+              <div class="management-card">
+                <h3 class="management-card-title"><i class="fas fa-pen-to-square"></i> Operator Profile Information</h3>
+                <form id="fullPageUserEditForm" onsubmit="return false;">
+                  <input type="hidden" id="fpEditUserId" />
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label class="management-label">User ID (Permanent)</label>
+                      <input type="text" id="fpEditUserDispId" class="management-input" disabled />
+                    </div>
+                    <div class="management-form-group">
+                      <label class="management-label">Username (Internal)</label>
+                      <input type="text" id="fpEditUsername" class="management-input" disabled />
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpEditFullName" class="management-label">Full Name</label>
+                      <input type="text" id="fpEditFullName" class="management-input" placeholder="e.g. Alex Morgan" />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpEditEmail" class="management-label">Email Address <span class="required-star">*</span></label>
+                      <input type="email" id="fpEditEmail" class="management-input" placeholder="operator@domain.com" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpEditPhone" class="management-label">Phone Number</label>
+                      <input type="tel" id="fpEditPhone" class="management-input" placeholder="+1 (555) 123-4567" />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpEditRole" class="management-label">Platform Role</label>
+                      <select id="fpEditRole" class="management-select">
+                        <option value="User">Operator (User)</option>
+                        <option value="Admin">System Administrator</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" id="fpEditUserCancelBtn">Cancel</button>
+                    <button type="button" class="btn-management-primary" id="fpEditUserSaveBtn">
+                      <i class="fas fa-save"></i> Save Changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 4. Dedicated Page: Create Subscription Plan -->
+            <div class="admin-panel full-page-management-view" id="adminPagePlanCreate" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-plans" class="breadcrumb-link" data-back-target="admin-plans"><i class="fas fa-gem"></i> Subscription Plans</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Create Plan</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" data-back-target="admin-plans">
+                    <i class="fas fa-arrow-left"></i> Back to Plans
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-plus"></i> Catalog Provisioning</div>
+                  <h2 class="management-title">Create Subscription Plan</h2>
+                  <p class="management-subtitle">Architect access tier parameters, pricing, duration, feature allowances, and service quotas.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPagePlanCreateAlert" style="display:none;"></div>
+
+              <div class="management-card">
+                <h3 class="management-card-title"><i class="fas fa-tag"></i> Plan Specifications & Pricing</h3>
+                <form id="fullPagePlanCreateForm" onsubmit="return false;">
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpCreatePlanCode" class="management-label">Plan Code Identifier <span class="required-star">*</span></label>
+                      <input type="text" id="fpCreatePlanCode" class="management-input" placeholder="e.g. enterprise-soc" required />
+                      <div class="management-help-text">Unique URL-friendly slug (lowercase, dashes allowed)</div>
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpCreatePlanName" class="management-label">Plan Display Name <span class="required-star">*</span></label>
+                      <input type="text" id="fpCreatePlanName" class="management-input" placeholder="e.g. Enterprise SOC Tier" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpCreatePlanPrice" class="management-label">Price (USD) <span class="required-star">*</span></label>
+                      <input type="number" id="fpCreatePlanPrice" class="management-input" step="0.01" min="0" placeholder="0.00" required />
+                      <div class="management-help-text">Set 0.00 for complimentary/community access</div>
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpCreatePlanDuration" class="management-label">Duration (Days) <span class="required-star">*</span></label>
+                      <input type="number" id="fpCreatePlanDuration" class="management-input" min="1" placeholder="30" value="30" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-group">
+                    <label for="fpCreatePlanDescription" class="management-label">Plan Description & Value Proposition</label>
+                    <textarea id="fpCreatePlanDescription" class="management-textarea" rows="3" placeholder="Describe the capabilities, SLA, and target organization size..."></textarea>
+                  </div>
+
+                  <h3 class="management-card-title" style="margin-top:24px;"><i class="fas fa-sliders"></i> Feature Entitlements & Quotas</h3>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpCreatePlanMaxScans" class="management-label">Daily Port Scans Limit</label>
+                      <input type="number" id="fpCreatePlanMaxScans" class="management-input" value="100" min="1" />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpCreatePlanTrafficLimit" class="management-label">Live Traffic Packet Rate Limit</label>
+                      <input type="number" id="fpCreatePlanTrafficLimit" class="management-input" value="10000" min="100" />
+                    </div>
+                  </div>
+
+                  <div style="display:flex; flex-wrap:wrap; gap:20px; padding: 12px 0;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpCreatePlanFeatMonitoring" checked /> Live Network Monitoring Access
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpCreatePlanFeatPortScan" checked /> Port Scanner Access
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpCreatePlanFeatDiscovery" /> Subnet Network Discovery Access
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpCreatePlanIsActive" checked /> Immediately Active in Public Catalog
+                    </label>
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" data-back-target="admin-plans">Cancel</button>
+                    <button type="button" class="btn-management-primary" id="fpCreatePlanSubmitBtn">
+                      <i class="fas fa-plus"></i> Create Plan
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 5. Dedicated Page: Plan Details -->
+            <div class="admin-panel full-page-management-view" id="adminPagePlanDetails" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-plans" class="breadcrumb-link" data-back-target="admin-plans"><i class="fas fa-gem"></i> Subscription Plans</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current" id="fpBreadcrumbPlanName">Plan Dossier</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" data-back-target="admin-plans">
+                    <i class="fas fa-arrow-left"></i> Back to Plans
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-gem"></i> Plan Dossier</div>
+                  <h2 class="management-title" id="fpPlanDetailsTitle">Subscription Plan Dossier</h2>
+                  <p class="management-subtitle">Comprehensive tier specifications, pricing breakdown, subscriber census, and feature matrix.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPagePlanDetailsAlert" style="display:none;"></div>
+
+              <div id="fpPlanDetailsContent">
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-circle-info"></i> Plan Overview & Telemetry</h3>
+                  <div class="management-dossier-grid">
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-hashtag"></i> Plan ID</span>
+                      <span class="management-dossier-val" id="fpPlanDossierId">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-barcode"></i> Plan Code</span>
+                      <span class="management-dossier-val" id="fpPlanDossierCode">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-font"></i> Plan Name</span>
+                      <span class="management-dossier-val" id="fpPlanDossierName">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-dollar-sign"></i> Price</span>
+                      <span class="management-dossier-val" id="fpPlanDossierPrice">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-calendar-day"></i> Duration</span>
+                      <span class="management-dossier-val" id="fpPlanDossierDuration">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-circle-check"></i> Status</span>
+                      <span class="management-dossier-val" id="fpPlanDossierStatus">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-users"></i> Subscribers</span>
+                      <span class="management-dossier-val" id="fpPlanDossierSubscribers">—</span>
+                    </div>
+                  </div>
+
+                  <div style="margin: 16px 0;">
+                    <span class="management-label">Description</span>
+                    <p id="fpPlanDossierDesc" style="color:var(--text-muted); font-size:0.9rem; line-height:1.5; margin: 4px 0 0 0;">—</p>
+                  </div>
+
+                  <div style="margin: 16px 0;">
+                    <span class="management-label">Enabled Features & Allowances</span>
+                    <div id="fpPlanDossierFeatures" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;"></div>
+                  </div>
+
+                  <div class="management-actions-footer" id="fpPlanDetailsActions">
+                    <!-- Dynamic actions: Edit, Archive, Delete -->
+                  </div>
+                </div>
+
+                <!-- Subscribers census card -->
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-id-badge"></i> Active Operators under this Plan</h3>
+                  <div class="admin-table-container">
+                    <table class="admin-table" style="width:100%;">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Operator</th>
+                          <th>Email Address</th>
+                          <th>Start Date</th>
+                          <th>End Date</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody id="fpPlanSubscribersTableBody">
+                        <tr><td colspan="6" class="text-center py-3 text-muted">No operators currently assigned to this tier.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error Box when Plan ID is invalid -->
+              <div id="fpPlanDetailsError" class="management-card" style="display:none; text-align:center; padding: 40px 20px;">
+                <i class="fas fa-triangle-exclamation" style="font-size: 2.5rem; color: #EF4444; margin-bottom: 14px;"></i>
+                <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 8px;">Plan Not Found</h3>
+                <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 20px auto;">
+                  The requested subscription plan does not exist or has been removed.
+                </p>
+                <button type="button" class="btn-management-primary" data-back-target="admin-plans">
+                  <i class="fas fa-arrow-left"></i> Return to Plans Catalog
+                </button>
+              </div>
+            </div>
+
+            <!-- 6. Dedicated Page: Edit Subscription Plan -->
+            <div class="admin-panel full-page-management-view" id="adminPagePlanEdit" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-plans" class="breadcrumb-link" data-back-target="admin-plans"><i class="fas fa-gem"></i> Subscription Plans</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <a href="#" class="breadcrumb-link" id="fpEditPlanBreadcrumbLink"><span id="fpEditPlanBreadcrumbName">Plan Dossier</span></a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Edit Plan</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" id="fpEditPlanBackBtn">
+                    <i class="fas fa-arrow-left"></i> Back to Plan Dossier
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-pen-to-square"></i> Catalog Governance</div>
+                  <h2 class="management-title">Edit Subscription Plan</h2>
+                  <p class="management-subtitle">Modify pricing structure, service features, quotas, or catalog visibility.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPagePlanEditAlert" style="display:none;"></div>
+
+              <div class="management-card">
+                <h3 class="management-card-title"><i class="fas fa-tag"></i> Plan Configuration</h3>
+                <form id="fullPagePlanEditForm" onsubmit="return false;">
+                  <input type="hidden" id="fpEditPlanId" />
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpEditPlanCode" class="management-label">Plan Code Identifier</label>
+                      <input type="text" id="fpEditPlanCode" class="management-input" required />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpEditPlanName" class="management-label">Plan Display Name <span class="required-star">*</span></label>
+                      <input type="text" id="fpEditPlanName" class="management-input" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpEditPlanPrice" class="management-label">Price (USD) <span class="required-star">*</span></label>
+                      <input type="number" id="fpEditPlanPrice" class="management-input" step="0.01" min="0" required />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpEditPlanDuration" class="management-label">Duration (Days) <span class="required-star">*</span></label>
+                      <input type="number" id="fpEditPlanDuration" class="management-input" min="1" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-group">
+                    <label for="fpEditPlanDescription" class="management-label">Plan Description</label>
+                    <textarea id="fpEditPlanDescription" class="management-textarea" rows="3"></textarea>
+                  </div>
+
+                  <h3 class="management-card-title" style="margin-top:24px;"><i class="fas fa-sliders"></i> Features & Quotas</h3>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpEditPlanMaxScans" class="management-label">Daily Port Scans Limit</label>
+                      <input type="number" id="fpEditPlanMaxScans" class="management-input" min="1" />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpEditPlanTrafficLimit" class="management-label">Live Traffic Packet Rate Limit</label>
+                      <input type="number" id="fpEditPlanTrafficLimit" class="management-input" min="100" />
+                    </div>
+                  </div>
+
+                  <div style="display:flex; flex-wrap:wrap; gap:20px; padding: 12px 0;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpEditPlanFeatMonitoring" /> Live Network Monitoring Access
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpEditPlanFeatPortScan" /> Port Scanner Access
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpEditPlanFeatDiscovery" /> Subnet Network Discovery Access
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
+                      <input type="checkbox" id="fpEditPlanIsActive" /> Active in Public Catalog
+                    </label>
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" id="fpEditPlanCancelBtn">Cancel</button>
+                    <button type="button" class="btn-management-primary" id="fpEditPlanSubmitBtn">
+                      <i class="fas fa-save"></i> Save Plan Changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 7. Dedicated Page: Subscription Details -->
+            <div class="admin-panel full-page-management-view" id="adminPageSubDetails" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-subs" class="breadcrumb-link" data-back-target="admin-subs"><i class="fas fa-id-card"></i> Subscriptions</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current" id="fpBreadcrumbSubId">Subscription Dossier</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" data-back-target="admin-subs">
+                    <i class="fas fa-arrow-left"></i> Back to Subscriptions
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-id-card"></i> License Dossier</div>
+                  <h2 class="management-title">Subscription Record & License Telemetry</h2>
+                  <p class="management-subtitle">Full operator license assignment, terms, notes, and chronological audit trail.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageSubDetailsAlert" style="display:none;"></div>
+
+              <div id="fpSubDetailsContent">
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-circle-check"></i> License Assignment & Status</h3>
+                  <div class="management-dossier-grid">
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-hashtag"></i> Subscription ID</span>
+                      <span class="management-dossier-val" id="fpSubDossierId">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-user"></i> Operator</span>
+                      <span class="management-dossier-val" id="fpSubDossierUsername">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-envelope"></i> Email</span>
+                      <span class="management-dossier-val" id="fpSubDossierEmail">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-gem"></i> Assigned Plan</span>
+                      <span class="management-dossier-val" id="fpSubDossierPlan">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-circle-info"></i> Status</span>
+                      <span class="management-dossier-val" id="fpSubDossierStatus">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-calendar-check"></i> Start Date</span>
+                      <span class="management-dossier-val" id="fpSubDossierStartDate">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-calendar-xmark"></i> Expiration Date</span>
+                      <span class="management-dossier-val" id="fpSubDossierEndDate">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-arrows-rotate"></i> Auto-Renewal</span>
+                      <span class="management-dossier-val" id="fpSubDossierAutoRenew">—</span>
+                    </div>
+                  </div>
+
+                  <div class="management-actions-footer" id="fpSubDetailsActions">
+                    <!-- Populated dynamically with Edit Dates, Extend, Cancel, Renew, Delete -->
+                  </div>
+                </div>
+
+                <!-- Administrative Notes Card -->
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-pen-to-square"></i> Operational Notes & Administrative Log</h3>
+                  <div style="display:grid; grid-template-columns: 1fr auto; gap: 12px; align-items: flex-end;">
+                    <div>
+                      <label for="fpSubNotesInput" class="management-label">Administrative Notes / Reasons</label>
+                      <input type="text" id="fpSubNotesInput" class="management-input" placeholder="e.g. VIP client approved under SLA policy" />
+                    </div>
+                    <button type="button" class="btn-management-primary" id="fpSubNotesSaveBtn">
+                      <i class="fas fa-save"></i> Save Notes
+                    </button>
+                  </div>
+                  <div id="fpSubNotesMsg" style="display:none; margin-top:8px; font-size:0.84rem; padding: 6px 12px; border-radius:6px;"></div>
+                </div>
+
+                <!-- Audit History Card -->
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-clock-rotate-left"></i> Chronological Audit Trail</h3>
+                  <div class="admin-table-container">
+                    <table class="admin-table" style="width:100%;">
+                      <thead>
+                        <tr>
+                          <th>Timestamp</th>
+                          <th>Action</th>
+                          <th>Operator</th>
+                          <th>IP Address</th>
+                          <th>Notes / Details</th>
+                        </tr>
+                      </thead>
+                      <tbody id="fpSubAuditTableBody">
+                        <tr><td colspan="5" class="text-center py-3 text-muted">No audit events logged for this subscription.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error Box when Subscription ID is invalid -->
+              <div id="fpSubDetailsError" class="management-card" style="display:none; text-align:center; padding: 40px 20px;">
+                <i class="fas fa-triangle-exclamation" style="font-size: 2.5rem; color: #EF4444; margin-bottom: 14px;"></i>
+                <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 8px;">Subscription Record Not Found</h3>
+                <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 20px auto;">
+                  The requested subscription record does not exist or has been removed.
+                </p>
+                <button type="button" class="btn-management-primary" data-back-target="admin-subs">
+                  <i class="fas fa-arrow-left"></i> Return to Subscriptions
+                </button>
+              </div>
+            </div>
+
+            <!-- 8. Dedicated Page: Edit Subscription Dates & Terms -->
+            <div class="admin-panel full-page-management-view" id="adminPageSubEdit" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-subs" class="breadcrumb-link" data-back-target="admin-subs"><i class="fas fa-id-card"></i> Subscriptions</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <a href="#" class="breadcrumb-link" id="fpEditSubBreadcrumbLink"><span id="fpEditSubBreadcrumbName">Subscription Dossier</span></a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Adjust Dates & Terms</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" id="fpEditSubBackBtn">
+                    <i class="fas fa-arrow-left"></i> Back to Subscription Dossier
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-calendar-pen"></i> Term Adjustment</div>
+                  <h2 class="management-title">Adjust Subscription Dates & Terms</h2>
+                  <p class="management-subtitle">Explicitly modify licensing start date, expiration date, and administrative notes.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageSubEditAlert" style="display:none;"></div>
+
+              <div class="management-card">
+                <h3 class="management-card-title"><i class="fas fa-calendar-days"></i> Validity Dates & Operational Reason</h3>
+                <form id="fullPageSubEditForm" onsubmit="return false;">
+                  <input type="hidden" id="fpEditSubId" />
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label class="management-label">Operator Account</label>
+                      <input type="text" id="fpEditSubUser" class="management-input" disabled />
+                    </div>
+                    <div class="management-form-group">
+                      <label class="management-label">Subscription Plan</label>
+                      <input type="text" id="fpEditSubPlan" class="management-input" disabled />
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpEditSubStartDate" class="management-label">Start Date (UTC) <span class="required-star">*</span></label>
+                      <input type="datetime-local" id="fpEditSubStartDate" class="management-input" required />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpEditSubEndDate" class="management-label">End / Expiration Date (UTC) <span class="required-star">*</span></label>
+                      <input type="datetime-local" id="fpEditSubEndDate" class="management-input" required />
+                    </div>
+                  </div>
+
+                  <div class="management-form-group">
+                    <label for="fpEditSubReason" class="management-label">Administrative Note / Adjustment Reason</label>
+                    <input type="text" id="fpEditSubReason" class="management-input" placeholder="e.g. Terms modified per client request" />
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" id="fpEditSubCancelBtn">Cancel</button>
+                    <button type="button" class="btn-management-primary" id="fpEditSubSubmitBtn">
+                      <i class="fas fa-save"></i> Save Adjustment
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 9. Dedicated Page: Extend Subscription -->
+            <div class="admin-panel full-page-management-view" id="adminPageSubExtend" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-subs" class="breadcrumb-link" data-back-target="admin-subs"><i class="fas fa-id-card"></i> Subscriptions</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <a href="#" class="breadcrumb-link" id="fpExtendSubBreadcrumbLink"><span id="fpExtendSubBreadcrumbName">Subscription Dossier</span></a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Extend Validity</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" id="fpExtendSubBackBtn">
+                    <i class="fas fa-arrow-left"></i> Back to Subscription Dossier
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-calendar-plus"></i> License Extension</div>
+                  <h2 class="management-title">Extend Subscription Validity</h2>
+                  <p class="management-subtitle">Grant additional active operational days to an operator license without resetting history.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageSubExtendAlert" style="display:none;"></div>
+
+              <div class="management-card">
+                <h3 class="management-card-title"><i class="fas fa-clock-rotate-left"></i> Extension Parameters</h3>
+                <form id="fullPageSubExtendForm" onsubmit="return false;">
+                  <input type="hidden" id="fpExtendSubId" />
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label class="management-label">Operator Account</label>
+                      <input type="text" id="fpExtendSubUser" class="management-input" disabled />
+                    </div>
+                    <div class="management-form-group">
+                      <label class="management-label">Subscription Plan</label>
+                      <input type="text" id="fpExtendSubPlan" class="management-input" disabled />
+                    </div>
+                  </div>
+
+                  <div class="management-form-group">
+                    <label class="management-label">Current Expiration Date</label>
+                    <input type="text" id="fpExtendSubCurrentEnd" class="management-input" disabled />
+                  </div>
+
+                  <div class="management-form-group">
+                    <label class="management-label">Quick Preset Extension</label>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                      <button type="button" class="btn-management-secondary fp-preset-btn" data-preset-days="7">+7 Days</button>
+                      <button type="button" class="btn-management-secondary fp-preset-btn" data-preset-days="14">+14 Days</button>
+                      <button type="button" class="btn-management-secondary fp-preset-btn" data-preset-days="30">+30 Days (1 Month)</button>
+                      <button type="button" class="btn-management-secondary fp-preset-btn" data-preset-days="60">+60 Days (2 Months)</button>
+                      <button type="button" class="btn-management-secondary fp-preset-btn" data-preset-days="90">+90 Days (Quarter)</button>
+                      <button type="button" class="btn-management-secondary fp-preset-btn" data-preset-days="365">+365 Days (1 Year)</button>
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
+                      <label for="fpExtendDaysInput" class="management-label">Days to Add <span class="required-star">*</span></label>
+                      <input type="number" id="fpExtendDaysInput" class="management-input" min="1" value="30" required />
+                    </div>
+                    <div class="management-form-group">
+                      <label for="fpExtendReasonInput" class="management-label">Extension Reason</label>
+                      <input type="text" id="fpExtendReasonInput" class="management-input" placeholder="e.g. Complimentary extension granted" />
+                    </div>
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" id="fpExtendSubCancelBtn">Cancel</button>
+                    <button type="button" class="btn-management-primary" id="fpExtendSubmitBtn">
+                      <i class="fas fa-calendar-plus"></i> Confirm Extension
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 10. Dedicated Page: Pending Request Details & Review -->
+            <div class="admin-panel full-page-management-view" id="adminPageRequestDetails" style="display:none;">
+              <div class="management-breadcrumb-bar">
+                <div class="management-breadcrumb">
+                  <a href="/?view=admin-requests" class="breadcrumb-link" data-back-target="admin-requests"><i class="fas fa-user-clock"></i> Pending Requests</a>
+                  <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                  <span class="breadcrumb-current">Review Request</span>
+                </div>
+                <div class="management-top-actions">
+                  <button type="button" class="btn-management-secondary" data-back-target="admin-requests">
+                    <i class="fas fa-arrow-left"></i> Back to Requests
+                  </button>
+                </div>
+              </div>
+
+              <div class="management-header">
+                <div class="management-header-left">
+                  <div class="management-badge"><i class="fas fa-clock"></i> Access Approval Workflow</div>
+                  <h2 class="management-title">Pending Request Review & Provisioning</h2>
+                  <p class="management-subtitle">Inspect subscriber credentials, selected plan specifications, and process authorization.</p>
+                </div>
+              </div>
+
+              <div class="management-alert" id="fullPageRequestAlert" style="display:none;"></div>
+
+              <div id="fpRequestDetailsContent">
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-id-card"></i> Applicant & Requested Tier Telemetry</h3>
+                  <div class="management-dossier-grid">
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-hashtag"></i> Request ID</span>
+                      <span class="management-dossier-val" id="fpReqDossierId">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-user"></i> Applicant</span>
+                      <span class="management-dossier-val" id="fpReqDossierName">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-envelope"></i> Email Address</span>
+                      <span class="management-dossier-val" id="fpReqDossierEmail">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-gem"></i> Requested Plan</span>
+                      <span class="management-dossier-val" id="fpReqDossierPlan">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-dollar-sign"></i> Price</span>
+                      <span class="management-dossier-val" id="fpReqDossierPrice">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-calendar-day"></i> Term Duration</span>
+                      <span class="management-dossier-val" id="fpReqDossierDuration">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-clock"></i> Requested On</span>
+                      <span class="management-dossier-val" id="fpReqDossierCreated">—</span>
+                    </div>
+                    <div class="management-dossier-item">
+                      <span class="management-dossier-label"><i class="fas fa-circle-info"></i> Status</span>
+                      <span class="management-dossier-val" id="fpReqDossierStatus">—</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="management-card">
+                  <h3 class="management-card-title"><i class="fas fa-user-check"></i> Administrative Authorization Decision</h3>
+                  <div class="management-form-group">
+                    <label for="fpReqReviewNotes" class="management-label">Operational Notes / Reason for Decision</label>
+                    <input type="text" id="fpReqReviewNotes" class="management-input" placeholder="e.g. Verified organization credentials. Approved." />
+                  </div>
+
+                  <div class="management-actions-footer">
+                    <button type="button" class="btn-management-secondary" data-back-target="admin-requests">Cancel</button>
+                    <button type="button" class="btn-management-danger" id="fpReqRejectBtn">
+                      <i class="fas fa-xmark"></i> Reject Request
+                    </button>
+                    <button type="button" class="btn-management-primary" id="fpReqApproveBtn">
+                      <i class="fas fa-check"></i> Approve & Activate
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error Box when Request ID is invalid -->
+              <div id="fpRequestDetailsError" class="management-card" style="display:none; text-align:center; padding: 40px 20px;">
+                <i class="fas fa-triangle-exclamation" style="font-size: 2.5rem; color: #EF4444; margin-bottom: 14px;"></i>
+                <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 8px;">Request Not Found</h3>
+                <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 20px auto;">
+                  The requested subscription request does not exist or has already been processed.
+                </p>
+                <button type="button" class="btn-management-primary" data-back-target="admin-requests">
+                  <i class="fas fa-arrow-left"></i> Return to Requests
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -2911,7 +3840,7 @@
   </button>
 
   <!-- Modal: Admin Create User -->
-  <div class="auth-modal" id="adminCreateUserModal" role="dialog" aria-modal="true" aria-labelledby="adminCreateUserModalTitle" style="display:none; z-index: 10460;">
+  <div class="auth-modal" id="adminCreateUserModal" role="dialog" aria-modal="true" aria-labelledby="adminCreateUserModalTitle" style="display:none !important; z-index: 10460;">
     <div class="auth-modal-backdrop" id="adminCreateUserModalBackdrop"></div>
     <div class="auth-modal-dialog" style="max-width: 540px;">
       <div class="auth-modal-header">
@@ -2963,7 +3892,7 @@
   </div>
 
   <!-- Modal: Admin User Details & History Drawer -->
-  <div class="auth-modal" id="adminUserDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminUserDetailsModalTitle" style="display:none;">
+  <div class="auth-modal" id="adminUserDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminUserDetailsModalTitle" style="display:none !important;">
     <div class="auth-modal-backdrop" id="adminUserDetailsModalBackdrop"></div>
     <div class="auth-modal-dialog modal-lg">
       <div class="auth-modal-header">
@@ -3076,7 +4005,7 @@
   </div>
 
   <!-- Modal: Admin Plan Editor -->
-  <div class="auth-modal" id="adminPlanModal" role="dialog" aria-modal="true" aria-labelledby="adminPlanModalTitle" style="display:none;">
+  <div class="auth-modal" id="adminPlanModal" role="dialog" aria-modal="true" aria-labelledby="adminPlanModalTitle" style="display:none !important;">
     <div class="auth-modal-backdrop" id="adminPlanModalBackdrop"></div>
     <div class="auth-modal-dialog modal-lg">
       <div class="auth-modal-header">
@@ -3211,7 +4140,7 @@
   </div>
 
   <!-- Modal: Admin Date Adjustment -->
-  <div class="auth-modal" id="adminDateModal" role="dialog" aria-modal="true" aria-labelledby="adminDateModalTitle" style="display:none;">
+  <div class="auth-modal" id="adminDateModal" role="dialog" aria-modal="true" aria-labelledby="adminDateModalTitle" style="display:none !important;">
     <div class="auth-modal-backdrop" id="adminDateModalBackdrop"></div>
     <div class="auth-modal-dialog">
       <div class="auth-modal-header">
@@ -3246,7 +4175,7 @@
   </div>
 
   <!-- Modal: Admin Renew Subscription -->
-  <div class="auth-modal" id="adminRenewSubModal" role="dialog" aria-modal="true" aria-labelledby="adminRenewSubModalTitle" style="display:none;">
+  <div class="auth-modal" id="adminRenewSubModal" role="dialog" aria-modal="true" aria-labelledby="adminRenewSubModalTitle" style="display:none !important;">
     <div class="auth-modal-backdrop" id="adminRenewSubModalBackdrop"></div>
     <div class="auth-modal-dialog">
       <div class="auth-modal-header">
@@ -3283,7 +4212,7 @@
   </div>
 
   <!-- Modal: Admin Extend Subscription -->
-  <div class="auth-modal" id="adminExtendSubModal" role="dialog" aria-modal="true" aria-labelledby="adminExtendSubModalTitle" style="display:none;">
+  <div class="auth-modal" id="adminExtendSubModal" role="dialog" aria-modal="true" aria-labelledby="adminExtendSubModalTitle" style="display:none !important;">
     <div class="auth-modal-backdrop" id="adminExtendSubModalBackdrop"></div>
     <div class="auth-modal-dialog">
       <div class="auth-modal-header">
@@ -3386,7 +4315,7 @@
   </div>
 
   <!-- Modal: Admin Plan Details & Subscribers Drawer -->
-  <div class="auth-modal" id="adminPlanDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminPlanDetailsModalTitle" style="display:none; z-index: 10450;">
+  <div class="auth-modal" id="adminPlanDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminPlanDetailsModalTitle" style="display:none !important; z-index: 10450;">
     <div class="auth-modal-backdrop" id="adminPlanDetailsModalBackdrop"></div>
     <div class="auth-modal-dialog modal-lg">
       <div class="auth-modal-header">
@@ -3481,7 +4410,7 @@
   </div>
 
   <!-- Modal: Admin Subscription & Request Details Drawer -->
-  <div class="auth-modal" id="adminSubDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminSubDetailsModalTitle" style="display:none; z-index: 10450;">
+  <div class="auth-modal" id="adminSubDetailsModal" role="dialog" aria-modal="true" aria-labelledby="adminSubDetailsModalTitle" style="display:none !important; z-index: 10450;">
     <div class="auth-modal-backdrop" id="adminSubDetailsModalBackdrop"></div>
     <div class="auth-modal-dialog modal-lg">
       <div class="auth-modal-header">

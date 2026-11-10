@@ -2272,6 +2272,39 @@ document.addEventListener("DOMContentLoaded", () => {
   const mindMapSection = document.getElementById("system-architecture");
   const footerEl = document.querySelector(".site-footer");
 
+  // Full-Page Management Views Registry (Part 1, 2, 3 & 6)
+  const FULL_PAGE_MANAGEMENT_VIEWS = {
+    "admin-users-create": "adminPageUserCreate",
+    "admin-user-details": "adminPageUserDetails",
+    "admin-user-edit": "adminPageUserEdit",
+    "admin-plans-create": "adminPagePlanCreate",
+    "admin-plan-details": "adminPagePlanDetails",
+    "admin-plan-edit": "adminPagePlanEdit",
+    "admin-sub-details": "adminPageSubDetails",
+    "admin-sub-edit": "adminPageSubEdit",
+    "admin-sub-extend": "adminPageSubExtend",
+    "admin-request-details": "adminPageRequestDetails"
+  };
+
+  function hideAllFullPageManagementViews() {
+    Object.values(FULL_PAGE_MANAGEMENT_VIEWS).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
+  }
+
+  function toDateTimeLocal(isoStr) {
+    if (!isoStr) return "";
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
   const sidebarMobileCloseBtn = document.getElementById("sidebarMobileCloseBtn");
 
   // Sidebar is collapsed by default across the application
@@ -2367,10 +2400,16 @@ document.addEventListener("DOMContentLoaded", () => {
     let normalized = navName || "";
     if (normalized === "admin-overview" || normalized === "admin-console") {
       normalized = "admin";
-    } else if (normalized === "admin-operators") {
+    } else if (normalized === "admin-operators" || normalized === "admin-users-create" || normalized.startsWith("admin-user")) {
       normalized = "admin-users";
-    } else if (normalized === "admin-subscriptions") {
+    } else if (normalized.startsWith("admin-plan")) {
+      normalized = "admin-plans";
+    } else if (normalized.startsWith("admin-sub")) {
       normalized = "admin-subs";
+    } else if (normalized.startsWith("admin-request")) {
+      normalized = "admin-requests";
+    } else if (normalized.startsWith("admin-profile")) {
+      normalized = "admin-profile";
     }
 
     sidebarNavItems.forEach(item => {
@@ -3073,7 +3112,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Switch View: Dedicated Workspace vs Full Landing Page
-  function switchView(targetView, updateHistory = true) {
+  function switchView(targetView, updateHistory = true, entityId = null) {
     // Intercept operational tools and dashboard for anonymous visitors
     if ((targetView === "monitoring" || targetView === "port-scanner" || targetView === "dashboard") && !currentUser) {
       openAuthModal("signin", "Authentication required to access SCOUT Operational Tools and Dashboard.");
@@ -3283,21 +3322,6 @@ document.addEventListener("DOMContentLoaded", () => {
       document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "plans-view", "dashboard-view", "anonymous-landing");
       document.body.classList.add("admin-view");
 
-      let subTab = "overview";
-      if (targetView === "admin-users" || targetView === "admin-operators") {
-        subTab = "users";
-      } else if (targetView === "admin-plans") {
-        subTab = "plans";
-      } else if (targetView === "admin-subs" || targetView === "admin-subscriptions") {
-        subTab = "subscriptions";
-      } else if (targetView === "admin-requests") {
-        subTab = "requests";
-      } else if (targetView === "admin-audit") {
-        subTab = "audit";
-      } else if (targetView === "admin-profile") {
-        subTab = "profile";
-      }
-
       // Hide dedicated tool bar so it does not render a redundant top breadcrumb above admin console
       if (dedicatedToolBar) dedicatedToolBar.style.display = "none";
 
@@ -3318,12 +3342,70 @@ document.addEventListener("DOMContentLoaded", () => {
       setSidebarActive(targetView);
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      if (typeof activateAdminTab === "function") {
-        activateAdminTab(subTab, false);
-      }
+      if (targetView in FULL_PAGE_MANAGEMENT_VIEWS) {
+        // Dedicated Full-Page Management Experience inside application shell
+        if (typeof adminPanels !== "undefined" && adminPanels) {
+          Object.keys(adminPanels).forEach(key => {
+            if (adminPanels[key]) adminPanels[key].style.display = "none";
+          });
+        }
+        hideAllFullPageManagementViews();
+        const targetPageEl = document.getElementById(FULL_PAGE_MANAGEMENT_VIEWS[targetView]);
+        if (targetPageEl) targetPageEl.style.display = "block";
 
-      if (updateHistory) {
-        history.pushState({ view: targetView }, "", "?view=" + targetView);
+        const finalId = entityId || (new URLSearchParams(window.location.search)).get("id");
+
+        if (targetView === "admin-users-create") {
+          loadPageUserCreate();
+        } else if (targetView === "admin-user-details") {
+          loadPageUserDetails(finalId);
+        } else if (targetView === "admin-user-edit") {
+          loadPageUserEdit(finalId);
+        } else if (targetView === "admin-plans-create") {
+          loadPagePlanCreate();
+        } else if (targetView === "admin-plan-details") {
+          loadPagePlanDetails(finalId);
+        } else if (targetView === "admin-plan-edit") {
+          loadPagePlanEdit(finalId);
+        } else if (targetView === "admin-sub-details") {
+          loadPageSubDetails(finalId);
+        } else if (targetView === "admin-sub-edit") {
+          loadPageSubEdit(finalId);
+        } else if (targetView === "admin-sub-extend") {
+          loadPageSubExtend(finalId);
+        } else if (targetView === "admin-request-details") {
+          loadPageRequestDetails(finalId);
+        }
+
+        if (updateHistory) {
+          const qs = "?view=" + targetView + (finalId ? "&id=" + encodeURIComponent(finalId) : "");
+          history.pushState({ view: targetView, id: finalId }, "", qs);
+        }
+      } else {
+        hideAllFullPageManagementViews();
+
+        let subTab = "overview";
+        if (targetView === "admin-users" || targetView === "admin-operators") {
+          subTab = "users";
+        } else if (targetView === "admin-plans") {
+          subTab = "plans";
+        } else if (targetView === "admin-subs" || targetView === "admin-subscriptions") {
+          subTab = "subscriptions";
+        } else if (targetView === "admin-requests") {
+          subTab = "requests";
+        } else if (targetView === "admin-audit") {
+          subTab = "audit";
+        } else if (targetView === "admin-profile" || targetView === "admin-profile-edit") {
+          subTab = "profile";
+        }
+
+        if (typeof activateAdminTab === "function") {
+          activateAdminTab(subTab, false);
+        }
+
+        if (updateHistory) {
+          history.pushState({ view: targetView }, "", "?view=" + targetView);
+        }
       }
     } else {
       document.title = "SCOUT — Autonomous Cyber Threat Defense & Telemetry";
@@ -3714,6 +3796,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Listen to popstate (browser back/forward)
   window.addEventListener("popstate", () => {
     const qView = getQueryView();
+    const qId = (new URLSearchParams(window.location.search)).get("id");
     if (qView === "landing" && window.location.hash) {
       const hash = window.location.hash.replace("#", "");
       for (const [nav, secId] of Object.entries(PUBLIC_SECTION_TARGETS)) {
@@ -3723,7 +3806,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     }
-    switchView(qView, false);
+    switchView(qView, false, qId);
   });
 
   // Back To Top Button
@@ -6244,6 +6327,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function activateAdminTab(tabKey, updateUrl = true) {
     if (!tabKey) tabKey = "overview";
+    hideAllFullPageManagementViews();
     adminTabBtns.forEach(b => {
       if (b.getAttribute("data-admin-tab") === tabKey) {
         b.classList.add("active");
@@ -6757,10 +6841,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminPlanDetailsAlert = document.getElementById("adminPlanDetailsAlert");
 
   async function openPlanDetailsModal(planId) {
-    if (!adminPlanDetailsModal || !planId) return;
-    if (adminPlanDetailsAlert) adminPlanDetailsAlert.style.display = "none";
-    adminPlanDetailsModal.style.display = "flex";
-    document.body.style.overflow = "hidden";
+    if (!planId) return;
+    switchView("admin-plan-details", true, planId);
+    return;
 
     const dId = document.getElementById("dossierPlanId");
     const dCode = document.getElementById("dossierPlanCode");
@@ -6930,10 +7013,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminSubDetailsAlert = document.getElementById("adminSubDetailsAlert");
 
   async function openSubDetailsModal(subId) {
-    if (!adminSubDetailsModal || !subId) return;
-    if (adminSubDetailsAlert) adminSubDetailsAlert.style.display = "none";
-    adminSubDetailsModal.style.display = "flex";
-    document.body.style.overflow = "hidden";
+    if (!subId) return;
+    switchView("admin-sub-details", true, subId);
+    return;
 
     const dId = document.getElementById("dossierSubId");
     const dUser = document.getElementById("dossierSubUsername");
@@ -7355,7 +7437,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const bindActions = (container) => {
         if (!container) return;
         container.querySelectorAll("[data-sub-details-id]").forEach(btn => {
-          btn.addEventListener("click", () => openSubDetailsModal(btn.getAttribute("data-sub-details-id")));
+          btn.addEventListener("click", () => switchView("admin-request-details", true, btn.getAttribute("data-sub-details-id")));
         });
         container.querySelectorAll("[data-act-id]").forEach(btn => {
           btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
@@ -7578,7 +7660,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const bindActions = (container) => {
         if (!container) return;
         container.querySelectorAll("[data-sub-details-id]").forEach(btn => {
-          btn.addEventListener("click", () => openSubDetailsModal(btn.getAttribute("data-sub-details-id")));
+          btn.addEventListener("click", () => switchView("admin-sub-details", true, btn.getAttribute("data-sub-details-id")));
         });
         container.querySelectorAll("[data-act-id]").forEach(btn => {
           btn.addEventListener("click", () => activateSubscription(btn.getAttribute("data-act-id"), btn));
@@ -7599,7 +7681,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         container.querySelectorAll("[data-dates-id]").forEach(btn => {
           btn.addEventListener("click", () => {
-            openAdminDateModal(btn.getAttribute("data-dates-id"), btn.getAttribute("data-start"), btn.getAttribute("data-end"));
+            switchView("admin-sub-edit", true, btn.getAttribute("data-dates-id"));
           });
         });
         container.querySelectorAll("[data-renew-id]").forEach(btn => {
@@ -7613,13 +7695,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         container.querySelectorAll("[data-extend-id]").forEach(btn => {
           btn.addEventListener("click", () => {
-            openAdminExtendModal({
-              id: btn.getAttribute("data-extend-id"),
-              user: btn.getAttribute("data-user"),
-              plan: btn.getAttribute("data-plan"),
-              endDate: btn.getAttribute("data-end"),
-              status: btn.getAttribute("data-status")
-            });
+            switchView("admin-sub-extend", true, btn.getAttribute("data-extend-id"));
           });
         });
       };
@@ -7892,19 +7968,13 @@ document.addEventListener("DOMContentLoaded", () => {
       containers.forEach(container => {
         container.querySelectorAll("[data-view-user]").forEach(btn => {
           btn.addEventListener("click", () => {
-            openAdminUserDetails(btn.getAttribute("data-view-user"));
+            switchView("admin-user-details", true, btn.getAttribute("data-view-user"));
           });
         });
 
         container.querySelectorAll("[data-edit-user]").forEach(btn => {
-          btn.addEventListener("click", async () => {
-            const uid = btn.getAttribute("data-edit-user");
-            await openAdminUserDetails(uid);
-            const editInput = document.getElementById("adminUserEditFullName");
-            if (editInput) {
-              editInput.focus();
-              editInput.scrollIntoView({ behavior: "smooth", block: "center" });
-            }
+          btn.addEventListener("click", () => {
+            switchView("admin-user-edit", true, btn.getAttribute("data-edit-user"));
           });
         });
 
@@ -8059,10 +8129,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminUserDetailsAlert = document.getElementById("adminUserDetailsAlert");
 
   async function openAdminUserDetails(userId) {
-    if (!adminUserDetailsModal || !userId) return;
-    if (adminUserDetailsAlert) adminUserDetailsAlert.style.display = "none";
-    adminUserDetailsModal.style.display = "flex";
-    document.body.style.overflow = "hidden";
+    if (!userId) return;
+    switchView("admin-user-details", true, userId);
+    return;
 
     const dId = document.getElementById("dossierUserId");
     const dUser = document.getElementById("dossierUsername");
@@ -8286,7 +8355,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminCreateConfirmPassword = document.getElementById("adminCreateConfirmPassword");
 
   function openCreateUserModal() {
-    if (!adminCreateUserModal) return;
+    switchView("admin-users-create");
+    return;
     if (adminCreateUserAlert) {
       adminCreateUserAlert.style.display = "none";
       adminCreateUserAlert.textContent = "";
@@ -8308,7 +8378,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.style.overflow = "";
   }
 
-  if (adminCreateUserBtn) adminCreateUserBtn.addEventListener("click", openCreateUserModal);
+  if (adminCreateUserBtn) adminCreateUserBtn.addEventListener("click", () => switchView("admin-users-create"));
   if (adminCreateUserModalCloseBtn) adminCreateUserModalCloseBtn.addEventListener("click", closeCreateUserModal);
   if (adminCreateUserModalBackdrop) adminCreateUserModalBackdrop.addEventListener("click", closeCreateUserModal);
   if (adminCreateUserCancelBtn) adminCreateUserCancelBtn.addEventListener("click", closeCreateUserModal);
@@ -8587,15 +8657,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!container) return;
         container.querySelectorAll("[data-plan-details-id]").forEach(btn => {
           btn.addEventListener("click", () => {
-            openPlanDetailsModal(btn.getAttribute("data-plan-details-id"));
+            switchView("admin-plan-details", true, btn.getAttribute("data-plan-details-id"));
           });
         });
 
         container.querySelectorAll("[data-plan-edit-id]").forEach(btn => {
           btn.addEventListener("click", () => {
-            const pid = parseInt(btn.getAttribute("data-plan-edit-id"), 10);
-            const targetPlan = adminPlansCache.find(x => x.id === pid);
-            if (targetPlan) openEditPlanModal(targetPlan);
+            switchView("admin-plan-edit", true, btn.getAttribute("data-plan-edit-id"));
           });
         });
 
@@ -8635,7 +8703,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function openCreatePlanModal() {
-    if (!adminPlanModal) return;
+    switchView("admin-plans-create");
+    return;
     const modalTitle = document.getElementById("adminPlanModalTitle");
     const modeInput = document.getElementById("planFormMode");
     const dbIdInput = document.getElementById("planFormDbId");
@@ -8672,7 +8741,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function openEditPlanModal(plan) {
-    if (!adminPlanModal || !plan) return;
+    if (!plan) return;
+    const pid = plan.id || plan.plan_code;
+    switchView("admin-plan-edit", true, pid);
+    return;
     const modalTitle = document.getElementById("adminPlanModalTitle");
     const modeInput = document.getElementById("planFormMode");
     const dbIdInput = document.getElementById("planFormDbId");
@@ -8831,7 +8903,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (adminCreatePlanBtn) {
     adminCreatePlanBtn.addEventListener("click", () => {
-      openCreatePlanModal();
+      switchView("admin-plans-create");
     });
   }
   if (adminPlanModalCloseBtn) {
@@ -8986,7 +9058,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminDateAlert = document.getElementById("adminDateAlert");
 
   function openAdminDateModal(subId, startIso, endIso) {
-    if (!adminDateModal) return;
+    if (!subId) return;
+    switchView("admin-sub-edit", true, subId);
+    return;
     const subIdInput = document.getElementById("dateSubId");
     const startInput = document.getElementById("dateNewStartDate");
     const endInput = document.getElementById("dateNewEndDate");
@@ -9091,7 +9165,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const adminRenewSubAlert = document.getElementById("adminRenewSubAlert");
 
   function openAdminRenewModal(subInfo) {
-    if (!adminRenewSubModal || !subInfo) return;
+    if (!subInfo) return;
+    const sid = typeof subInfo === "object" ? subInfo.id : subInfo;
+    switchView("admin-sub-extend", true, sid);
+    return;
     const idInput = document.getElementById("renewSubId");
     const targetDisp = document.getElementById("renewSubTargetDisplay");
     const notesInput = document.getElementById("renewSubNotes");
@@ -9222,7 +9299,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function openAdminExtendModal(subInfo) {
-    if (!adminExtendSubModal || !subInfo) return;
+    if (!subInfo) return;
+    const sid = typeof subInfo === "object" ? subInfo.id : subInfo;
+    switchView("admin-sub-extend", true, sid);
+    return;
     currentExtendSubInfo = subInfo;
     const idInput = document.getElementById("extendSubId");
     const targetDisp = document.getElementById("extendSubTargetDisplay");
@@ -9332,6 +9412,1188 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } finally {
         if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<span class="auth-btn-text">Apply Extension</span> <i class="fas fa-calendar-plus auth-btn-icon"></i>'; }
+      }
+    });
+  }
+
+  // ==============================================================================
+  // Dedicated Full-Page Management Experience Controller (Part 1, 2, 3, 6 & 7)
+  // ==============================================================================
+
+  function loadPageUserCreate() {
+    document.title = "SCOUT Admin — Create Operator Account";
+    const alertEl = document.getElementById("fullPageCreateUserAlert");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+    const fn = document.getElementById("fullPageCreateFullName");
+    const em = document.getElementById("fullPageCreateEmail");
+    const ph = document.getElementById("fullPageCreatePhone");
+    const ro = document.getElementById("fullPageCreateRole");
+    const pw = document.getElementById("fullPageCreatePassword");
+    const cp = document.getElementById("fullPageCreateConfirmPassword");
+    if (fn) fn.value = "";
+    if (em) em.value = "";
+    if (ph) ph.value = "";
+    if (ro) ro.value = "User";
+    if (pw) pw.value = "";
+    if (cp) cp.value = "";
+    if (fn) fn.focus();
+  }
+
+  async function loadPageUserDetails(userId) {
+    document.title = "SCOUT Admin — Operator Dossier";
+    const alertEl = document.getElementById("fullPageUserDetailsAlert");
+    const contentEl = document.getElementById("fpUserDetailsContent");
+    const errorEl = document.getElementById("fpUserDetailsError");
+    const errorMsg = document.getElementById("fpUserDetailsErrorMsg");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!userId) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+      if (errorMsg) errorMsg.textContent = "No valid operator identifier was provided. Please choose a user from the Users table.";
+      return;
+    }
+
+    if (contentEl) contentEl.style.display = "block";
+    if (errorEl) errorEl.style.display = "none";
+
+    const dId = document.getElementById("fpDossierUserId");
+    const dUser = document.getElementById("fpDossierUsername");
+    const dEmail = document.getElementById("fpDossierEmail");
+    const dPhone = document.getElementById("fpDossierPhone");
+    const dName = document.getElementById("fpDossierFullName");
+    const dRole = document.getElementById("fpDossierRole");
+    const dStatus = document.getElementById("fpDossierStatus");
+    const dCreated = document.getElementById("fpDossierCreated");
+    const dLogin = document.getElementById("fpDossierLastLogin");
+    const actionsToolbar = document.getElementById("fpDossierActions");
+    const historyTbody = document.getElementById("fpUserSubsTableBody");
+
+    if (dId) dId.textContent = `#${userId}`;
+    if (dUser) dUser.textContent = "Loading...";
+    if (dEmail) dEmail.textContent = "Loading...";
+    if (dPhone) dPhone.textContent = "—";
+    if (dName) dName.textContent = "Loading...";
+    if (dRole) dRole.textContent = "Loading...";
+    if (dStatus) { dStatus.textContent = "Loading..."; dStatus.className = "management-dossier-val text-muted"; }
+    if (dCreated) dCreated.textContent = "Loading...";
+    if (dLogin) dLogin.textContent = "Loading...";
+    if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3"><i class="fas fa-circle-notch fa-spin"></i> Loading subscriptions...</td></tr>`;
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.user) {
+        if (contentEl) contentEl.style.display = "none";
+        if (errorEl) errorEl.style.display = "block";
+        if (errorMsg) errorMsg.textContent = data.message || "The requested operator ID does not exist or has been removed.";
+        return;
+      }
+
+      const u = data.user;
+      const bName = document.getElementById("fpBreadcrumbUserName");
+      const titleEl = document.getElementById("fpUserDetailsTitle");
+      if (bName) bName.textContent = u.full_name || u.username || `User #${u.id}`;
+      if (titleEl) titleEl.textContent = `${u.full_name || u.username} — Dossier & Telemetry`;
+      if (dId) dId.textContent = `#${u.id}`;
+      if (dUser) dUser.textContent = u.username || "—";
+      if (dEmail) dEmail.textContent = u.email;
+      if (dPhone) dPhone.textContent = u.phone_number || "—";
+      if (dName) dName.textContent = u.full_name || "—";
+      if (dRole) dRole.textContent = u.role;
+      if (dStatus) {
+        dStatus.textContent = u.is_active ? "Active" : "Suspended";
+        dStatus.className = u.is_active ? "management-dossier-val text-success" : "management-dossier-val text-danger";
+      }
+      if (dCreated) dCreated.textContent = formatUtcDate(u.created_at);
+      if (dLogin) dLogin.textContent = u.last_login_at ? formatUtcDate(u.last_login_at) : "Never Logged In";
+
+      // Render Actions Toolbar
+      const isSelf = currentUser && currentUser.id === u.id;
+      if (actionsToolbar) {
+        if (isSelf) {
+          actionsToolbar.innerHTML = `<span class="text-muted"><i class="fas fa-info-circle"></i> This is your currently authenticated Administrator account.</span>`;
+        } else {
+          actionsToolbar.innerHTML = `
+            <button type="button" class="btn-management-primary" id="fpDossierEditBtn">
+              <i class="fas fa-pen-to-square"></i> Edit Operator
+            </button>
+            <button type="button" class="btn-management-secondary" id="fpDossierToggleStatusBtn">
+              <i class="fas ${u.is_active ? 'fa-user-lock' : 'fa-user-check'}"></i> ${u.is_active ? 'Suspend Account' : 'Reactivate Account'}
+            </button>
+            <button type="button" class="btn-management-danger" id="fpDossierDeleteBtn">
+              <i class="fas fa-trash-can"></i> Delete Account
+            </button>
+          `;
+          const editBtn = document.getElementById("fpDossierEditBtn");
+          if (editBtn) {
+            editBtn.addEventListener("click", () => switchView("admin-user-edit", true, u.id));
+          }
+          const toggleBtn = document.getElementById("fpDossierToggleStatusBtn");
+          if (toggleBtn) {
+            toggleBtn.addEventListener("click", async () => {
+              await toggleUserActive(u.id, !u.is_active, toggleBtn, u.full_name || u.username);
+              loadPageUserDetails(u.id);
+            });
+          }
+          const delBtn = document.getElementById("fpDossierDeleteBtn");
+          if (delBtn) {
+            delBtn.addEventListener("click", async () => {
+              if (!confirm(`Are you sure you want to delete or archive operator '${u.username}'? Subscriptions will be preserved.`)) return;
+              delBtn.disabled = true;
+              try {
+                const dRes = await fetch(`/api/admin/users/${u.id}`, { method: "DELETE", credentials: "same-origin" });
+                const dData = await dRes.json();
+                if (dRes.ok && dData.status === "success") {
+                  if (typeof showToast === "function") showToast(dData.message, "success");
+                  switchView("admin-users");
+                  if (typeof loadAdminUsers === "function") loadAdminUsers();
+                  if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+                } else {
+                  if (typeof showToast === "function") showToast(dData.message || "Failed to delete user.", "error");
+                }
+              } catch (_) {
+                if (typeof showToast === "function") showToast("Network error deleting user.", "error");
+              } finally {
+                delBtn.disabled = false;
+              }
+            });
+          }
+        }
+      }
+
+      // Render Subscriptions History Table
+      const subs = u.subscriptions || [];
+      if (historyTbody) {
+        if (subs.length === 0) {
+          historyTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted">No historical subscription records found.</td></tr>`;
+        } else {
+          let hHtml = "";
+          for (const s of subs) {
+            const bClass = s.status === "active" ? "active" : (s.status === "pending" ? "pending" : (s.status === "expired" ? "expired" : "canceled"));
+            hHtml += `
+              <tr>
+                <td><strong>#${s.id}</strong></td>
+                <td>${escapeHtml(s.plan_name || s.plan_code || 'Plan')}</td>
+                <td><span class="sub-badge ${bClass}">${escapeHtml(s.status)}</span></td>
+                <td>${formatUtcDate(s.start_date)}</td>
+                <td>${formatUtcDate(s.end_date)}</td>
+                <td><small class="text-muted">${escapeHtml(s.admin_notes || s.cancellation_reason || '—')}</small></td>
+              </tr>
+            `;
+          }
+          historyTbody.innerHTML = hHtml;
+        }
+      }
+    } catch (_) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+      if (errorMsg) errorMsg.textContent = "Network error loading operator record.";
+    }
+  }
+
+  async function loadPageUserEdit(userId) {
+    document.title = "SCOUT Admin — Edit User Account";
+    const alertEl = document.getElementById("fullPageUserEditAlert");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!userId) {
+      if (alertEl) {
+        alertEl.className = "management-alert error";
+        alertEl.textContent = "No operator ID specified. Return to Users table.";
+        alertEl.style.display = "flex";
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.user) {
+        if (alertEl) {
+          alertEl.className = "management-alert error";
+          alertEl.textContent = data.message || "Failed to load user for editing.";
+          alertEl.style.display = "flex";
+        }
+        return;
+      }
+
+      const u = data.user;
+      const idInput = document.getElementById("fpEditUserId");
+      const dispId = document.getElementById("fpEditUserDispId");
+      const unInput = document.getElementById("fpEditUsername");
+      const fnInput = document.getElementById("fpEditFullName");
+      const emInput = document.getElementById("fpEditEmail");
+      const phInput = document.getElementById("fpEditPhone");
+      const roSelect = document.getElementById("fpEditRole");
+      const bcDossier = document.getElementById("fpEditBreadcrumbDossier");
+      const bcName = document.getElementById("fpEditBreadcrumbName");
+      const backDossierBtn = document.getElementById("fpEditBackToDossierBtn");
+      const cancelBtn = document.getElementById("fpEditUserCancelBtn");
+
+      if (idInput) idInput.value = u.id;
+      if (dispId) dispId.value = `#${u.id}`;
+      if (unInput) unInput.value = u.username || "";
+      if (fnInput) fnInput.value = u.full_name || "";
+      if (emInput) emInput.value = u.email || "";
+      if (phInput) phInput.value = u.phone_number || "";
+      if (roSelect) roSelect.value = u.role || "User";
+      if (bcName) bcName.textContent = u.full_name || u.username || `User #${u.id}`;
+
+      const navBack = (e) => {
+        if (e) e.preventDefault();
+        switchView("admin-user-details", true, u.id);
+      };
+      if (bcDossier) bcDossier.onclick = navBack;
+      if (backDossierBtn) backDossierBtn.onclick = navBack;
+      if (cancelBtn) cancelBtn.onclick = navBack;
+    } catch (_) {
+      if (alertEl) {
+        alertEl.className = "management-alert error";
+        alertEl.textContent = "Network error loading user details for editing.";
+        alertEl.style.display = "flex";
+      }
+    }
+  }
+
+  function loadPagePlanCreate() {
+    document.title = "SCOUT Admin — Create Subscription Plan";
+    const alertEl = document.getElementById("fullPagePlanCreateAlert");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+    const code = document.getElementById("fpCreatePlanCode");
+    const name = document.getElementById("fpCreatePlanName");
+    const price = document.getElementById("fpCreatePlanPrice");
+    const duration = document.getElementById("fpCreatePlanDuration");
+    const desc = document.getElementById("fpCreatePlanDescription");
+    const scans = document.getElementById("fpCreatePlanMaxScans");
+    const traffic = document.getElementById("fpCreatePlanTrafficLimit");
+    const featMon = document.getElementById("fpCreatePlanFeatMonitoring");
+    const featPort = document.getElementById("fpCreatePlanFeatPortScan");
+    const featNd = document.getElementById("fpCreatePlanFeatDiscovery");
+    const active = document.getElementById("fpCreatePlanIsActive");
+
+    if (code) code.value = "";
+    if (name) name.value = "";
+    if (price) price.value = "";
+    if (duration) duration.value = "30";
+    if (desc) desc.value = "";
+    if (scans) scans.value = "100";
+    if (traffic) traffic.value = "10000";
+    if (featMon) featMon.checked = true;
+    if (featPort) featPort.checked = true;
+    if (featNd) featNd.checked = false;
+    if (active) active.checked = true;
+    if (code) code.focus();
+  }
+
+  async function loadPagePlanDetails(planId) {
+    document.title = "SCOUT Admin — Plan Dossier";
+    const alertEl = document.getElementById("fullPagePlanDetailsAlert");
+    const contentEl = document.getElementById("fpPlanDetailsContent");
+    const errorEl = document.getElementById("fpPlanDetailsError");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!planId) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+      return;
+    }
+
+    if (contentEl) contentEl.style.display = "block";
+    if (errorEl) errorEl.style.display = "none";
+
+    try {
+      const res = await fetch(`/api/admin/plans/${planId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.plan) {
+        if (contentEl) contentEl.style.display = "none";
+        if (errorEl) errorEl.style.display = "block";
+        return;
+      }
+
+      const p = data.plan;
+      const subs = data.subscribers || [];
+      const subsCount = typeof p.active_subscribers_count === "number" ? p.active_subscribers_count : subs.length;
+
+      const bcName = document.getElementById("fpBreadcrumbPlanName");
+      const titleEl = document.getElementById("fpPlanDetailsTitle");
+      const dId = document.getElementById("fpPlanDossierId");
+      const dCode = document.getElementById("fpPlanDossierCode");
+      const dName = document.getElementById("fpPlanDossierName");
+      const dPrice = document.getElementById("fpPlanDossierPrice");
+      const dDuration = document.getElementById("fpPlanDossierDuration");
+      const dStatus = document.getElementById("fpPlanDossierStatus");
+      const dSubscribers = document.getElementById("fpPlanDossierSubscribers");
+      const dDesc = document.getElementById("fpPlanDossierDesc");
+      const dFeatures = document.getElementById("fpPlanDossierFeatures");
+      const actionsToolbar = document.getElementById("fpPlanDetailsActions");
+      const subsTbody = document.getElementById("fpPlanSubscribersTableBody");
+
+      if (bcName) bcName.textContent = p.name || p.code;
+      if (titleEl) titleEl.textContent = `${p.name} — Tier Dossier`;
+      if (dId) dId.textContent = `#${p.id}`;
+      if (dCode) dCode.textContent = p.code;
+      if (dName) dName.textContent = p.name;
+      if (dPrice) dPrice.textContent = `$${parseFloat(p.price || 0).toFixed(2)}`;
+      if (dDuration) dDuration.textContent = `${p.duration_days} Days`;
+      if (dStatus) {
+        dStatus.textContent = p.is_active ? "Active" : "Archived";
+        dStatus.className = p.is_active ? "management-dossier-val text-success" : "management-dossier-val text-warning";
+      }
+      if (dSubscribers) dSubscribers.textContent = String(subsCount);
+      if (dDesc) dDesc.textContent = p.description || "No tier description provided.";
+
+      if (dFeatures) {
+        const f = p.features || {};
+        let fHtml = "";
+        if (f.can_monitor !== false) fHtml += `<span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-check"></i> Live Monitoring</span>`;
+        if (f.can_port_scan !== false) fHtml += `<span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-check"></i> Port Scanner</span>`;
+        if (f.can_network_discovery) fHtml += `<span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-check"></i> Network Discovery</span>`;
+        if (f.max_scans_per_day) fHtml += `<span class="badge-pill bg-info-soft" style="padding:4px 10px; border-radius:6px; background:rgba(2,132,199,0.15); color:#0284C7; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-crosshairs"></i> ${f.max_scans_per_day} Scans/Day</span>`;
+        if (f.traffic_packet_limit) fHtml += `<span class="badge-pill bg-info-soft" style="padding:4px 10px; border-radius:6px; background:rgba(2,132,199,0.15); color:#0284C7; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-bolt"></i> ${f.traffic_packet_limit} Packets</span>`;
+        dFeatures.innerHTML = fHtml || `<span class="text-muted">Standard platform access privileges</span>`;
+      }
+
+      if (actionsToolbar) {
+        actionsToolbar.innerHTML = `
+          <button type="button" class="btn-management-primary" id="fpPlanEditBtn">
+            <i class="fas fa-pen-to-square"></i> Edit Plan
+          </button>
+          <button type="button" class="btn-management-secondary" id="fpPlanArchiveBtn">
+            <i class="fas ${p.is_active ? 'fa-box-archive' : 'fa-check'}"></i> ${p.is_active ? 'Archive from Catalog' : 'Publish to Catalog'}
+          </button>
+          ${subsCount === 0 ? `
+          <button type="button" class="btn-management-danger" id="fpPlanDeleteBtn">
+            <i class="fas fa-trash-can"></i> Delete Plan
+          </button>` : `<span class="text-muted" style="font-size:0.8rem;"><i class="fas fa-lock"></i> Protected (${subsCount} active subscribers)</span>`}
+        `;
+
+        const pEditBtn = document.getElementById("fpPlanEditBtn");
+        if (pEditBtn) {
+          pEditBtn.onclick = () => switchView("admin-plan-edit", true, p.id);
+        }
+        const pArchiveBtn = document.getElementById("fpPlanArchiveBtn");
+        if (pArchiveBtn) {
+          pArchiveBtn.onclick = async () => {
+            await togglePlanActive(p.id, !p.is_active, pArchiveBtn, p.name);
+            loadPagePlanDetails(p.id);
+          };
+        }
+        const pDeleteBtn = document.getElementById("fpPlanDeleteBtn");
+        if (pDeleteBtn) {
+          pDeleteBtn.onclick = async () => {
+            await deletePlan(p.id, p.name, 0);
+            switchView("admin-plans");
+          };
+        }
+      }
+
+      if (subsTbody) {
+        if (subs.length === 0) {
+          subsTbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted">No operators currently assigned to this tier.</td></tr>`;
+        } else {
+          let sHtml = "";
+          for (const s of subs) {
+            const bClass = s.status === "active" ? "active" : (s.status === "pending" ? "pending" : "expired");
+            sHtml += `
+              <tr>
+                <td><strong>#${s.id}</strong></td>
+                <td><strong>${escapeHtml(s.username || s.full_name || 'Operator')}</strong></td>
+                <td>${escapeHtml(s.email || '—')}</td>
+                <td>${formatUtcDate(s.start_date)}</td>
+                <td>${formatUtcDate(s.end_date)}</td>
+                <td><span class="sub-badge ${bClass}">${escapeHtml(s.status)}</span></td>
+              </tr>
+            `;
+          }
+          subsTbody.innerHTML = sHtml;
+        }
+      }
+    } catch (_) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+    }
+  }
+
+  async function loadPagePlanEdit(planId) {
+    document.title = "SCOUT Admin — Edit Subscription Plan";
+    const alertEl = document.getElementById("fullPagePlanEditAlert");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!planId) return;
+
+    try {
+      const res = await fetch(`/api/admin/plans/${planId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.plan) {
+        if (alertEl) {
+          alertEl.className = "management-alert error";
+          alertEl.textContent = data.message || "Failed to load plan for editing.";
+          alertEl.style.display = "flex";
+        }
+        return;
+      }
+
+      const p = data.plan;
+      const f = p.features || {};
+
+      const idInput = document.getElementById("fpEditPlanId");
+      const codeInput = document.getElementById("fpEditPlanCode");
+      const nameInput = document.getElementById("fpEditPlanName");
+      const priceInput = document.getElementById("fpEditPlanPrice");
+      const durationInput = document.getElementById("fpEditPlanDuration");
+      const descInput = document.getElementById("fpEditPlanDescription");
+      const scansInput = document.getElementById("fpEditPlanMaxScans");
+      const trafficInput = document.getElementById("fpEditPlanTrafficLimit");
+      const featMon = document.getElementById("fpEditPlanFeatMonitoring");
+      const featPort = document.getElementById("fpEditPlanFeatPortScan");
+      const featNd = document.getElementById("fpEditPlanFeatDiscovery");
+      const activeCheck = document.getElementById("fpEditPlanIsActive");
+      const bcLink = document.getElementById("fpEditPlanBreadcrumbLink");
+      const bcName = document.getElementById("fpEditPlanBreadcrumbName");
+      const backBtn = document.getElementById("fpEditPlanBackBtn");
+      const cancelBtn = document.getElementById("fpEditPlanCancelBtn");
+
+      if (idInput) idInput.value = p.id;
+      if (codeInput) codeInput.value = p.code;
+      if (nameInput) nameInput.value = p.name;
+      if (priceInput) priceInput.value = p.price;
+      if (durationInput) durationInput.value = p.duration_days;
+      if (descInput) descInput.value = p.description || "";
+      if (scansInput) scansInput.value = f.max_scans_per_day || 100;
+      if (trafficInput) trafficInput.value = f.traffic_packet_limit || 10000;
+      if (featMon) featMon.checked = Boolean(f.can_monitor !== false);
+      if (featPort) featPort.checked = Boolean(f.can_port_scan !== false);
+      if (featNd) featNd.checked = Boolean(f.can_network_discovery);
+      if (activeCheck) activeCheck.checked = Boolean(p.is_active);
+
+      if (bcName) bcName.textContent = p.name || p.code;
+      const navBack = (e) => {
+        if (e) e.preventDefault();
+        switchView("admin-plan-details", true, p.id);
+      };
+      if (bcLink) bcLink.onclick = navBack;
+      if (backBtn) backBtn.onclick = navBack;
+      if (cancelBtn) cancelBtn.onclick = navBack;
+    } catch (_) {
+      if (alertEl) {
+        alertEl.className = "management-alert error";
+        alertEl.textContent = "Network error loading plan details.";
+        alertEl.style.display = "flex";
+      }
+    }
+  }
+
+  async function loadPageSubDetails(subId) {
+    document.title = "SCOUT Admin — Subscription Dossier";
+    const alertEl = document.getElementById("fullPageSubDetailsAlert");
+    const contentEl = document.getElementById("fpSubDetailsContent");
+    const errorEl = document.getElementById("fpSubDetailsError");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!subId) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+      return;
+    }
+
+    if (contentEl) contentEl.style.display = "block";
+    if (errorEl) errorEl.style.display = "none";
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.subscription) {
+        if (contentEl) contentEl.style.display = "none";
+        if (errorEl) errorEl.style.display = "block";
+        return;
+      }
+
+      const s = data.subscription;
+      const bcId = document.getElementById("fpBreadcrumbSubId");
+      const dId = document.getElementById("fpSubDossierId");
+      const dUser = document.getElementById("fpSubDossierUsername");
+      const dEmail = document.getElementById("fpSubDossierEmail");
+      const dPlan = document.getElementById("fpSubDossierPlan");
+      const dStatus = document.getElementById("fpSubDossierStatus");
+      const dStart = document.getElementById("fpSubDossierStartDate");
+      const dEnd = document.getElementById("fpSubDossierEndDate");
+      const dTerm = document.getElementById("fpSubDossierTerm");
+      const dAuto = document.getElementById("fpSubDossierAutoRenew");
+      const notesInput = document.getElementById("fpSubNotesInput");
+      const actionsToolbar = document.getElementById("fpSubDetailsActions");
+      const auditTbody = document.getElementById("fpSubAuditTableBody");
+
+      if (bcId) bcId.textContent = `Subscription #${s.id}`;
+      if (dId) dId.textContent = `#${s.id}`;
+      if (dUser) {
+        dUser.innerHTML = `<strong>${escapeHtml(s.username || s.full_name || 'Operator')}</strong> <a href="/?view=admin-user-details&id=${s.user_id}" class="breadcrumb-link" style="margin-left:8px; font-size:0.8rem;"><i class="fas fa-arrow-up-right-from-square"></i> Dossier</a>`;
+        const link = dUser.querySelector("a");
+        if (link) {
+          link.onclick = (e) => {
+            e.preventDefault();
+            switchView("admin-user-details", true, s.user_id);
+          };
+        }
+      }
+      if (dEmail) dEmail.textContent = s.email || "—";
+      if (dPlan) dPlan.textContent = s.plan_name || s.plan_code || "Plan";
+      if (dStatus) dStatus.innerHTML = `<span class="sub-badge ${s.status}">${escapeHtml(s.status)}</span>`;
+      if (dStart) dStart.textContent = formatUtcDate(s.start_date);
+      if (dEnd) dEnd.textContent = formatUtcDate(s.end_date);
+      if (dTerm) dTerm.textContent = s.duration_days ? `${s.duration_days} Days` : "Standard";
+      if (dAuto) dAuto.textContent = s.auto_renew ? "Enabled" : "Disabled";
+      if (notesInput) notesInput.value = s.admin_notes || "";
+
+      // Actions Toolbar
+      if (actionsToolbar) {
+        actionsToolbar.innerHTML = `
+          <button type="button" class="btn-management-primary" id="fpSubDatesBtn">
+            <i class="fas fa-calendar-days"></i> Adjust Dates & Terms
+          </button>
+          <button type="button" class="btn-management-primary" id="fpSubExtendBtn" style="background:#0284C7; color:#FFFFFF;">
+            <i class="fas fa-calendar-plus"></i> Extend Subscription
+          </button>
+          ${s.status === "active" ? `
+          <button type="button" class="btn-management-danger" id="fpSubCancelBtn">
+            <i class="fas fa-ban"></i> Cancel License
+          </button>` : ''}
+          <button type="button" class="btn-management-secondary" id="fpSubRenewBtn">
+            <i class="fas fa-arrows-rotate"></i> Renew
+          </button>
+          <button type="button" class="btn-management-danger" id="fpSubDeleteBtn">
+            <i class="fas fa-trash-can"></i> Delete
+          </button>
+        `;
+
+        const datesBtn = document.getElementById("fpSubDatesBtn");
+        if (datesBtn) datesBtn.onclick = () => switchView("admin-sub-edit", true, s.id);
+        const extBtn = document.getElementById("fpSubExtendBtn");
+        if (extBtn) extBtn.onclick = () => switchView("admin-sub-extend", true, s.id);
+        const cancBtn = document.getElementById("fpSubCancelBtn");
+        if (cancBtn) {
+          cancBtn.onclick = async () => {
+            await cancelSubscription(s.id, cancBtn);
+            loadPageSubDetails(s.id);
+          };
+        }
+        const renewBtn = document.getElementById("fpSubRenewBtn");
+        if (renewBtn) {
+          renewBtn.onclick = () => {
+            openAdminRenewModal({ id: s.id, user: s.username, plan: s.plan_name });
+          };
+        }
+        const delBtn = document.getElementById("fpSubDeleteBtn");
+        if (delBtn) {
+          delBtn.onclick = async () => {
+            await deleteSubscription(s.id, s.username, s.plan_name, s.status !== "active", delBtn);
+            switchView("admin-subs");
+          };
+        }
+      }
+
+      // Chronological Audit Trail
+      if (auditTbody) {
+        const logs = s.audit_logs || [];
+        if (logs.length === 0) {
+          auditTbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-muted">No audit events logged for this subscription.</td></tr>`;
+        } else {
+          let aHtml = "";
+          for (const l of logs) {
+            aHtml += `
+              <tr>
+                <td>${formatUtcDate(l.created_at || l.timestamp)}</td>
+                <td><strong>${escapeHtml(l.action)}</strong></td>
+                <td>${escapeHtml(l.admin_name || l.actor || 'System')}</td>
+                <td><code>${escapeHtml(l.ip_address || '—')}</code></td>
+                <td><small class="text-muted">${escapeHtml(l.details || l.reason || '—')}</small></td>
+              </tr>
+            `;
+          }
+          auditTbody.innerHTML = aHtml;
+        }
+      }
+    } catch (_) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+    }
+  }
+
+  async function loadPageSubEdit(subId) {
+    document.title = "SCOUT Admin — Adjust Subscription Dates";
+    const alertEl = document.getElementById("fullPageSubEditAlert");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!subId) return;
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.subscription) return;
+
+      const s = data.subscription;
+      const idInput = document.getElementById("fpEditSubId");
+      const userInput = document.getElementById("fpEditSubUser");
+      const planInput = document.getElementById("fpEditSubPlan");
+      const startInput = document.getElementById("fpEditSubStartDate");
+      const endInput = document.getElementById("fpEditSubEndDate");
+      const reasonInput = document.getElementById("fpEditSubReason");
+      const bcLink = document.getElementById("fpEditSubBreadcrumbLink");
+      const bcName = document.getElementById("fpEditSubBreadcrumbName");
+      const backBtn = document.getElementById("fpEditSubBackBtn");
+      const cancelBtn = document.getElementById("fpEditSubCancelBtn");
+
+      if (idInput) idInput.value = s.id;
+      if (userInput) userInput.value = s.username || s.full_name || `User #${s.user_id}`;
+      if (planInput) planInput.value = s.plan_name || s.plan_code || "Plan";
+      if (startInput) startInput.value = toDateTimeLocal(s.start_date);
+      if (endInput) endInput.value = toDateTimeLocal(s.end_date);
+      if (reasonInput) reasonInput.value = s.admin_notes || "";
+      if (bcName) bcName.textContent = `Subscription #${s.id}`;
+
+      const navBack = (e) => {
+        if (e) e.preventDefault();
+        switchView("admin-sub-details", true, s.id);
+      };
+      if (bcLink) bcLink.onclick = navBack;
+      if (backBtn) backBtn.onclick = navBack;
+      if (cancelBtn) cancelBtn.onclick = navBack;
+    } catch (_) {}
+  }
+
+  async function loadPageSubExtend(subId) {
+    document.title = "SCOUT Admin — Extend Subscription";
+    const alertEl = document.getElementById("fullPageSubExtendAlert");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!subId) return;
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${subId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.subscription) return;
+
+      const s = data.subscription;
+      const idInput = document.getElementById("fpExtendSubId");
+      const userInput = document.getElementById("fpExtendSubUser");
+      const planInput = document.getElementById("fpExtendSubPlan");
+      const endInput = document.getElementById("fpExtendSubCurrentEnd");
+      const daysInput = document.getElementById("fpExtendDaysInput");
+      const reasonInput = document.getElementById("fpExtendReasonInput");
+      const bcLink = document.getElementById("fpExtendSubBreadcrumbLink");
+      const bcName = document.getElementById("fpExtendSubBreadcrumbName");
+      const backBtn = document.getElementById("fpExtendSubBackBtn");
+      const cancelBtn = document.getElementById("fpExtendSubCancelBtn");
+
+      if (idInput) idInput.value = s.id;
+      if (userInput) userInput.value = s.username || s.full_name || `User #${s.user_id}`;
+      if (planInput) planInput.value = s.plan_name || s.plan_code || "Plan";
+      if (endInput) endInput.value = formatUtcDate(s.end_date);
+      if (daysInput) daysInput.value = 30;
+      if (reasonInput) reasonInput.value = "";
+      if (bcName) bcName.textContent = `Subscription #${s.id}`;
+
+      const navBack = (e) => {
+        if (e) e.preventDefault();
+        switchView("admin-sub-details", true, s.id);
+      };
+      if (bcLink) bcLink.onclick = navBack;
+      if (backBtn) backBtn.onclick = navBack;
+      if (cancelBtn) cancelBtn.onclick = navBack;
+    } catch (_) {}
+  }
+
+  async function loadPageRequestDetails(reqId) {
+    document.title = "SCOUT Admin — Review Subscription Request";
+    const alertEl = document.getElementById("fullPageRequestAlert");
+    const contentEl = document.getElementById("fpRequestDetailsContent");
+    const errorEl = document.getElementById("fpRequestDetailsError");
+    if (alertEl) { alertEl.style.display = "none"; alertEl.textContent = ""; }
+
+    if (!reqId) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+      return;
+    }
+
+    if (contentEl) contentEl.style.display = "block";
+    if (errorEl) errorEl.style.display = "none";
+
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${reqId}`, { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success" || !data.subscription) {
+        if (contentEl) contentEl.style.display = "none";
+        if (errorEl) errorEl.style.display = "block";
+        return;
+      }
+
+      const r = data.subscription;
+      const dId = document.getElementById("fpReqDossierId");
+      const dName = document.getElementById("fpReqDossierName");
+      const dEmail = document.getElementById("fpReqDossierEmail");
+      const dPlan = document.getElementById("fpReqDossierPlan");
+      const dPrice = document.getElementById("fpReqDossierPrice");
+      const dDuration = document.getElementById("fpReqDossierDuration");
+      const dCreated = document.getElementById("fpReqDossierCreated");
+      const dStatus = document.getElementById("fpReqDossierStatus");
+      const notesInput = document.getElementById("fpReqReviewNotes");
+      const appBtn = document.getElementById("fpReqApproveBtn");
+      const rejBtn = document.getElementById("fpReqRejectBtn");
+
+      if (dId) dId.textContent = `#${r.id}`;
+      if (dName) dName.textContent = r.username || r.full_name || "Applicant";
+      if (dEmail) dEmail.textContent = r.email || "—";
+      if (dPlan) dPlan.textContent = r.plan_name || r.plan_code || "Plan";
+      if (dPrice) dPrice.textContent = `$${parseFloat(r.plan_price || 0).toFixed(2)}`;
+      if (dDuration) dDuration.textContent = `${r.duration_days || 30} Days`;
+      if (dCreated) dCreated.textContent = formatUtcDate(r.created_at || r.request_date);
+      if (dStatus) dStatus.innerHTML = `<span class="sub-badge ${r.status}">${escapeHtml(r.status)}</span>`;
+      if (notesInput) notesInput.value = r.admin_notes || "";
+
+      if (appBtn) {
+        appBtn.onclick = async () => {
+          appBtn.disabled = true;
+          try {
+            await activateSubscription(r.id, appBtn);
+            switchView("admin-requests");
+          } finally {
+            appBtn.disabled = false;
+          }
+        };
+      }
+
+      if (rejBtn) {
+        rejBtn.onclick = async () => {
+          rejBtn.disabled = true;
+          try {
+            await rejectSubscription(r.id, rejBtn);
+            switchView("admin-requests");
+          } finally {
+            rejBtn.disabled = false;
+          }
+        };
+      }
+    } catch (_) {
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "block";
+    }
+  }
+
+  function initFullPageManagementHandlers() {
+    // 1. Create User Submit
+    const createUserSubmitBtn = document.getElementById("fullPageCreateUserSubmitBtn");
+    if (createUserSubmitBtn) {
+      createUserSubmitBtn.addEventListener("click", async () => {
+        const fn = document.getElementById("fullPageCreateFullName")?.value.trim() || "";
+        const em = document.getElementById("fullPageCreateEmail")?.value.trim().toLowerCase() || "";
+        const ph = document.getElementById("fullPageCreatePhone")?.value.trim() || "";
+        const ro = document.getElementById("fullPageCreateRole")?.value || "User";
+        const pw = document.getElementById("fullPageCreatePassword")?.value || "";
+        const cp = document.getElementById("fullPageCreateConfirmPassword")?.value || "";
+        const alertEl = document.getElementById("fullPageCreateUserAlert");
+
+        const showError = (msg) => {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${msg}`;
+            alertEl.style.display = "flex";
+          }
+        };
+
+        if (!em) return showError("Email address is required.");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return showError("Please enter a valid email address.");
+        if (!pw) return showError("Password is required.");
+        if (pw.length !== 8) return showError("Password must be exactly 8 digits long.");
+        if (!/^\d{8}$/.test(pw)) return showError("Password must contain numbers only (0-9) with no letters, spaces, or special characters.");
+        if (pw !== cp) return showError("Passwords do not match.");
+
+        createUserSubmitBtn.disabled = true;
+        const origHtml = createUserSubmitBtn.innerHTML;
+        createUserSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Creating...';
+
+        try {
+          const resp = await fetch("/api/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ full_name: fn, email: em, phone_number: ph, role: ro, password: pw, confirm_password: cp })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.status !== "success") {
+            showError(data.message || "Failed to create user account.");
+            return;
+          }
+          if (typeof showToast === "function") showToast(data.message || `User account created successfully (${ro}).`, "success");
+          switchView("admin-users");
+          if (typeof loadAdminUsers === "function") loadAdminUsers();
+          if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+        } catch (_) {
+          showError("Network error while creating user account.");
+        } finally {
+          createUserSubmitBtn.disabled = false;
+          createUserSubmitBtn.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // 2. Edit User Save
+    const editUserSaveBtn = document.getElementById("fpEditUserSaveBtn");
+    if (editUserSaveBtn) {
+      editUserSaveBtn.addEventListener("click", async () => {
+        const uid = document.getElementById("fpEditUserId")?.value;
+        const fn = document.getElementById("fpEditFullName")?.value.trim() || "";
+        const em = document.getElementById("fpEditEmail")?.value.trim() || "";
+        const ph = document.getElementById("fpEditPhone")?.value.trim() || "";
+        const ro = document.getElementById("fpEditRole")?.value || "User";
+        const alertEl = document.getElementById("fullPageUserEditAlert");
+
+        if (!uid) return;
+        editUserSaveBtn.disabled = true;
+        const origHtml = editUserSaveBtn.innerHTML;
+        editUserSaveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+
+        try {
+          const resp = await fetch(`/api/admin/users/${uid}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ full_name: fn, email: em, phone_number: ph, role: ro })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.status !== "success") {
+            if (alertEl) {
+              alertEl.className = "management-alert error";
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to update user.'}`;
+              alertEl.style.display = "flex";
+            }
+            return;
+          }
+          if (typeof showToast === "function") showToast(data.message || "User profile updated successfully.", "success");
+          switchView("admin-user-details", true, uid);
+          if (typeof loadAdminUsers === "function") loadAdminUsers();
+        } catch (_) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Network error updating profile.';
+            alertEl.style.display = "flex";
+          }
+        } finally {
+          editUserSaveBtn.disabled = false;
+          editUserSaveBtn.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // 3. Create Plan Save
+    const createPlanSubmitBtn = document.getElementById("fpCreatePlanSubmitBtn");
+    if (createPlanSubmitBtn) {
+      createPlanSubmitBtn.addEventListener("click", async () => {
+        const code = document.getElementById("fpCreatePlanCode")?.value.trim().toLowerCase() || "";
+        const name = document.getElementById("fpCreatePlanName")?.value.trim() || "";
+        const price = parseFloat(document.getElementById("fpCreatePlanPrice")?.value || "0");
+        const duration = parseInt(document.getElementById("fpCreatePlanDuration")?.value || "30", 10);
+        const desc = document.getElementById("fpCreatePlanDescription")?.value.trim() || "";
+        const maxScans = parseInt(document.getElementById("fpCreatePlanMaxScans")?.value || "100", 10);
+        const trafficLimit = parseInt(document.getElementById("fpCreatePlanTrafficLimit")?.value || "10000", 10);
+        const canMon = document.getElementById("fpCreatePlanFeatMonitoring")?.checked ?? true;
+        const canPort = document.getElementById("fpCreatePlanFeatPortScan")?.checked ?? true;
+        const canNd = document.getElementById("fpCreatePlanFeatDiscovery")?.checked ?? false;
+        const isActive = document.getElementById("fpCreatePlanIsActive")?.checked ?? true;
+        const alertEl = document.getElementById("fullPagePlanCreateAlert");
+
+        if (!code || !name) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Plan code and display name are required.';
+            alertEl.style.display = "flex";
+          }
+          return;
+        }
+
+        createPlanSubmitBtn.disabled = true;
+        const origHtml = createPlanSubmitBtn.innerHTML;
+        createPlanSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Creating...';
+
+        try {
+          const resp = await fetch("/api/admin/plans", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              code, name, price, duration_days: duration, description: desc,
+              is_active: isActive,
+              features: {
+                can_monitor: canMon,
+                can_port_scan: canPort,
+                can_network_discovery: canNd,
+                max_scans_per_day: maxScans,
+                traffic_packet_limit: trafficLimit
+              }
+            })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.status !== "success") {
+            if (alertEl) {
+              alertEl.className = "management-alert error";
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to create plan.'}`;
+              alertEl.style.display = "flex";
+            }
+            return;
+          }
+          if (typeof showToast === "function") showToast(data.message || "Plan created successfully.", "success");
+          switchView("admin-plans");
+          if (typeof loadAdminPlans === "function") loadAdminPlans();
+          if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+          if (typeof loadPublicHomepagePlans === "function") loadPublicHomepagePlans();
+        } catch (_) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Network error creating plan.';
+            alertEl.style.display = "flex";
+          }
+        } finally {
+          createPlanSubmitBtn.disabled = false;
+          createPlanSubmitBtn.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // 4. Edit Plan Save
+    const editPlanSubmitBtn = document.getElementById("fpEditPlanSubmitBtn");
+    if (editPlanSubmitBtn) {
+      editPlanSubmitBtn.addEventListener("click", async () => {
+        const pid = document.getElementById("fpEditPlanId")?.value;
+        const code = document.getElementById("fpEditPlanCode")?.value.trim().toLowerCase() || "";
+        const name = document.getElementById("fpEditPlanName")?.value.trim() || "";
+        const price = parseFloat(document.getElementById("fpEditPlanPrice")?.value || "0");
+        const duration = parseInt(document.getElementById("fpEditPlanDuration")?.value || "30", 10);
+        const desc = document.getElementById("fpEditPlanDescription")?.value.trim() || "";
+        const maxScans = parseInt(document.getElementById("fpEditPlanMaxScans")?.value || "100", 10);
+        const trafficLimit = parseInt(document.getElementById("fpEditPlanTrafficLimit")?.value || "10000", 10);
+        const canMon = document.getElementById("fpEditPlanFeatMonitoring")?.checked ?? true;
+        const canPort = document.getElementById("fpEditPlanFeatPortScan")?.checked ?? true;
+        const canNd = document.getElementById("fpEditPlanFeatDiscovery")?.checked ?? false;
+        const isActive = document.getElementById("fpEditPlanIsActive")?.checked ?? true;
+        const alertEl = document.getElementById("fullPagePlanEditAlert");
+
+        if (!pid) return;
+
+        editPlanSubmitBtn.disabled = true;
+        const origHtml = editPlanSubmitBtn.innerHTML;
+        editPlanSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+
+        try {
+          const resp = await fetch(`/api/admin/plans/${pid}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              code, name, price, duration_days: duration, description: desc,
+              is_active: isActive,
+              features: {
+                can_monitor: canMon,
+                can_port_scan: canPort,
+                can_network_discovery: canNd,
+                max_scans_per_day: maxScans,
+                traffic_packet_limit: trafficLimit
+              }
+            })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.status !== "success") {
+            if (alertEl) {
+              alertEl.className = "management-alert error";
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to update plan.'}`;
+              alertEl.style.display = "flex";
+            }
+            return;
+          }
+          if (typeof showToast === "function") showToast(data.message || "Plan updated successfully.", "success");
+          switchView("admin-plan-details", true, pid);
+          if (typeof loadAdminPlans === "function") loadAdminPlans();
+          if (typeof loadPublicHomepagePlans === "function") loadPublicHomepagePlans();
+        } catch (_) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Network error updating plan.';
+            alertEl.style.display = "flex";
+          }
+        } finally {
+          editPlanSubmitBtn.disabled = false;
+          editPlanSubmitBtn.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // 5. Subscription Notes Save
+    const subNotesSaveBtn = document.getElementById("fpSubNotesSaveBtn");
+    if (subNotesSaveBtn) {
+      subNotesSaveBtn.addEventListener("click", async () => {
+        const sid = document.getElementById("fpSubDossierId")?.textContent?.replace("#", "").trim();
+        const notes = document.getElementById("fpSubNotesInput")?.value?.trim() || "";
+        const msgEl = document.getElementById("fpSubNotesMsg");
+        if (!sid) return;
+
+        subNotesSaveBtn.disabled = true;
+        try {
+          const resp = await fetch(`/api/admin/subscriptions/${sid}/notes`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ notes })
+          });
+          const data = await resp.json();
+          if (resp.ok && data.status === "success") {
+            if (msgEl) {
+              msgEl.style.display = "block";
+              msgEl.style.background = "rgba(16, 185, 129, 0.15)";
+              msgEl.style.color = "#10B981";
+              msgEl.textContent = "Notes saved successfully.";
+              setTimeout(() => { msgEl.style.display = "none"; }, 3000);
+            }
+            if (typeof showToast === "function") showToast("Subscription notes saved.", "success");
+          } else {
+            if (msgEl) {
+              msgEl.style.display = "block";
+              msgEl.style.background = "rgba(239, 68, 68, 0.15)";
+              msgEl.style.color = "#EF4444";
+              msgEl.textContent = data.message || "Failed to save notes.";
+            }
+          }
+        } catch (_) {
+          if (msgEl) {
+            msgEl.style.display = "block";
+            msgEl.style.background = "rgba(239, 68, 68, 0.15)";
+            msgEl.style.color = "#EF4444";
+            msgEl.textContent = "Network error saving notes.";
+          }
+        } finally {
+          subNotesSaveBtn.disabled = false;
+        }
+      });
+    }
+
+    // 6. Edit Subscription Dates Save
+    const editSubSubmitBtn = document.getElementById("fpEditSubSubmitBtn");
+    if (editSubSubmitBtn) {
+      editSubSubmitBtn.addEventListener("click", async () => {
+        const sid = document.getElementById("fpEditSubId")?.value;
+        const startDate = document.getElementById("fpEditSubStartDate")?.value;
+        const endDate = document.getElementById("fpEditSubEndDate")?.value;
+        const reason = document.getElementById("fpEditSubReason")?.value?.trim() || "";
+        const alertEl = document.getElementById("fullPageSubEditAlert");
+
+        if (!sid) return;
+        if (!startDate || !endDate) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Start and End dates are both required.';
+            alertEl.style.display = "flex";
+          }
+          return;
+        }
+
+        editSubSubmitBtn.disabled = true;
+        const origHtml = editSubSubmitBtn.innerHTML;
+        editSubSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
+
+        try {
+          const resp = await fetch(`/api/admin/subscriptions/${sid}/dates`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ start_date: startDate, end_date: endDate, reason })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.status !== "success") {
+            if (alertEl) {
+              alertEl.className = "management-alert error";
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to update dates.'}`;
+              alertEl.style.display = "flex";
+            }
+            return;
+          }
+          if (typeof showToast === "function") showToast(data.message || "Subscription dates updated successfully.", "success");
+          switchView("admin-sub-details", true, sid);
+          if (typeof loadAdminSubscriptions === "function") loadAdminSubscriptions();
+        } catch (_) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Network error updating dates.';
+            alertEl.style.display = "flex";
+          }
+        } finally {
+          editSubSubmitBtn.disabled = false;
+          editSubSubmitBtn.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // 7. Extend Subscription Preset Buttons & Submit
+    document.querySelectorAll(".fp-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const days = btn.getAttribute("data-preset-days");
+        const daysInput = document.getElementById("fpExtendDaysInput");
+        if (daysInput && days) daysInput.value = days;
+      });
+    });
+
+    const extendSubmitBtn = document.getElementById("fpExtendSubmitBtn");
+    if (extendSubmitBtn) {
+      extendSubmitBtn.addEventListener("click", async () => {
+        const sid = document.getElementById("fpExtendSubId")?.value;
+        const days = parseInt(document.getElementById("fpExtendDaysInput")?.value || "30", 10);
+        const reason = document.getElementById("fpExtendReasonInput")?.value?.trim() || "";
+        const alertEl = document.getElementById("fullPageSubExtendAlert");
+
+        if (!sid) return;
+
+        extendSubmitBtn.disabled = true;
+        const origHtml = extendSubmitBtn.innerHTML;
+        extendSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Extending...';
+
+        try {
+          const resp = await fetch(`/api/admin/subscriptions/${sid}/extend`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ extension_days: days, reason })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.status !== "success") {
+            if (alertEl) {
+              alertEl.className = "management-alert error";
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to extend subscription.'}`;
+              alertEl.style.display = "flex";
+            }
+            return;
+          }
+          if (typeof showToast === "function") showToast(data.message || "Subscription extended successfully.", "success");
+          switchView("admin-sub-details", true, sid);
+          if (typeof loadAdminSubscriptions === "function") loadAdminSubscriptions();
+        } catch (_) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Network error extending subscription.';
+            alertEl.style.display = "flex";
+          }
+        } finally {
+          extendSubmitBtn.disabled = false;
+          extendSubmitBtn.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // 8. Global delegate for all Back & Cancel buttons with [data-back-target]
+    document.addEventListener("click", (e) => {
+      const backBtn = e.target.closest("[data-back-target]");
+      if (backBtn) {
+        e.preventDefault();
+        const target = backBtn.getAttribute("data-back-target");
+        if (target) {
+          switchView(target, true);
+        }
       }
     });
   }
@@ -9882,10 +11144,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Port Scanner UI
   PortScannerUI.init();
 
+  // Initialize Full-Page Management Handlers
+  initFullPageManagementHandlers();
+
   // Check auth session before initial view switch
   checkAuthSession().finally(() => {
     const initialView = getQueryView();
     const urlParams = new URLSearchParams(window.location.search);
+    const initialId = urlParams.get("id");
     const isExplicitPublic = urlParams.get("public") === "1" || urlParams.get("view") === "home" || urlParams.get("view") === "landing";
 
     // If initialView is landing (or no view in URL) and user is authenticated and not requesting explicit public view:
@@ -9898,7 +11164,7 @@ document.addEventListener("DOMContentLoaded", () => {
         switchView("plans", false);
       }
     } else {
-      switchView(initialView, false);
+      switchView(initialView, false, initialId);
     }
   });
 
