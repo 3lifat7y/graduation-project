@@ -2274,9 +2274,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const sidebarMobileCloseBtn = document.getElementById("sidebarMobileCloseBtn");
 
-  // Restore Sidebar Collapsed State from localStorage
-  if (localStorage.getItem("nss_sidebar_collapsed") === "true") {
+  // Sidebar is collapsed by default across the application
+  const storedSidebarState = localStorage.getItem("nss_sidebar_collapsed");
+  if (storedSidebarState !== "false") {
     document.body.classList.add("sidebar-collapsed");
+    localStorage.setItem("nss_sidebar_collapsed", "true");
   }
 
   // Close Mobile Drawer Helper
@@ -2284,6 +2286,19 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.classList.remove("mobile-sidebar-open");
     if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
     if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+    document.body.style.overflow = "";
+  }
+
+  // Auto-close / auto-collapse sidebar after navigation (mobile drawer & desktop collapse)
+  function autoCloseSidebarAfterNav() {
+    closeMobileSidebar();
+    if (!document.body.classList.contains("sidebar-collapsed")) {
+      document.body.classList.add("sidebar-collapsed");
+      localStorage.setItem("nss_sidebar_collapsed", "true");
+      if (navbarSidebarToggleBtn) {
+        navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
+      }
+    }
   }
 
   // Toggle Sidebar Function (Responsive for Desktop Collapse & Mobile Drawer)
@@ -2292,6 +2307,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const isOpen = document.body.classList.toggle("mobile-sidebar-open");
       if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
       if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      if (isOpen) {
+        document.body.style.overflow = "hidden";
+      } else {
+        document.body.style.overflow = "";
+      }
     } else {
       const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
       localStorage.setItem("nss_sidebar_collapsed", isCollapsed ? "true" : "false");
@@ -2583,6 +2603,109 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ============================================================================
+  // Context-Aware Top Navbar Controller
+  // ============================================================================
+  function updateNavbarContext(view) {
+    let currentView = view;
+    if (!currentView) {
+      if (document.body.classList.contains("admin-view")) currentView = "admin";
+      else if (document.body.classList.contains("dashboard-view")) currentView = "dashboard";
+      else if (document.body.classList.contains("dedicated-mode-monitoring")) currentView = "monitoring";
+      else if (document.body.classList.contains("dedicated-mode-port-scanner")) currentView = "port-scanner";
+      else if (document.body.classList.contains("plans-view")) currentView = "plans";
+      else if (document.body.classList.contains("home-view")) currentView = "landing";
+      else currentView = getQueryView();
+    }
+
+    if (!currentUser) {
+      if (publicAuthActions) publicAuthActions.style.display = "flex";
+      if (publicDashboardCtaWrap) publicDashboardCtaWrap.style.display = "none";
+      if (userProfileMenu) userProfileMenu.style.display = "none";
+      if (userDropdownCard) userDropdownCard.style.display = "none";
+      return;
+    }
+
+    if (publicAuthActions) publicAuthActions.style.display = "none";
+    if (userProfileMenu) userProfileMenu.style.display = "block";
+
+    if (!publicDashboardCtaWrap || !publicDashboardCta) return;
+
+    const isAdmin = currentUser.role === "Admin";
+    const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+
+    if (currentView === "admin" || (typeof currentView === "string" && currentView.startsWith("admin-"))) {
+      // Admin Dashboard: replace Go to Dashboard with Back to Website
+      publicDashboardCtaWrap.style.display = "flex";
+      publicDashboardCta.className = "btn-auth-ghost";
+      publicDashboardCta.setAttribute("href", "/?public=1");
+      publicDashboardCta.setAttribute("title", "Return to Public SCOUT Homepage");
+      publicDashboardCta.innerHTML = '<i class="fas fa-globe"></i> <span id="publicDashboardCtaText">Back to Website</span>';
+    } else if (currentView === "dashboard") {
+      // User Dashboard: replace Go to Dashboard with Back to Website
+      publicDashboardCtaWrap.style.display = "flex";
+      publicDashboardCta.className = "btn-auth-ghost";
+      publicDashboardCta.setAttribute("href", "/?public=1");
+      publicDashboardCta.setAttribute("title", "Return to Public SCOUT Homepage");
+      publicDashboardCta.innerHTML = '<i class="fas fa-globe"></i> <span id="publicDashboardCtaText">Back to Website</span>';
+    } else if (currentView === "landing" || currentView === "home") {
+      // Public Homepage: display Go to Dashboard / View Subscription Plans
+      publicDashboardCtaWrap.style.display = "flex";
+      publicDashboardCta.className = "btn-auth-cta";
+      if (isAdmin) {
+        publicDashboardCta.setAttribute("href", "/?view=admin");
+        publicDashboardCta.setAttribute("title", "Open SCOUT Admin Console");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
+        if (publicDashboardCtaText) publicDashboardCtaText.textContent = "Go to Dashboard";
+      } else if (hasActiveSub) {
+        publicDashboardCta.setAttribute("href", "/?view=dashboard");
+        publicDashboardCta.setAttribute("title", "Open SCOUT Operator Dashboard");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
+        if (publicDashboardCtaText) publicDashboardCtaText.textContent = "Go to Dashboard";
+      } else {
+        publicDashboardCta.setAttribute("href", "/?view=plans");
+        publicDashboardCta.setAttribute("title", "Explore Subscription Plans");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gem"></i> <span id="publicDashboardCtaText">View Subscription Plans</span>';
+      }
+    } else if (currentView === "plans") {
+      // Inside Plans view: never show a button pointing to Plans
+      publicDashboardCtaWrap.style.display = "flex";
+      if (isAdmin) {
+        publicDashboardCta.className = "btn-auth-cta";
+        publicDashboardCta.setAttribute("href", "/?view=admin");
+        publicDashboardCta.setAttribute("title", "Open Admin Console");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
+      } else if (hasActiveSub) {
+        publicDashboardCta.className = "btn-auth-cta";
+        publicDashboardCta.setAttribute("href", "/?view=dashboard");
+        publicDashboardCta.setAttribute("title", "Open Operator Dashboard");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
+      } else {
+        publicDashboardCta.className = "btn-auth-ghost";
+        publicDashboardCta.setAttribute("href", "/?public=1");
+        publicDashboardCta.setAttribute("title", "Return to Public SCOUT Homepage");
+        publicDashboardCta.innerHTML = '<i class="fas fa-globe"></i> <span id="publicDashboardCtaText">Back to Website</span>';
+      }
+    } else {
+      // Dedicated Tool Views (monitoring, port-scanner, etc.)
+      publicDashboardCtaWrap.style.display = "flex";
+      publicDashboardCta.className = "btn-auth-cta";
+      if (isAdmin) {
+        publicDashboardCta.setAttribute("href", "/?view=admin");
+        publicDashboardCta.setAttribute("title", "Open Admin Console");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
+      } else if (hasActiveSub) {
+        publicDashboardCta.setAttribute("href", "/?view=dashboard");
+        publicDashboardCta.setAttribute("title", "Open Operator Dashboard");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
+      } else {
+        publicDashboardCta.setAttribute("href", "/?view=plans");
+        publicDashboardCta.setAttribute("title", "Explore Subscription Plans");
+        publicDashboardCta.innerHTML = '<i class="fas fa-gem"></i> <span id="publicDashboardCtaText">View Subscription Plans</span>';
+      }
+    }
+  }
+
   function updateAuthUI(user) {
     currentUser = user;
     if (user) {
@@ -2596,16 +2719,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (dropdownAdminLink) dropdownAdminLink.style.display = "flex";
         if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
 
-        // Dynamic Admin Dashboard CTA for Public Homepage
-        if (publicDashboardCtaWrap) publicDashboardCtaWrap.style.display = "flex";
-        if (publicDashboardCta) publicDashboardCta.setAttribute("href", "/?view=admin");
-        if (publicDashboardCtaText) publicDashboardCtaText.textContent = "Go to Admin Dashboard";
-
         if (heroDynamicDashboardBtn) {
           heroDynamicDashboardBtn.style.display = "inline-flex";
           heroDynamicDashboardBtn.setAttribute("href", "/?view=admin");
         }
-        if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "Go to Admin Dashboard";
+        if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "Go to Dashboard";
 
         if (breadcrumbDashboardLink) {
           breadcrumbDashboardLink.setAttribute("href", "/?view=admin");
@@ -2619,12 +2737,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Dynamic User Dashboard CTA for Public Homepage
         const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
-        if (publicDashboardCtaWrap) publicDashboardCtaWrap.style.display = "flex";
 
         if (hasActiveSub) {
-          if (publicDashboardCta) publicDashboardCta.setAttribute("href", "/?view=dashboard");
-          if (publicDashboardCtaText) publicDashboardCtaText.textContent = "Go to Dashboard";
-
           if (heroDynamicDashboardBtn) {
             heroDynamicDashboardBtn.style.display = "inline-flex";
             heroDynamicDashboardBtn.setAttribute("href", "/?view=dashboard");
@@ -2637,9 +2751,6 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           if (dropdownDashboardLink) dropdownDashboardLink.style.display = "flex";
         } else {
-          if (publicDashboardCta) publicDashboardCta.setAttribute("href", "/?view=plans");
-          if (publicDashboardCtaText) publicDashboardCtaText.textContent = "View Subscription Plans";
-
           if (heroDynamicDashboardBtn) {
             heroDynamicDashboardBtn.style.display = "inline-flex";
             heroDynamicDashboardBtn.setAttribute("href", "/?view=plans");
@@ -2665,6 +2776,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dropdownUserTitle) dropdownUserTitle.textContent = user.full_name || user.email || user.username;
       if (dropdownUserEmail) dropdownUserEmail.textContent = user.email;
 
+      // Update contextual top navbar action
+      updateNavbarContext();
+
     } else {
       document.body.classList.remove("auth-authenticated", "auth-admin");
       document.body.classList.add("auth-anonymous");
@@ -2681,6 +2795,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (publicAuthActions) publicAuthActions.style.display = "flex";
       if (userProfileMenu) userProfileMenu.style.display = "none";
       if (userDropdownCard) userDropdownCard.style.display = "none";
+
+      updateNavbarContext();
     }
   }
 
@@ -2991,10 +3107,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Close mobile drawer on navigation
-    document.body.classList.remove("mobile-sidebar-open");
-    if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
-    if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
+    // Auto-close / auto-collapse sidebar after navigation
+    autoCloseSidebarAfterNav();
 
     // Close any open modals and reset body scroll lock
     if (typeof closeAttackModal === "function") {
@@ -3004,6 +3118,32 @@ document.addEventListener("DOMContentLoaded", () => {
       try { window.PortScannerUI.closePortDetailsModal(); } catch (_) {}
     }
     document.body.style.overflow = "";
+
+    // Update navbar actions and dynamic buttons for the target view context
+    updateNavbarContext(targetView);
+
+    // Maintain strict separation between public navigation and internal dashboard layouts
+    if (targetView === "landing" || targetView === "home") {
+      if (sidebarPublicNavGroup) sidebarPublicNavGroup.style.display = "block";
+      if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+      if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+    } else {
+      if (sidebarPublicNavGroup) sidebarPublicNavGroup.style.display = "none";
+      if (currentUser && currentUser.role === "Admin") {
+        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "block";
+        if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
+        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
+      } else if (currentUser) {
+        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "block";
+        if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
+        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+      } else {
+        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
+        if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+      }
+    }
 
     if (targetView === "dashboard") {
       document.title = "SCOUT — Operator Dashboard & Mission Control";
@@ -3288,10 +3428,8 @@ document.addEventListener("DOMContentLoaded", () => {
       window.history.pushState(null, "", `#${sectionId}`);
     }
 
-    // Auto-close mobile sidebar drawer if open
-    document.body.classList.remove("mobile-sidebar-open");
-    if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute("aria-expanded", "false");
-    if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "false");
+    // Auto-close / auto-collapse sidebar after navigation
+    autoCloseSidebarAfterNav();
 
     navClickLockTimer = setTimeout(() => {
       isNavigatingViaClick = false;
@@ -3347,13 +3485,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   initPublicNavLinks();
-
-  // Helper to auto-close mobile drawer after navigation
-  function autoCloseSidebarAfterNav() {
-    if (window.innerWidth < 992) {
-      closeMobileSidebar();
-    }
-  }
 
   // Intercept Navigation Link Clicks in Sidebar
   sidebarNavItems.forEach(item => {
@@ -3454,6 +3585,24 @@ document.addEventListener("DOMContentLoaded", () => {
         openAuthModal("signin");
         return;
       }
+      const href = publicDashboardCta.getAttribute("href") || "";
+      if (href.includes("public=1") || href === "/" || href.includes("#overview")) {
+        switchView("landing");
+        return;
+      }
+      if (href.includes("view=admin")) {
+        switchView("admin");
+        return;
+      }
+      if (href.includes("view=dashboard")) {
+        switchView("dashboard");
+        return;
+      }
+      if (href.includes("view=plans")) {
+        switchView("plans");
+        return;
+      }
+
       if (currentUser.role === "Admin") {
         switchView("admin");
       } else {

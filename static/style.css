@@ -444,6 +444,7 @@ body.sidebar-collapsed .main-content-wrapper {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 0 24px;
   z-index: 900;
   box-sizing: border-box;
@@ -486,12 +487,15 @@ body.dedicated-mode-port-scanner #port-scanner {
   scroll-margin-top: calc(var(--top-nav-height, 60px) + 68px);
 }
 
-/* Left Group: Sidebar Toggle & Brand Title */
+/* 1. Left Group: Dedicated Area for Sidebar Toggle & SCOUT Logo */
 .top-nav-left {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: max-content;
+  z-index: 2;
 }
 
 .top-nav-sidebar-toggle {
@@ -522,11 +526,11 @@ body.dedicated-mode-port-scanner #port-scanner {
 }
 
 .top-nav-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-decoration: none;
-  min-width: 0;
+  flex-shrink: 0;
   transition: opacity var(--transition-fast);
 }
 
@@ -538,13 +542,16 @@ body.dedicated-mode-port-scanner #port-scanner {
   display: flex;
   align-items: center;
   height: 36px;
+  width: auto;
+  min-width: 110px;
+  max-width: 140px;
   overflow: visible;
 }
 
 .scout-nav-logo {
-  height: 32px;
+  height: 30px;
   width: auto;
-  max-width: 140px;
+  max-width: 130px;
   object-fit: contain;
   display: block;
   transition: transform var(--transition-fast), filter var(--transition-fast);
@@ -579,25 +586,32 @@ body.dedicated-mode-port-scanner #port-scanner {
   border: 0;
 }
 
-/* Public Center Navigation for Anonymous & Landing Visitors */
+/* 2. Center Group: Public Navigation Links in Dedicated Container */
 .public-top-nav-links {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 12px;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 16px;
+  gap: 6px;
 }
 
 .public-nav-link {
   font-family: var(--font-body, "Inter", sans-serif);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-weight: 500;
   color: var(--text-secondary);
   text-decoration: none;
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm, 6px);
   border: 1px solid transparent;
   transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
 }
 
 .public-nav-link:hover {
@@ -638,6 +652,10 @@ body.dedicated-mode-port-scanner #port-scanner {
 /* Public Sidebar Nav Items in Mobile Drawer */
 body:not(.home-view) #sidebarPublicNavGroup {
   display: none !important;
+}
+
+body.home-view #sidebarPublicNavGroup {
+  display: block;
 }
 
 .public-sidebar-nav-item.active {
@@ -735,12 +753,17 @@ body:not(.home-view) .public-top-nav-links {
   50% { opacity: 0.4; transform: scale(0.85); }
 }
 
-/* Right Group: System Engine Status & Theme Toggle */
+/* Right Group: System Actions, Theme Toggle & User Profile */
 .top-nav-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
   flex-shrink: 0;
+  min-width: max-content;
+  z-index: 2;
+  margin-left: auto;
 }
 
 .top-nav-health-pill {
@@ -783,18 +806,21 @@ body:not(.home-view) .public-top-nav-links {
 .theme-toggle-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 7px 15px;
+  height: 34px;
+  padding: 0 14px;
   border-radius: var(--radius-full);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  font-size: 0.82rem;
+  font-size: 0.80rem;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
   user-select: none;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .theme-toggle-btn:hover {
@@ -7654,6 +7680,49 @@ body.dedicated-mode-port-scanner #system-architecture,
    Complete multi-screen fluid layout supporting 320px, 360px, 375px, 390px, 414px, 768px, 1024px & Desktop
 ============================================================================== */
 
+/* --- Medium Desktop & Laptop Navbar Optimization (max-width: 1365px and min-width: 961px) --- */
+@media (max-width: 1365px) and (min-width: 961px) {
+  .global-top-navbar {
+    padding: 0 16px;
+    gap: 10px;
+  }
+
+  .public-top-nav-links {
+    margin: 0 8px;
+    gap: 4px;
+  }
+
+  .public-nav-link {
+    padding: 5px 8px;
+    font-size: 0.78rem;
+  }
+
+  .theme-toggle-text {
+    display: none !important;
+  }
+
+  .theme-toggle-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--radius-full);
+  }
+
+  .btn-auth-cta,
+  .btn-auth-ghost {
+    height: 34px;
+    padding: 0 11px;
+    font-size: 0.78rem;
+    gap: 5px;
+  }
+
+  .user-name {
+    max-width: 85px;
+  }
+}
+
 /* --- Breakpoint 1: Large Laptops & Medium Desktops (max-width: 1200px) --- */
 @media (max-width: 1200px) {
   .section-container {
@@ -7768,8 +7837,14 @@ body.dedicated-mode-port-scanner #system-architecture,
   /* Global Top Navbar on mobile / tablet */
   .global-top-navbar {
     padding: 0 16px;
+    gap: 8px;
   }
 
+  .top-nav-sidebar-toggle {
+    display: inline-flex !important;
+  }
+
+  .public-top-nav-links,
   .top-nav-center {
     display: none !important;
   }
@@ -7779,7 +7854,8 @@ body.dedicated-mode-port-scanner #system-architecture,
   }
 
   .theme-toggle-btn {
-    padding: 8px 12px;
+    height: 34px;
+    padding: 0 10px;
     gap: 0;
   }
 
@@ -8305,7 +8381,19 @@ body.dedicated-mode-port-scanner #system-architecture,
 
   /* Global Top Navbar on Small Screens */
   .global-top-navbar {
-    padding: 0 12px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .top-nav-left {
+    gap: 6px;
+  }
+
+  .top-nav-sidebar-toggle {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.88rem;
   }
 
   .top-nav-brand .top-nav-title {
@@ -8317,21 +8405,49 @@ body.dedicated-mode-port-scanner #system-architecture,
   }
 
   .top-nav-brand .scout-nav-logo {
-    height: 28px;
-    max-width: 110px;
+    height: 25px;
+    max-width: 95px;
   }
 
   .top-nav-health-pill {
     display: none !important;
   }
 
+  .top-nav-right {
+    gap: 6px;
+  }
+
   .theme-toggle-btn {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     padding: 0;
     justify-content: center;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-full);
+  }
+
+  .btn-auth-cta,
+  .btn-auth-ghost {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 0.74rem;
+    gap: 4px;
+  }
+
+  .user-profile-btn {
+    height: 32px;
+    padding: 0 6px 0 3px;
+    gap: 4px;
+  }
+
+  .user-info-wrap {
+    display: none;
+  }
+
+  .user-dropdown-card {
+    right: 0;
+    width: 190px;
+    max-width: calc(100vw - 16px);
   }
 
   /* Hero Section */
@@ -10956,23 +11072,26 @@ body.dedicated-mode-port-scanner #system-architecture,
    SCOUT Cyber Authentication, RBAC & Modal Design System
    ============================================================================== */
 
-/* 1. Public Homepage Layout: Sidebar Completely Hidden for Everyone */
-body.home-view .app-sidebar,
-body.home-view #sidebar,
-body.home-view #sidebarBackdrop,
-body.home-view .top-nav-sidebar-toggle,
-body.auth-anonymous .app-sidebar,
-body.auth-anonymous #sidebar,
-body.auth-anonymous #sidebarBackdrop,
-body.auth-anonymous .top-nav-sidebar-toggle {
-  display: none !important;
-}
-
+/* 1. Public Homepage Layout: Full-Width Main Content Wrapper */
 body.home-view .main-content-wrapper,
 body.auth-anonymous .main-content-wrapper {
   margin-left: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
+}
+
+/* On Desktop (>= 961px): Sidebar and Toggle Hidden on Public Home (Full-Width Landing) */
+@media (min-width: 961px) {
+  body.home-view .app-sidebar,
+  body.home-view #sidebar,
+  body.home-view #sidebarBackdrop,
+  body.home-view .top-nav-sidebar-toggle,
+  body.auth-anonymous .app-sidebar,
+  body.auth-anonymous #sidebar,
+  body.auth-anonymous #sidebarBackdrop,
+  body.auth-anonymous .top-nav-sidebar-toggle {
+    display: none !important;
+  }
 }
 
 /* 2. Public Auth Top Navbar Buttons & Dashboard CTA */
@@ -10986,17 +11105,22 @@ body.auth-anonymous .main-content-wrapper {
 .btn-auth-ghost {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 7px 14px;
-  font-family: "Plus Jakarta Sans", sans-serif;
-  font-size: 0.85rem;
+  height: 34px;
+  padding: 0 14px;
+  font-family: var(--font-display, "Plus Jakarta Sans", sans-serif);
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-primary, #F4F4F5);
   background: transparent;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.16));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
 .btn-auth-ghost:hover {
@@ -11008,43 +11132,54 @@ body.auth-anonymous .main-content-wrapper {
 .btn-auth-cta {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 7px 16px;
-  font-family: "Plus Jakarta Sans", sans-serif;
-  font-size: 0.85rem;
+  height: 34px;
+  padding: 0 15px;
+  font-family: var(--font-display, "Plus Jakarta Sans", sans-serif);
+  font-size: 0.82rem;
   font-weight: 700;
   color: #09090B !important;
   background: var(--brand-accent, #A3E635);
   border: 1px solid var(--brand-accent, #A3E635);
   border-radius: 8px;
   cursor: pointer;
-  box-shadow: 0 0 16px rgba(163, 230, 53, 0.25);
+  box-shadow: 0 0 14px rgba(163, 230, 53, 0.22);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  text-decoration: none;
+  box-sizing: border-box;
+  line-height: 1;
 }
 
 .btn-auth-cta:hover {
   background: #84CC16;
   border-color: #84CC16;
-  box-shadow: 0 0 22px rgba(163, 230, 53, 0.45);
+  box-shadow: 0 0 20px rgba(163, 230, 53, 0.40);
   transform: translateY(-1px);
 }
 
 /* 3. Authenticated User Profile Menu & Dropdown */
 .user-profile-menu {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
 .user-profile-btn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 5px 12px 5px 6px;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 5px;
   background: var(--bg-surface, rgba(24, 24, 27, 0.8));
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-  border-radius: 24px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-full, 9999px);
   color: var(--text-primary, #F4F4F5);
   cursor: pointer;
   transition: all 0.2s ease;
+  user-select: none;
+  box-sizing: border-box;
 }
 
 .user-profile-btn:hover {
@@ -11053,15 +11188,16 @@ body.auth-anonymous .main-content-wrapper {
 }
 
 .user-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   border-radius: 50%;
   background: rgba(163, 230, 53, 0.15);
   color: var(--brand-accent, #A3E635);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   border: 1px solid rgba(163, 230, 53, 0.3);
 }
 
@@ -11073,18 +11209,23 @@ body.auth-anonymous .main-content-wrapper {
 }
 
 .user-name {
-  font-family: "Plus Jakarta Sans", sans-serif;
-  font-size: 0.82rem;
+  font-family: var(--font-display, "Plus Jakarta Sans", sans-serif);
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-primary, #F4F4F5);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-role-badge {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.65rem;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--brand-accent, #A3E635);
+  letter-spacing: 0.02em;
 }
 
 body.auth-admin .user-role-badge {
@@ -11092,73 +11233,84 @@ body.auth-admin .user-role-badge {
 }
 
 .user-dropdown-caret {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   color: var(--text-muted, #A1A1AA);
   transition: transform 0.2s ease;
 }
 
+.user-profile-btn[aria-expanded="true"] .user-dropdown-caret {
+  transform: rotate(180deg);
+}
+
 .user-dropdown-card {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   right: 0;
-  width: 220px;
+  width: 195px;
+  max-width: calc(100vw - 16px);
   background: var(--bg-surface, #18181B);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-  border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.25), 0 4px 10px -2px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(12px);
-  padding: 8px;
+  -webkit-backdrop-filter: blur(12px);
+  padding: 5px;
   z-index: 1000;
-  animation: dropdownFadeIn 0.18s ease-out;
+  animation: dropdownFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 
 @keyframes dropdownFadeIn {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .user-dropdown-header {
-  padding: 8px 10px;
+  padding: 6px 8px 5px 8px;
 }
 
 .user-dropdown-title {
-  font-family: "Plus Jakarta Sans", sans-serif;
-  font-size: 0.85rem;
+  font-family: var(--font-display, "Plus Jakarta Sans", sans-serif);
+  font-size: 0.80rem;
   font-weight: 700;
   color: var(--text-primary, #F4F4F5);
+  line-height: 1.2;
 }
 
 .user-dropdown-email {
-  font-size: 0.75rem;
+  font-size: 0.70rem;
   color: var(--text-muted, #A1A1AA);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 2px;
+  line-height: 1.2;
 }
 
 .user-dropdown-divider {
   height: 1px;
-  background: var(--border-color, rgba(255, 255, 255, 0.08));
-  margin: 6px 0;
+  background: var(--border, rgba(255, 255, 255, 0.08));
+  margin: 4px 0;
 }
 
 .user-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 10px;
-  font-family: "Inter", sans-serif;
-  font-size: 0.82rem;
+  padding: 6px 8px;
+  font-family: var(--font-sans, "Inter", sans-serif);
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-primary, #F4F4F5);
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   text-decoration: none;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   box-sizing: border-box;
+  line-height: 1.2;
 }
 
 .user-dropdown-item:hover {
@@ -11166,15 +11318,25 @@ body.auth-admin .user-role-badge {
   color: var(--brand-accent, #A3E635);
 }
 
-.user-dropdown-item.text-danger:hover {
-  background: rgba(239, 68, 68, 0.12);
+[data-theme="light"] .user-dropdown-item:hover {
+  background: var(--bg-secondary, #F4F4F5);
+  color: #09090B;
+}
+
+.user-dropdown-item.text-danger {
   color: #EF4444;
 }
 
+.user-dropdown-item.text-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #DC2626;
+}
+
 .dropdown-item-icon {
-  width: 16px;
+  width: 14px;
+  min-width: 14px;
   text-align: center;
-  font-size: 0.85rem;
+  font-size: 0.76rem;
   color: var(--text-muted, #A1A1AA);
 }
 

@@ -1453,9 +1453,11 @@
       });
     });
 
-    // Collapsible Sidebar & Mobile Navigation
-    if (localStorage.getItem('nss_sidebar_collapsed') === 'true') {
+    // Sidebar is collapsed by default across the application
+    const storedSidebarState = localStorage.getItem('nss_sidebar_collapsed');
+    if (storedSidebarState !== 'false') {
       document.body.classList.add('sidebar-collapsed');
+      localStorage.setItem('nss_sidebar_collapsed', 'true');
     }
 
     const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
@@ -1468,6 +1470,7 @@
       document.body.classList.remove('mobile-sidebar-open');
       if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', 'false');
       if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
     }
 
     function handleSidebarToggle() {
@@ -1475,6 +1478,11 @@
         const isOpen = document.body.classList.toggle('mobile-sidebar-open');
         if (navbarSidebarToggleBtn) navbarSidebarToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (isOpen) {
+          document.body.style.overflow = 'hidden';
+        } else {
+          document.body.style.overflow = '';
+        }
       } else {
         const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
         localStorage.setItem('nss_sidebar_collapsed', isCollapsed ? 'true' : 'false');
@@ -1523,15 +1531,12 @@
     });
 
     function autoCloseSidebarAfterNav() {
-      if (window.innerWidth < 992) {
-        closeMobileSidebar();
-      } else {
-        if (!document.body.classList.contains('sidebar-collapsed')) {
-          document.body.classList.add('sidebar-collapsed');
-          localStorage.setItem('nss_sidebar_collapsed', 'true');
-          if (navbarSidebarToggleBtn) {
-            navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
-          }
+      closeMobileSidebar();
+      if (!document.body.classList.contains('sidebar-collapsed')) {
+        document.body.classList.add('sidebar-collapsed');
+        localStorage.setItem('nss_sidebar_collapsed', 'true');
+        if (navbarSidebarToggleBtn) {
+          navbarSidebarToggleBtn.setAttribute('aria-expanded', 'false');
         }
       }
     }
