@@ -139,8 +139,8 @@ class TestSubscriptionFrontendAndIntegration(unittest.TestCase):
             "phone_number": "+1 (555) 250-0199",
             "username": "operator_p25",
             "email": "operator_p25@scout.local",
-            "password": "SecurePassword123!",
-            "confirm_password": "SecurePassword123!"
+            "password": "12345678",
+            "confirm_password": "12345678"
         })
         self.assertEqual(reg_res.status_code, 201)
         reg_data = reg_res.get_json()

@@ -407,18 +407,21 @@ def determine_user_landing_view(user: User) -> Tuple[str, str]:
     Evaluates role, account status, and subscription state to return:
     (view_key: str, redirect_url: str).
 
+    - Inactive / Suspended -> ("suspended", "/?view=suspended")
     - Admin -> ("admin", "/?view=admin")
     - User with active subscription -> ("dashboard", "/?view=dashboard")
     - User with pending request -> ("plans", "/?view=plans&status=pending")
-    - User with expired/no subscription -> ("plans", "/?view=plans")
+    - User with expired subscription -> ("plans", "/?view=plans&status=expired")
+    - User with no subscription -> ("plans", "/?view=plans")
     """
     if not user or not user.is_active:
-        return "landing", "/"
+        return "suspended", "/?view=suspended"
 
     if user.role == "Admin":
         return "admin", "/?view=admin"
 
     with get_db_session() as session:
+        now = ensure_utc(utcnow())
         # Check active subscription
         active_sub = (
             session.query(UserSubscription)
@@ -426,19 +429,30 @@ def determine_user_landing_view(user: User) -> Tuple[str, str]:
             .order_by(UserSubscription.end_date.desc())
             .first()
         )
-        if active_sub and active_sub.is_valid_active():
+        if active_sub and active_sub.is_valid_active(now):
             return "dashboard", "/?view=dashboard"
 
         # Check pending subscription
         pending_sub = (
             session.query(UserSubscription)
             .filter_by(user_id=user.id, status="pending")
+            .order_by(UserSubscription.id.desc())
             .first()
         )
         if pending_sub:
             return "plans", "/?view=plans&status=pending"
 
-        # Expired or no subscription
+        # Check expired subscription
+        expired_sub = (
+            session.query(UserSubscription)
+            .filter_by(user_id=user.id, status="expired")
+            .order_by(UserSubscription.end_date.desc())
+            .first()
+        )
+        if expired_sub:
+            return "plans", "/?view=plans&status=expired"
+
+        # No subscription
         return "plans", "/?view=plans"
 
 

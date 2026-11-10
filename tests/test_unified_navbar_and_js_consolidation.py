@@ -34,9 +34,6 @@ class TestUnifiedNavbarAndJsConsolidation(unittest.TestCase):
             'id="topNavBrandLink"',
             'id="navbarSidebarToggleBtn"',
             'id="themeToggleBtn"',
-            'id="publicDashboardCtaWrap"',
-            'id="publicDashboardCta"',
-            'id="publicDashboardCtaText"',
             'id="userProfileMenu"',
             'id="userProfileDropdownBtn"',
             'id="userDropdownCard"'
@@ -52,10 +49,9 @@ class TestUnifiedNavbarAndJsConsolidation(unittest.TestCase):
         self.assertNotIn('id="topNavHealthPill"', self.ddos_html)
 
     def test_03_go_to_dashboard_cta_in_network_discovery(self):
-        """3. Verify Go to Dashboard CTA button exists in network_discovery.html with correct classes and text."""
-        self.assertIn('id="publicDashboardCta"', self.nd_html)
-        self.assertIn('class="btn-auth-cta"', self.nd_html)
-        self.assertIn('>Go to Dashboard</span>', self.nd_html)
+        """3. Verify redundant Go to Dashboard navbar button is absent from network_discovery.html top navbar."""
+        self.assertNotIn('id="publicDashboardCta"', self.nd_html)
+        self.assertNotIn('id="publicDashboardCtaWrap"', self.nd_html)
         # Dedicated toolbar breadcrumbs
         self.assertIn('id="dedicatedToolBar"', self.nd_html)
         self.assertIn('id="breadcrumbHomeLink"', self.nd_html)
@@ -109,14 +105,22 @@ class TestUnifiedNavbarAndJsConsolidation(unittest.TestCase):
 
     def test_09_flask_route_network_discovery_live_response(self):
         """9. Verify GET /network-discovery returns 200 with complete navbar and scripts."""
-        res = self.client.get('/network-discovery')
+        from modules.auth.security import create_session_token, COOKIE_NAME
+        from modules.auth.db import get_db_session
+        from modules.auth.models import User
+
+        with get_db_session() as s:
+            u = s.query(User).filter_by(role='Admin', is_active=True).first()
+            token = create_session_token(u.id, u.role, u.session_version)
+
+        self.client.set_cookie(key=COOKIE_NAME, value=token)
+        res = self.client.get('/network-discovery', headers={"Authorization": f"Bearer {token}"})
         self.assertEqual(res.status_code, 200)
         html = res.get_data(as_text=True)
 
         self.assertIn('id="globalTopNavbar"', html)
-        self.assertIn('id="publicDashboardCtaWrap"', html)
-        self.assertIn('id="publicDashboardCta"', html)
-        self.assertIn('Go to Dashboard', html)
+        self.assertNotIn('id="publicDashboardCtaWrap"', html)
+        self.assertNotIn('id="publicDashboardCta"', html)
         self.assertIn('/static/main.js', html)
 
 if __name__ == '__main__':

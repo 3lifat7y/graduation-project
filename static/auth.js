@@ -117,13 +117,30 @@
           if (banner && text) {
             text.textContent = `Signed in as ${user.full_name || user.username} (${user.role}).`;
             if (link) {
+              const destination = data.landing_url || (user.role === "Admin" ? "/?view=admin" : "/?view=plans");
+              link.setAttribute("href", destination);
               if (user.role === "Admin") {
-                link.setAttribute("href", "/?view=admin");
                 link.textContent = "Go to Admin Console \u2192";
-              } else {
-                link.setAttribute("href", "/?view=dashboard");
+              } else if (data.has_active_subscription) {
                 link.textContent = "Go to Dashboard \u2192";
+              } else {
+                link.textContent = "View Subscription Plans \u2192";
               }
+            }
+            banner.style.display = "flex";
+          }
+        }
+      } else if (res.status === 403) {
+        const data = await res.json().catch(() => ({}));
+        if (data.code === "ACCOUNT_DISABLED") {
+          const banner = document.getElementById("authSessionBanner");
+          const text = document.getElementById("authSessionText");
+          const link = document.getElementById("authSessionLink");
+          if (banner && text) {
+            text.textContent = "Account suspended. Operational and subscription features are restricted.";
+            if (link) {
+              link.setAttribute("href", "/?view=suspended");
+              link.textContent = "View Account Status \u2192";
             }
             banner.style.display = "flex";
           }
@@ -304,7 +321,7 @@
             } else if (data.user && data.user.role === "Admin") {
               destination = "/?view=admin";
             } else {
-              destination = "/?view=dashboard";
+              destination = (data.has_active_subscription) ? "/?view=dashboard" : "/?view=plans";
             }
           }
 

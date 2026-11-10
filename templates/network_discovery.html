@@ -105,32 +105,49 @@
 
       <!-- Regular Operator Navigation Group (Rendered when Authenticated as User) -->
       <div class="sidebar-nav-group" id="sidebarUserNavGroup" style="display:none;">
-        <div class="sidebar-section-label">OVERVIEW</div>
+        <div class="sidebar-section-label" id="sidebarUserOverviewLabel">OVERVIEW</div>
         <a href="/?view=dashboard" class="sidebar-nav-item" id="sidebarDashboardNavItem" data-nav="dashboard" data-tooltip="Operator Dashboard">
           <i class="fas fa-gauge-high nav-icon"></i>
           <span class="nav-text">Dashboard</span>
         </a>
 
-        <div class="sidebar-section-label nav-sub-label">ACCOUNT & BILLING</div>
-        <a href="/?view=plans" class="sidebar-nav-item" data-nav="plans" data-tooltip="Subscription Plans">
+        <div class="sidebar-section-label nav-sub-label" id="sidebarUserBillingLabel">ACCOUNT & BILLING</div>
+        <a href="/?view=plans" class="sidebar-nav-item" id="sidebarPlansNavItem" data-nav="plans" data-tooltip="Subscription Plans">
           <i class="fas fa-gem nav-icon"></i>
           <span class="nav-text">Subscription Plans</span>
+          <span class="nav-badge-pill" id="sidebarUserPendingBadge" style="display:none;">Pending</span>
+        </a>
+
+        <a href="/?view=profile" class="sidebar-nav-item" id="sidebarProfileNavItem" data-nav="profile" data-tooltip="Profile & Security">
+          <i class="fas fa-user-shield nav-icon"></i>
+          <span class="nav-text">Profile & Security</span>
+        </a>
+
+        <div class="sidebar-nav-item account-restriction-item" id="sidebarSuspendedNavItem" style="display:none; color: #EF4444;" data-tooltip="Account Suspended">
+          <i class="fas fa-user-slash nav-icon"></i>
+          <span class="nav-text">Account Suspended</span>
+        </div>
+
+        <div class="sidebar-section-label nav-sub-label" id="sidebarUserSessionLabel">SESSION</div>
+        <a href="#" class="sidebar-nav-item text-danger" id="sidebarSignOutNavItem" data-nav="signout" data-tooltip="Sign Out">
+          <i class="fas fa-arrow-right-from-bracket nav-icon"></i>
+          <span class="nav-text">Sign Out</span>
         </a>
       </div>
 
       <!-- Operational Tools (Shared by Authenticated Users & Admins) -->
       <div class="sidebar-nav-group" id="sidebarToolsNavGroup">
         <div class="sidebar-section-label">OPERATIONAL TOOLS</div>
-        <a href="/?view=monitoring" class="sidebar-nav-item" data-nav="monitoring" data-tooltip="Live Network Monitoring">
+        <a href="/?view=monitoring" class="sidebar-nav-item" id="sidebarMonitoringNavItem" data-nav="monitoring" data-tooltip="Live Network Monitoring">
           <i class="fas fa-satellite-dish nav-icon"></i>
           <span class="nav-text">Live Network Monitoring</span>
           <span class="nav-badge-pill">Live</span>
         </a>
-        <a href="/?view=port-scanner" class="sidebar-nav-item" data-nav="port-scanner" data-tooltip="Port Scanner">
+        <a href="/?view=port-scanner" class="sidebar-nav-item" id="sidebarPortScannerNavItem" data-nav="port-scanner" data-tooltip="Port Scanner">
           <i class="fas fa-bullseye nav-icon"></i>
           <span class="nav-text">Port Scanner</span>
         </a>
-        <a href="/network-discovery" class="sidebar-nav-item active" data-nav="network-discovery" data-tooltip="Network Discovery" aria-current="page">
+        <a href="/network-discovery" class="sidebar-nav-item active" id="sidebarNetworkDiscoveryNavItem" data-nav="network-discovery" data-tooltip="Network Discovery" aria-current="page">
           <i class="fas fa-sitemap nav-icon"></i>
           <span class="nav-text">Network Discovery</span>
         </a>
@@ -181,14 +198,6 @@
           <a href="/register" class="btn-auth-cta" id="headerGetStartedBtn" title="Create a new SCOUT account">
             <i class="fas fa-user-shield"></i>
             <span>Get Started</span>
-          </a>
-        </div>
-
-        <!-- Dynamic Go to Dashboard CTA (Visible on Operational Tools when Logged In) -->
-        <div class="public-dashboard-cta-wrap" id="publicDashboardCtaWrap" style="display:none;">
-          <a href="/?view=dashboard" class="btn-auth-cta" id="publicDashboardCta">
-            <i class="fas fa-gauge-high"></i>
-            <span id="publicDashboardCtaText">Go to Dashboard</span>
           </a>
         </div>
 

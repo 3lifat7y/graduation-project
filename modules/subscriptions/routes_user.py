@@ -17,6 +17,15 @@ sub_user_bp = Blueprint("sub_user", __name__, url_prefix="/api")
 @sub_user_bp.route("/subscriptions/plans", methods=["GET"])
 def get_public_plans():
     """Returns all currently active subscription plans available for user selection."""
+    from modules.auth.routes import get_current_user_from_request
+    user, _ = get_current_user_from_request(allow_disabled=True)
+    if user and not user.is_active:
+        return jsonify({
+            "status": "error",
+            "code": "ACCOUNT_DISABLED",
+            "message": "Your account has been suspended. Please contact the platform administrator."
+        }), 403
+
     with get_db_session() as session:
         plans = (
             session.query(SubscriptionPlan)

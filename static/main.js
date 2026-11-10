@@ -2271,6 +2271,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const subPlansSection = document.getElementById("subscription-plans");
   const adminConsoleSection = document.getElementById("admin-console");
   const userDashboardSection = document.getElementById("user-dashboard");
+  const userProfileSection = document.getElementById("userProfileSection");
+  const accountSuspendedSection = document.getElementById("accountSuspendedSection");
   const ndLandingSection = document.getElementById("network-discovery-section");
   const threatSection = document.getElementById("threat-intelligence");
   const preventionSection = document.getElementById("prevention");
@@ -2689,6 +2691,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const isAdmin = currentUser.role === "Admin";
     const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
 
+    // Operational tools (Live Network Monitoring, Port Scanner, Network Discovery):
+    // Completely remove the redundant 'Go to Dashboard' navbar button.
+    // Dashboard is accessed exclusively via the sidebar navigation.
+    const isOperationalView = (
+      currentView === "monitoring" ||
+      currentView === "port-scanner" ||
+      currentView === "network-discovery" ||
+      document.body.classList.contains("dedicated-mode-monitoring") ||
+      document.body.classList.contains("dedicated-mode-port-scanner") ||
+      document.body.classList.contains("network-discovery-page") ||
+      window.location.pathname.startsWith("/network-discovery")
+    );
+
+    if (isOperationalView) {
+      publicDashboardCtaWrap.style.display = "none";
+      publicDashboardCta.innerHTML = "";
+      return;
+    }
+
     if (currentView === "admin" || (typeof currentView === "string" && currentView.startsWith("admin-"))) {
       // Admin Dashboard: replace Go to Dashboard with Back to Website
       publicDashboardCtaWrap.style.display = "flex";
@@ -2742,22 +2763,131 @@ document.addEventListener("DOMContentLoaded", () => {
         publicDashboardCta.innerHTML = '<i class="fas fa-globe"></i> <span id="publicDashboardCtaText">Back to Website</span>';
       }
     } else {
-      // Dedicated Tool Views (monitoring, port-scanner, etc.)
-      publicDashboardCtaWrap.style.display = "flex";
-      publicDashboardCta.className = "btn-auth-cta";
-      if (isAdmin) {
-        publicDashboardCta.setAttribute("href", "/?view=admin");
-        publicDashboardCta.setAttribute("title", "Open Admin Console");
-        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
-      } else if (hasActiveSub) {
-        publicDashboardCta.setAttribute("href", "/?view=dashboard");
-        publicDashboardCta.setAttribute("title", "Open Operator Dashboard");
-        publicDashboardCta.innerHTML = '<i class="fas fa-gauge-high"></i> <span id="publicDashboardCtaText">Go to Dashboard</span>';
-      } else {
-        publicDashboardCta.setAttribute("href", "/?view=plans");
-        publicDashboardCta.setAttribute("title", "Explore Subscription Plans");
-        publicDashboardCta.innerHTML = '<i class="fas fa-gem"></i> <span id="publicDashboardCtaText">View Subscription Plans</span>';
+      // Default / other non-public views: do not render navbar CTA
+      publicDashboardCtaWrap.style.display = "none";
+      publicDashboardCta.innerHTML = "";
+    }
+  }
+
+  function updateDynamicSidebar(user, sub) {
+    if (!user) {
+      if (sidebarPublicNavGroup) sidebarPublicNavGroup.style.display = "block";
+      if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+      if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+      return;
+    }
+
+    if (sidebarPublicNavGroup) sidebarPublicNavGroup.style.display = "none";
+
+    if (user.role === "Admin") {
+      if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "block";
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
+      if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
+      const mItem = document.getElementById("sidebarMonitoringNavItem");
+      const pItem = document.getElementById("sidebarPortScannerNavItem");
+      const nItem = document.getElementById("sidebarNetworkDiscoveryNavItem");
+      if (mItem) mItem.style.display = "flex";
+      if (pItem) pItem.style.display = "flex";
+      if (nItem) nItem.style.display = "flex";
+      return;
+    }
+
+    // Regular USER account
+    if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
+    if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "block";
+
+    const isBanned = !user.is_active;
+    const isSubActive = !isBanned && sub && sub.status === "active";
+    const isSubPending = !isBanned && sub && sub.status === "pending";
+    const isSubExpired = !isBanned && sub && (sub.status === "expired" || (!isSubActive && !isSubPending && sub.end_date && new Date(sub.end_date) < new Date()));
+
+    const dashItem = document.getElementById("sidebarDashboardNavItem");
+    const plansItem = document.getElementById("sidebarPlansNavItem");
+    const profileItem = document.getElementById("sidebarProfileNavItem");
+    const suspendedItem = document.getElementById("sidebarSuspendedNavItem");
+    const signOutItem = document.getElementById("sidebarSignOutNavItem");
+    const pendingBadge = document.getElementById("sidebarUserPendingBadge");
+    const overviewLabel = document.getElementById("sidebarUserOverviewLabel");
+    const billingLabel = document.getElementById("sidebarUserBillingLabel");
+    const sessionLabel = document.getElementById("sidebarUserSessionLabel");
+
+    if (isBanned) {
+      // Case D: Banned / Suspended Account
+      // Show ONLY: Minimum necessary account restriction/status information + Sign Out
+      if (overviewLabel) overviewLabel.style.display = "none";
+      if (billingLabel) billingLabel.style.display = "none";
+      if (dashItem) dashItem.style.display = "none";
+      if (plansItem) plansItem.style.display = "none";
+      if (profileItem) profileItem.style.display = "none";
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+      if (suspendedItem) suspendedItem.style.display = "flex";
+      if (sessionLabel) sessionLabel.style.display = "block";
+      if (signOutItem) signOutItem.style.display = "flex";
+      return;
+    }
+
+    // Account is active
+    if (suspendedItem) suspendedItem.style.display = "none";
+    if (profileItem) profileItem.style.display = "flex";
+    if (sessionLabel) sessionLabel.style.display = "block";
+    if (signOutItem) signOutItem.style.display = "flex";
+
+    if (isSubActive) {
+      // Case A: Active Subscription
+      // Show: Dashboard, Plans, Live Network Monitoring, Port Scanner, Network Discovery, Profile & Security, Sign Out
+      if (overviewLabel) overviewLabel.style.display = "block";
+      if (billingLabel) billingLabel.style.display = "block";
+      if (dashItem) dashItem.style.display = "flex";
+      if (plansItem) plansItem.style.display = "flex";
+      if (pendingBadge) pendingBadge.style.display = "none";
+
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
+      const f = (sub.plan && sub.plan.features) || sub.features || {};
+      const mItem = document.getElementById("sidebarMonitoringNavItem");
+      const pItem = document.getElementById("sidebarPortScannerNavItem");
+      const nItem = document.getElementById("sidebarNetworkDiscoveryNavItem");
+      if (mItem) mItem.style.display = (f.can_live_monitoring !== false) ? "flex" : "none";
+      if (pItem) pItem.style.display = (f.can_port_scan !== false) ? "flex" : "none";
+      if (nItem) nItem.style.display = (f.can_network_discovery !== false) ? "flex" : "none";
+
+    } else if (isSubPending) {
+      // Case E: Pending Approval
+      // Show: Plans (with Pending badge), Profile & Security, Sign Out. Hide: Dashboard, Operational tools
+      if (overviewLabel) overviewLabel.style.display = "none";
+      if (billingLabel) billingLabel.style.display = "block";
+      if (dashItem) dashItem.style.display = "none";
+      if (plansItem) plansItem.style.display = "flex";
+      if (pendingBadge) {
+        pendingBadge.style.display = "inline-block";
+        pendingBadge.textContent = "Pending";
+        pendingBadge.className = "nav-badge-pill warning";
       }
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+
+    } else if (isSubExpired) {
+      // Case C: Expired Subscription
+      // Show: Plans, Profile & Security, Sign Out. Hide: Dashboard, Operational tools
+      if (overviewLabel) overviewLabel.style.display = "none";
+      if (billingLabel) billingLabel.style.display = "block";
+      if (dashItem) dashItem.style.display = "none";
+      if (plansItem) plansItem.style.display = "flex";
+      if (pendingBadge) {
+        pendingBadge.style.display = "inline-block";
+        pendingBadge.textContent = "Expired";
+        pendingBadge.className = "nav-badge-pill danger";
+      }
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+
+    } else {
+      // Case B: No Subscription
+      // Show: Plans, Profile & Security, Sign Out. Hide: Dashboard, Operational tools
+      if (overviewLabel) overviewLabel.style.display = "none";
+      if (billingLabel) billingLabel.style.display = "block";
+      if (dashItem) dashItem.style.display = "none";
+      if (plansItem) plansItem.style.display = "flex";
+      if (pendingBadge) pendingBadge.style.display = "none";
+      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
     }
   }
 
@@ -2769,8 +2899,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (user.role === "Admin") {
         document.body.classList.add("auth-admin");
-        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "block";
-        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
         if (dropdownAdminLink) dropdownAdminLink.style.display = "flex";
         if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
 
@@ -2786,48 +2914,58 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else {
         document.body.classList.remove("auth-admin");
-        if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
-        if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "block";
         if (dropdownAdminLink) dropdownAdminLink.style.display = "none";
 
-        // Dynamic User Dashboard CTA for Public Homepage
-        const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
-
-        if (hasActiveSub) {
-          if (heroDynamicDashboardBtn) {
-            heroDynamicDashboardBtn.style.display = "inline-flex";
-            heroDynamicDashboardBtn.setAttribute("href", "/?view=dashboard");
-          }
-          if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "Go to Dashboard";
-
-          if (breadcrumbDashboardLink) {
-            breadcrumbDashboardLink.setAttribute("href", "/?view=dashboard");
-            breadcrumbDashboardLink.innerHTML = '<i class="fas fa-gauge-high"></i> Dashboard';
-          }
-          if (dropdownDashboardLink) dropdownDashboardLink.style.display = "flex";
-        } else {
-          if (heroDynamicDashboardBtn) {
-            heroDynamicDashboardBtn.style.display = "inline-flex";
-            heroDynamicDashboardBtn.setAttribute("href", "/?view=plans");
-          }
-          if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "View Subscription Plans";
-
-          if (breadcrumbDashboardLink) {
-            breadcrumbDashboardLink.setAttribute("href", "/?view=plans");
-            breadcrumbDashboardLink.innerHTML = '<i class="fas fa-gem"></i> Plans';
-          }
+        if (!user.is_active) {
+          // Banned / Suspended user
+          if (heroDynamicDashboardBtn) heroDynamicDashboardBtn.style.display = "none";
           if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
+          const dropdownPlans = document.getElementById("dropdownPlansLink");
+          if (dropdownPlans) dropdownPlans.style.display = "none";
+          if (dropdownPublicLink) dropdownPublicLink.style.display = "none";
+        } else {
+          // Dynamic User Dashboard CTA for Public Homepage
+          const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+
+          if (hasActiveSub) {
+            if (heroDynamicDashboardBtn) {
+              heroDynamicDashboardBtn.style.display = "inline-flex";
+              heroDynamicDashboardBtn.setAttribute("href", "/?view=dashboard");
+            }
+            if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "Go to Dashboard";
+
+            if (breadcrumbDashboardLink) {
+              breadcrumbDashboardLink.setAttribute("href", "/?view=dashboard");
+              breadcrumbDashboardLink.innerHTML = '<i class="fas fa-gauge-high"></i> Dashboard';
+            }
+            if (dropdownDashboardLink) dropdownDashboardLink.style.display = "flex";
+          } else {
+            if (heroDynamicDashboardBtn) {
+              heroDynamicDashboardBtn.style.display = "inline-flex";
+              heroDynamicDashboardBtn.setAttribute("href", "/?view=plans");
+            }
+            if (heroDynamicDashboardBtnText) heroDynamicDashboardBtnText.textContent = "View Subscription Plans";
+
+            if (breadcrumbDashboardLink) {
+              breadcrumbDashboardLink.setAttribute("href", "/?view=plans");
+              breadcrumbDashboardLink.innerHTML = '<i class="fas fa-gem"></i> Plans';
+            }
+            if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
+          }
+
+          if (dropdownPublicLink) dropdownPublicLink.style.display = "flex";
+          const dropdownPlans = document.getElementById("dropdownPlansLink");
+          if (dropdownPlans) dropdownPlans.style.display = "flex";
         }
       }
 
-      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
-      if (dropdownPublicLink) dropdownPublicLink.style.display = "flex";
-      const dropdownPlans = document.getElementById("dropdownPlansLink");
-      if (dropdownPlans) dropdownPlans.style.display = "flex";
+      // Synchronize dynamic sidebar navigation
+      updateDynamicSidebar(user, currentUserSubscription);
+
       if (publicAuthActions) publicAuthActions.style.display = "none";
       if (userProfileMenu) userProfileMenu.style.display = "block";
       if (navUserName) navUserName.textContent = user.full_name || user.email || user.username;
-      if (navUserRoleBadge) navUserRoleBadge.textContent = user.role;
+      if (navUserRoleBadge) navUserRoleBadge.textContent = user.is_active ? user.role : "Suspended";
       if (dropdownUserTitle) dropdownUserTitle.textContent = user.full_name || user.email || user.username;
       if (dropdownUserEmail) dropdownUserEmail.textContent = user.email;
 
@@ -2852,9 +2990,8 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       document.body.classList.remove("auth-authenticated", "auth-admin");
       document.body.classList.add("auth-anonymous");
-      if (sidebarAdminNavGroup) sidebarAdminNavGroup.style.display = "none";
-      if (sidebarUserNavGroup) sidebarUserNavGroup.style.display = "none";
-      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "none";
+      updateDynamicSidebar(null, null);
+
       if (dropdownDashboardLink) dropdownDashboardLink.style.display = "none";
       if (dropdownPublicLink) dropdownPublicLink.style.display = "none";
       const dropdownPlans = document.getElementById("dropdownPlansLink");
@@ -2879,12 +3016,20 @@ document.addEventListener("DOMContentLoaded", () => {
         await fetchCurrentUserSubscription();
         updateAuthUI(data.user);
         return data.user;
-      } else {
-        currentUser = null;
-        currentUserSubscription = null;
-        updateAuthUI(null);
-        return null;
+      } else if (res.status === 403) {
+        const data = await res.json().catch(() => ({}));
+        if (data.code === "ACCOUNT_DISABLED" || data.account_status === "suspended" || (data.user && !data.user.is_active)) {
+          currentUser = data.user || { is_active: false, role: "User" };
+          currentUserSubscription = null;
+          updateAuthUI(currentUser);
+          switchView("suspended");
+          return currentUser;
+        }
       }
+      currentUser = null;
+      currentUserSubscription = null;
+      updateAuthUI(null);
+      return null;
     } catch (_) {
       currentUser = null;
       currentUserSubscription = null;
@@ -3142,6 +3287,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const suspendedSignOutBtn = document.getElementById("suspendedSignOutBtn");
+  if (suspendedSignOutBtn) {
+    suspendedSignOutBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      performLogout();
+    });
+  }
+
   // Switch View: Dedicated Workspace vs Full Landing Page
   function switchView(targetView, updateHistory = true, entityId = null) {
     // Cross-page navigation handling for Network Discovery page
@@ -3162,42 +3315,74 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    // Suspended accounts cannot access any operational views, plans, or dashboard
+    if (currentUser && !currentUser.is_active && targetView !== "suspended") {
+      targetView = "suspended";
+    }
+
     if (targetView === "network-discovery") {
+      if (!currentUser) {
+        openAuthModal("signin", "Authentication required to access Network Discovery.");
+        return;
+      }
+      if (!currentUser.is_active) {
+        switchView("suspended");
+        return;
+      }
+      if (currentUser.role !== "Admin") {
+        const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
+        if (!hasActiveSub) {
+          switchView("plans");
+          const subStatus = currentUserSubscription ? currentUserSubscription.status : "none";
+          const alertMsg = subStatus === "expired"
+            ? "Your subscription has expired. Renew or select a plan to restore access."
+            : (subStatus === "pending"
+                ? "Your subscription request is awaiting administrator approval."
+                : "You don't have an active subscription. Choose a plan to unlock SCOUT operational features.");
+          window.setTimeout(() => {
+            const alertBox = document.getElementById("subAlertBox");
+            if (alertBox) {
+              alertBox.className = "sub-alert-box warning";
+              alertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> ' + alertMsg;
+              alertBox.style.display = "flex";
+            }
+          }, 120);
+          return;
+        }
+      }
       autoCloseSidebarAfterNav();
       window.location.href = "/network-discovery";
       return;
     }
 
-    // Intercept operational tools and dashboard for anonymous visitors
-    if ((targetView === "monitoring" || targetView === "port-scanner" || targetView === "dashboard") && !currentUser) {
-      openAuthModal("signin", "Authentication required to access SCOUT Operational Tools and Dashboard.");
+    // Intercept operational tools, dashboard, profile for anonymous visitors
+    if ((targetView === "monitoring" || targetView === "port-scanner" || targetView === "dashboard" || targetView === "profile") && !currentUser) {
+      openAuthModal("signin", "Authentication required to access SCOUT operational tools and account features.");
       if (updateHistory) {
         history.replaceState({ view: "landing" }, "", window.location.pathname);
       }
       targetView = "landing";
     }
 
-    // Intercept operational tools for authenticated users without active subscription
-    if ((targetView === "monitoring" || targetView === "port-scanner") && currentUser && currentUser.role !== "Admin") {
+    // Intercept operational tools and dashboard for authenticated users without active subscription
+    if ((targetView === "monitoring" || targetView === "port-scanner" || targetView === "dashboard") && currentUser && currentUser.role !== "Admin") {
       const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
       if (!hasActiveSub) {
         targetView = "plans";
+        const subStatus = currentUserSubscription ? currentUserSubscription.status : "none";
+        const alertMsg = subStatus === "expired"
+          ? "Your subscription has expired. Renew or select a plan to restore access."
+          : (subStatus === "pending"
+              ? "Your subscription request is awaiting administrator approval."
+              : "You don't have an active subscription. Choose a plan to unlock SCOUT operational features.");
         window.setTimeout(() => {
           const alertBox = document.getElementById("subAlertBox");
           if (alertBox) {
             alertBox.className = "sub-alert-box warning";
-            alertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> An active subscription is required to access ' + (targetView === "monitoring" ? "Live Network Monitoring" : "Port Scanner") + '. Please select or activate a plan below.';
+            alertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> ' + alertMsg;
             alertBox.style.display = "flex";
           }
         }, 120);
-      }
-    }
-
-    // Intercept User Dashboard for authenticated users without active subscription
-    if (targetView === "dashboard" && currentUser && currentUser.role !== "Admin") {
-      const hasActiveSub = currentUserSubscription && currentUserSubscription.status === "active";
-      if (!hasActiveSub) {
-        targetView = "plans";
       }
     }
 
@@ -3260,6 +3445,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (mindMapSection) mindMapSection.style.display = "none";
       if (footerEl) footerEl.style.display = "none";
       if (userDashboardSection) userDashboardSection.style.display = "block";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
 
       setSidebarActive("dashboard");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3283,6 +3470,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (subPlansSection) subPlansSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
       if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
       if (ndLandingSection) ndLandingSection.style.display = "none";
       if (threatSection) threatSection.style.display = "none";
       if (preventionSection) preventionSection.style.display = "none";
@@ -3314,6 +3503,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (subPlansSection) subPlansSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
       if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
       if (ndLandingSection) ndLandingSection.style.display = "none";
       if (threatSection) threatSection.style.display = "none";
       if (preventionSection) preventionSection.style.display = "none";
@@ -3357,6 +3548,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (footerEl) footerEl.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
       if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
       if (subPlansSection) subPlansSection.style.display = "block";
 
       setSidebarActive("plans");
@@ -3392,6 +3585,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (footerEl) footerEl.style.display = "none";
       if (subPlansSection) subPlansSection.style.display = "none";
       if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "block";
 
       setSidebarActive(targetView);
@@ -3462,6 +3657,75 @@ document.addEventListener("DOMContentLoaded", () => {
           history.pushState({ view: targetView }, "", "?view=" + targetView);
         }
       }
+    } else if (targetView === "profile") {
+      if (!currentUser) {
+        openAuthModal("signin", "Authentication required to access Profile & Security.");
+        return;
+      }
+      if (!currentUser.is_active) {
+        switchView("suspended");
+        return;
+      }
+
+      document.title = "SCOUT — Profile & Security";
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "plans-view", "admin-view", "dashboard-view", "anonymous-landing", "suspended-view");
+      document.body.classList.add("profile-view");
+
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "flex";
+      if (dedicatedToolTitle) dedicatedToolTitle.textContent = "Profile & Security Settings";
+
+      if (heroSection) heroSection.style.display = "none";
+      if (monitorSection) monitorSection.style.display = "none";
+      if (portScannerSection) portScannerSection.style.display = "none";
+      if (subPlansSection) subPlansSection.style.display = "none";
+      if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
+      if (ndLandingSection) ndLandingSection.style.display = "none";
+      if (threatSection) threatSection.style.display = "none";
+      if (preventionSection) preventionSection.style.display = "none";
+      if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
+      if (footerEl) footerEl.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "block";
+
+      setSidebarActive("profile");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      loadStandaloneProfile();
+
+      if (updateHistory) {
+        history.pushState({ view: "profile" }, "", "?view=profile");
+      }
+    } else if (targetView === "suspended") {
+      document.title = "SCOUT — Account Restricted";
+      document.body.classList.remove("dedicated-mode-monitoring", "dedicated-mode-port-scanner", "home-view", "plans-view", "admin-view", "dashboard-view", "anonymous-landing", "profile-view");
+      document.body.classList.add("suspended-view");
+
+      if (dedicatedToolBar) dedicatedToolBar.style.display = "none";
+      if (heroSection) heroSection.style.display = "none";
+      if (monitorSection) monitorSection.style.display = "none";
+      if (portScannerSection) portScannerSection.style.display = "none";
+      if (subPlansSection) subPlansSection.style.display = "none";
+      if (adminConsoleSection) adminConsoleSection.style.display = "none";
+      if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (ndLandingSection) ndLandingSection.style.display = "none";
+      if (threatSection) threatSection.style.display = "none";
+      if (preventionSection) preventionSection.style.display = "none";
+      if (teamSection) teamSection.style.display = "none";
+      if (publicPricingSection) publicPricingSection.style.display = "none";
+      if (mindMapSection) mindMapSection.style.display = "none";
+      if (footerEl) footerEl.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "block";
+
+      setSidebarActive("suspended");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      if (updateHistory) {
+        history.pushState({ view: "suspended" }, "", "?view=suspended");
+      }
     } else {
       document.title = "SCOUT — Autonomous Cyber Threat Defense & Telemetry";
       // Home Page Mode: Live Monitoring, Port Scanner, Plans & Admin Console are NEVER displayed on Home!
@@ -3482,6 +3746,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (subPlansSection) subPlansSection.style.display = "none";
       if (adminConsoleSection) adminConsoleSection.style.display = "none";
       if (userDashboardSection) userDashboardSection.style.display = "none";
+      if (userProfileSection) userProfileSection.style.display = "none";
+      if (accountSuspendedSection) accountSuspendedSection.style.display = "none";
       if (ndLandingSection) ndLandingSection.style.display = "block";
       if (threatSection) threatSection.style.display = "block";
       if (preventionSection) preventionSection.style.display = "block";
@@ -3645,6 +3911,14 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
         switchView("plans");
         autoCloseSidebarAfterNav();
+      } else if (navTarget === "profile") {
+        e.preventDefault();
+        switchView("profile");
+        autoCloseSidebarAfterNav();
+      } else if (navTarget === "signout") {
+        e.preventDefault();
+        performLogout();
+        autoCloseSidebarAfterNav();
       } else if (navTarget === "admin" || (navTarget && navTarget.startsWith("admin-"))) {
         e.preventDefault();
         switchView(navTarget);
@@ -3735,11 +4009,15 @@ document.addEventListener("DOMContentLoaded", () => {
   if (publicDashboardCta) {
     publicDashboardCta.addEventListener("click", (e) => {
       e.preventDefault();
+      if (publicDashboardCtaWrap && publicDashboardCtaWrap.style.display === "none") {
+        return;
+      }
       if (!currentUser) {
         openAuthModal("signin");
         return;
       }
       const href = publicDashboardCta.getAttribute("href") || "";
+      if (!href) return;
       if (href.includes("public=1") || href === "/" || href.includes("#overview")) {
         switchView("landing");
         return;
@@ -7625,6 +7903,134 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Standalone Operator Profile Loader & Form Handlers
+  function loadStandaloneProfile() {
+    if (!currentUser) return;
+    const fnInp = document.getElementById("standaloneFullNameInput");
+    const emInp = document.getElementById("standaloneEmailInput");
+    const phInp = document.getElementById("standalonePhoneInput");
+    if (fnInp) fnInp.value = currentUser.full_name || "";
+    if (emInp) emInp.value = currentUser.email || "";
+    if (phInp) phInp.value = currentUser.phone_number || "";
+
+    const saveBtn = document.getElementById("standaloneSaveProfileBtn");
+    const saveMsg = document.getElementById("standaloneProfileMsg");
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Updating...';
+        try {
+          const resp = await fetch("/api/auth/profile", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              full_name: fnInp ? fnInp.value.trim() : "",
+              email: emInp ? emInp.value.trim() : "",
+              phone_number: phInp ? phInp.value.trim() : ""
+            })
+          });
+          const rData = await resp.json();
+          if (resp.ok && rData.status === "success") {
+            if (saveMsg) {
+              saveMsg.style.color = "#10B981";
+              saveMsg.textContent = rData.message || "Profile updated!";
+            }
+            if (rData.user) {
+              currentUser = rData.user;
+              updateAuthUI(currentUser);
+            }
+          } else {
+            if (saveMsg) {
+              saveMsg.style.color = "#EF4444";
+              saveMsg.textContent = rData.message || "Update failed.";
+            }
+          }
+        } catch (_) {
+          if (saveMsg) {
+            saveMsg.style.color = "#EF4444";
+            saveMsg.textContent = "Network error updating profile.";
+          }
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '<i class="fas fa-save"></i> <span>Update Profile</span>';
+        }
+      };
+    }
+
+    const changePwdBtn = document.getElementById("standaloneChangePasswordBtn");
+    const pwdMsg = document.getElementById("standalonePasswordMsg");
+    const curPwd = document.getElementById("standaloneCurrentPassword");
+    const newPwd = document.getElementById("standaloneNewPassword");
+    const confPwd = document.getElementById("standaloneConfirmPassword");
+    if (changePwdBtn) {
+      changePwdBtn.onclick = async () => {
+        const cp = curPwd ? curPwd.value : "";
+        const np = newPwd ? newPwd.value : "";
+        const cnp = confPwd ? confPwd.value : "";
+        if (!cp || !np || !cnp) {
+          if (pwdMsg) {
+            pwdMsg.style.color = "#EF4444";
+            pwdMsg.textContent = "Please fill in all password fields.";
+          }
+          return;
+        }
+        if (np !== cnp) {
+          if (pwdMsg) {
+            pwdMsg.style.color = "#EF4444";
+            pwdMsg.textContent = "New password and confirm password do not match.";
+          }
+          return;
+        }
+        if (np.length !== 8 || !/^\d{8}$/.test(np)) {
+          if (pwdMsg) {
+            pwdMsg.style.color = "#EF4444";
+            pwdMsg.textContent = "Password must be exactly 8 digits (0-9).";
+          }
+          return;
+        }
+
+        changePwdBtn.disabled = true;
+        changePwdBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Changing...';
+        try {
+          const resp = await fetch("/api/auth/change-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              current_password: cp,
+              new_password: np,
+              confirm_new_password: cnp
+            })
+          });
+          const rData = await resp.json();
+          if (resp.ok && rData.status === "success") {
+            if (pwdMsg) {
+              pwdMsg.style.color = "#10B981";
+              pwdMsg.textContent = rData.message || "Password changed successfully!";
+            }
+            if (curPwd) curPwd.value = "";
+            if (newPwd) newPwd.value = "";
+            if (confPwd) confPwd.value = "";
+          } else {
+            if (pwdMsg) {
+              pwdMsg.style.color = "#EF4444";
+              pwdMsg.textContent = rData.message || "Password change failed.";
+            }
+          }
+        } catch (_) {
+          if (pwdMsg) {
+            pwdMsg.style.color = "#EF4444";
+            pwdMsg.textContent = "Network error changing password.";
+          }
+        } finally {
+          changePwdBtn.disabled = false;
+          changePwdBtn.innerHTML = '<i class="fas fa-lock-rotate"></i> <span>Change Password</span>';
+        }
+      };
+    }
+  }
+
   // Load User Subscription Status
   async function loadUserSubscription() {
     if (!currentUser) {
@@ -7633,6 +8039,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (subUserRole) subUserRole.textContent = "Public";
       if (subStatusTitle) subStatusTitle.textContent = "Sign In to Access Subscriptions";
       if (subStatusMessage) subStatusMessage.textContent = "Create an account or sign in to request access and manage threat intelligence entitlements.";
+      if (subMetaRow) subMetaRow.style.display = "none";
+      return;
+    }
+
+    if (!currentUser.is_active) {
+      if (subStatusDot) subStatusDot.className = "sub-status-dot canceled";
+      if (subStatusText) subStatusText.textContent = "Account Suspended";
+      if (subStatusTitle) subStatusTitle.textContent = "Account Access Restricted";
+      if (subStatusMessage) subStatusMessage.textContent = "Your account has been suspended. Please contact the platform administrator.";
       if (subMetaRow) subMetaRow.style.display = "none";
       return;
     }
@@ -7651,6 +8066,27 @@ document.addEventListener("DOMContentLoaded", () => {
         if (subMetaTier) subMetaTier.textContent = "Full Enterprise Clearance";
       }
       return;
+    }
+
+    // Process notification query params on plans page
+    const urlParams = new URLSearchParams(window.location.search);
+    const reasonParam = urlParams.get("reason");
+    const statusParam = urlParams.get("status");
+    const alertBox = document.getElementById("subAlertBox");
+    if (alertBox) {
+      if (reasonParam) {
+        alertBox.className = "sub-alert-box warning";
+        alertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> ' + escapeHtml(reasonParam);
+        alertBox.style.display = "flex";
+      } else if (statusParam === "pending") {
+        alertBox.className = "sub-alert-box warning";
+        alertBox.innerHTML = '<i class="fas fa-clock"></i> Your subscription request is awaiting administrator approval.';
+        alertBox.style.display = "flex";
+      } else if (statusParam === "expired") {
+        alertBox.className = "sub-alert-box warning";
+        alertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Your subscription has expired. Renew or select a plan to restore access.';
+        alertBox.style.display = "flex";
+      }
     }
 
     try {
@@ -7755,6 +8191,8 @@ document.addEventListener("DOMContentLoaded", () => {
         let btnHtml = "";
         if (!currentUser) {
           btnHtml = `<button type="button" class="btn-plan-select" data-plan-trigger="auth"><i class="fas fa-lock"></i> Sign In to Select</button>`;
+        } else if (currentUser.is_active === false) {
+          btnHtml = `<button type="button" class="btn-plan-select banned" disabled><i class="fas fa-ban"></i> Account Restricted</button>`;
         } else if (currentUser.role === "Admin") {
           btnHtml = `<button type="button" class="btn-plan-select current" disabled><i class="fas fa-shield-halved"></i> Admin Unrestricted</button>`;
         } else if (isCurrentPlan) {
@@ -9735,7 +10173,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const dPhone = document.getElementById("dossierPhone");
       if (dPhone) dPhone.textContent = u.phone_number || "—";
       if (dName) dName.textContent = u.full_name || "—";
-      if (dRole) dRole.textContent = u.role;
+      if (dRole) {
+        const isAdmin = u.role === "Admin";
+        dRole.innerHTML = `<span class="user-role-badge role-${isAdmin ? 'admin' : 'user'}"><i class="fas ${isAdmin ? 'fa-shield-halved' : 'fa-user'}"></i> ${escapeHtml(u.role)}</span>`;
+      }
       if (dStatus) {
         dStatus.textContent = u.is_active ? "Active" : "Suspended";
         dStatus.className = u.is_active ? "dossier-val text-success" : "dossier-val text-danger";
@@ -11058,7 +11499,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dEmail) dEmail.textContent = u.email;
       if (dPhone) dPhone.textContent = u.phone_number || "—";
       if (dName) dName.textContent = u.full_name || "—";
-      if (dRole) dRole.textContent = u.role;
+      if (dRole) {
+        const isAdmin = u.role === "Admin";
+        dRole.innerHTML = `<span class="user-role-badge role-${isAdmin ? 'admin' : 'user'}"><i class="fas ${isAdmin ? 'fa-shield-halved' : 'fa-user'}"></i> ${escapeHtml(u.role)}</span>`;
+      }
       if (dStatus) {
         dStatus.textContent = u.is_active ? "Active" : "Suspended";
         dStatus.className = u.is_active ? "management-dossier-val text-success" : "management-dossier-val text-danger";
@@ -11413,19 +11857,19 @@ document.addEventListener("DOMContentLoaded", () => {
       const cancelBtn = document.getElementById("fpEditPlanCancelBtn");
 
       if (idInput) idInput.value = p.id;
-      if (codeInput) codeInput.value = p.code;
-      if (nameInput) nameInput.value = p.name;
-      if (priceInput) priceInput.value = p.price;
-      if (durationInput) durationInput.value = p.duration_days;
+      if (codeInput) codeInput.value = p.plan_code || p.code || "";
+      if (nameInput) nameInput.value = p.name || "";
+      if (priceInput) priceInput.value = p.price ?? "0.00";
+      if (durationInput) durationInput.value = p.duration_value ?? p.duration_days ?? 30;
       if (descInput) descInput.value = p.description || "";
-      if (scansInput) scansInput.value = f.max_scans_per_day || 100;
+      if (scansInput) scansInput.value = f.max_scans_per_day || f.max_concurrent_scans || 100;
       if (trafficInput) trafficInput.value = f.traffic_packet_limit || 10000;
-      if (featMon) featMon.checked = Boolean(f.can_monitor !== false);
+      if (featMon) featMon.checked = Boolean(f.can_live_monitoring !== false && f.can_monitor !== false);
       if (featPort) featPort.checked = Boolean(f.can_port_scan !== false);
       if (featNd) featNd.checked = Boolean(f.can_network_discovery);
       if (activeCheck) activeCheck.checked = Boolean(p.is_active);
 
-      if (bcName) bcName.textContent = p.name || p.code;
+      if (bcName) bcName.textContent = p.name || p.plan_code || p.code;
       const navBack = (e) => {
         if (e) e.preventDefault();
         switchView("admin-plan-details", true, p.id);
@@ -11828,6 +12272,21 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
           }
           if (typeof showToast === "function") showToast(data.message || "User profile updated successfully.", "success");
+
+          // Handle authenticated self-updates safely
+          if (currentUser && currentUser.id === parseInt(uid, 10)) {
+            currentUser.role = (data.user && data.user.role) || ro;
+            if (currentUser.role !== "Admin") {
+              if (typeof showToast === "function") {
+                showToast("Your account role has been updated to Operator. Redirecting...", "info");
+              }
+              setTimeout(() => {
+                window.location.href = "/?view=dashboard";
+              }, 1200);
+              return;
+            }
+          }
+
           switchView("admin-user-details", true, uid);
           if (typeof loadAdminUsers === "function") loadAdminUsers();
         } catch (_) {
@@ -11847,8 +12306,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const createPlanSubmitBtn = document.getElementById("fpCreatePlanSubmitBtn");
     if (createPlanSubmitBtn) {
       createPlanSubmitBtn.addEventListener("click", async () => {
-        const code = document.getElementById("fpCreatePlanCode")?.value.trim().toLowerCase() || "";
-        const name = document.getElementById("fpCreatePlanName")?.value.trim() || "";
+        const codeInput = document.getElementById("fpCreatePlanCode");
+        const nameInput = document.getElementById("fpCreatePlanName");
+        const code = codeInput ? codeInput.value.trim() : "";
+        const name = nameInput ? nameInput.value.trim() : "";
         const price = parseFloat(document.getElementById("fpCreatePlanPrice")?.value || "0");
         const duration = parseInt(document.getElementById("fpCreatePlanDuration")?.value || "30", 10);
         const desc = document.getElementById("fpCreatePlanDescription")?.value.trim() || "";
@@ -11865,6 +12326,7 @@ document.addEventListener("DOMContentLoaded", () => {
             alertEl.className = "management-alert error";
             alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Plan code and display name are required.';
             alertEl.style.display = "flex";
+            alertEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }
           return;
         }
@@ -11879,13 +12341,22 @@ document.addEventListener("DOMContentLoaded", () => {
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
             body: JSON.stringify({
-              code, name, price, duration_days: duration, description: desc,
+              plan_code: code,
+              code: code,
+              name: name,
+              price: isNaN(price) ? 0.0 : price,
+              duration_value: isNaN(duration) ? 30 : duration,
+              duration_days: isNaN(duration) ? 30 : duration,
+              duration_unit: "days",
+              description: desc,
               is_active: isActive,
               features: {
+                can_live_monitoring: canMon,
                 can_monitor: canMon,
                 can_port_scan: canPort,
                 can_network_discovery: canNd,
                 max_scans_per_day: maxScans,
+                max_concurrent_scans: maxScans,
                 traffic_packet_limit: trafficLimit
               }
             })
@@ -11894,8 +12365,9 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!resp.ok || data.status !== "success") {
             if (alertEl) {
               alertEl.className = "management-alert error";
-              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to create plan.'}`;
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${escapeHtml(data.message || 'Failed to create plan.')}`;
               alertEl.style.display = "flex";
+              alertEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
             return;
           }
@@ -11922,8 +12394,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (editPlanSubmitBtn) {
       editPlanSubmitBtn.addEventListener("click", async () => {
         const pid = document.getElementById("fpEditPlanId")?.value;
-        const code = document.getElementById("fpEditPlanCode")?.value.trim().toLowerCase() || "";
-        const name = document.getElementById("fpEditPlanName")?.value.trim() || "";
+        const codeInput = document.getElementById("fpEditPlanCode");
+        const nameInput = document.getElementById("fpEditPlanName");
+        const code = codeInput ? codeInput.value.trim() : "";
+        const name = nameInput ? nameInput.value.trim() : "";
         const price = parseFloat(document.getElementById("fpEditPlanPrice")?.value || "0");
         const duration = parseInt(document.getElementById("fpEditPlanDuration")?.value || "30", 10);
         const desc = document.getElementById("fpEditPlanDescription")?.value.trim() || "";
@@ -11937,6 +12411,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!pid) return;
 
+        if (!name) {
+          if (alertEl) {
+            alertEl.className = "management-alert error";
+            alertEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> Plan display name is required.';
+            alertEl.style.display = "flex";
+            alertEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+          return;
+        }
+
         editPlanSubmitBtn.disabled = true;
         const origHtml = editPlanSubmitBtn.innerHTML;
         editPlanSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
@@ -11947,13 +12431,22 @@ document.addEventListener("DOMContentLoaded", () => {
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
             body: JSON.stringify({
-              code, name, price, duration_days: duration, description: desc,
+              plan_code: code,
+              code: code,
+              name: name,
+              price: isNaN(price) ? 0.0 : price,
+              duration_value: isNaN(duration) ? 30 : duration,
+              duration_days: isNaN(duration) ? 30 : duration,
+              duration_unit: "days",
+              description: desc,
               is_active: isActive,
               features: {
+                can_live_monitoring: canMon,
                 can_monitor: canMon,
                 can_port_scan: canPort,
                 can_network_discovery: canNd,
                 max_scans_per_day: maxScans,
+                max_concurrent_scans: maxScans,
                 traffic_packet_limit: trafficLimit
               }
             })
@@ -11962,8 +12455,9 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!resp.ok || data.status !== "success") {
             if (alertEl) {
               alertEl.className = "management-alert error";
-              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${data.message || 'Failed to update plan.'}`;
+              alertEl.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${escapeHtml(data.message || 'Failed to update plan.')}`;
               alertEl.style.display = "flex";
+              alertEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
             return;
           }
@@ -11979,6 +12473,10 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         } finally {
           editPlanSubmitBtn.disabled = false;
+          editPlanSubmitBtn.innerHTML = origHtml;
+        }
+      });
+    }
           editPlanSubmitBtn.innerHTML = origHtml;
         }
       });

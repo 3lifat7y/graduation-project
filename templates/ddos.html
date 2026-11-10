@@ -105,16 +105,33 @@
 
       <!-- Regular Operator Navigation Group (Rendered when Authenticated as User) -->
       <div class="sidebar-nav-group" id="sidebarUserNavGroup" style="display:none;">
-        <div class="sidebar-section-label">OVERVIEW</div>
+        <div class="sidebar-section-label" id="sidebarUserOverviewLabel">OVERVIEW</div>
         <a href="/?view=dashboard" class="sidebar-nav-item" id="sidebarDashboardNavItem" data-nav="dashboard" data-tooltip="Operator Dashboard">
           <i class="fas fa-gauge-high nav-icon"></i>
           <span class="nav-text">Dashboard</span>
         </a>
 
-        <div class="sidebar-section-label nav-sub-label">ACCOUNT & BILLING</div>
-        <a href="/?view=plans" class="sidebar-nav-item" data-nav="plans" data-tooltip="Subscription Plans">
+        <div class="sidebar-section-label nav-sub-label" id="sidebarUserBillingLabel">ACCOUNT & BILLING</div>
+        <a href="/?view=plans" class="sidebar-nav-item" id="sidebarPlansNavItem" data-nav="plans" data-tooltip="Subscription Plans">
           <i class="fas fa-gem nav-icon"></i>
           <span class="nav-text">Subscription Plans</span>
+          <span class="nav-badge-pill" id="sidebarUserPendingBadge" style="display:none;">Pending</span>
+        </a>
+
+        <a href="/?view=profile" class="sidebar-nav-item" id="sidebarProfileNavItem" data-nav="profile" data-tooltip="Profile & Security">
+          <i class="fas fa-user-shield nav-icon"></i>
+          <span class="nav-text">Profile & Security</span>
+        </a>
+
+        <div class="sidebar-nav-item account-restriction-item" id="sidebarSuspendedNavItem" style="display:none; color: #EF4444;" data-tooltip="Account Suspended">
+          <i class="fas fa-user-slash nav-icon"></i>
+          <span class="nav-text">Account Suspended</span>
+        </div>
+
+        <div class="sidebar-section-label nav-sub-label" id="sidebarUserSessionLabel">SESSION</div>
+        <a href="#" class="sidebar-nav-item text-danger" id="sidebarSignOutNavItem" data-nav="signout" data-tooltip="Sign Out">
+          <i class="fas fa-arrow-right-from-bracket nav-icon"></i>
+          <span class="nav-text">Sign Out</span>
         </a>
       </div>
 
@@ -150,16 +167,16 @@
       <!-- Operational Tools (Shared by Authenticated Users & Admins) -->
       <div class="sidebar-nav-group" id="sidebarToolsNavGroup">
         <div class="sidebar-section-label">OPERATIONAL TOOLS</div>
-        <a href="/?view=monitoring" class="sidebar-nav-item" data-nav="monitoring" data-tooltip="Live Network Monitoring">
+        <a href="/?view=monitoring" class="sidebar-nav-item" id="sidebarMonitoringNavItem" data-nav="monitoring" data-tooltip="Live Network Monitoring">
           <i class="fas fa-satellite-dish nav-icon"></i>
           <span class="nav-text">Live Network Monitoring</span>
           <span class="nav-badge-pill">Live</span>
         </a>
-        <a href="/?view=port-scanner" class="sidebar-nav-item" data-nav="port-scanner" data-tooltip="Port Scanner">
+        <a href="/?view=port-scanner" class="sidebar-nav-item" id="sidebarPortScannerNavItem" data-nav="port-scanner" data-tooltip="Port Scanner">
           <i class="fas fa-bullseye nav-icon"></i>
           <span class="nav-text">Port Scanner</span>
         </a>
-        <a href="/network-discovery" class="sidebar-nav-item" data-nav="network-discovery" data-tooltip="Network Discovery">
+        <a href="/network-discovery" class="sidebar-nav-item" id="sidebarNetworkDiscoveryNavItem" data-nav="network-discovery" data-tooltip="Network Discovery">
           <i class="fas fa-sitemap nav-icon"></i>
           <span class="nav-text">Network Discovery</span>
         </a>
@@ -2241,6 +2258,103 @@
                   </div>
                 </form>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Dedicated User Profile & Security -->
+      <section class="user-profile-section" id="userProfileSection" style="display:none;">
+        <div class="section-container" style="max-width: 960px; margin: 2rem auto; padding: 0 1.5rem;">
+          <div class="section-header">
+            <div class="section-badge">
+              <i class="fas fa-user-shield"></i> Account &amp; Credentials
+            </div>
+            <h2 class="section-title">Profile &amp; Security Settings</h2>
+            <p class="section-subtitle">
+              Manage your personal identity parameters, contact details, and cryptographic session password.
+            </p>
+          </div>
+
+          <div class="user-dash-profile-row" id="standaloneProfileRow" style="margin-top: 1.5rem;">
+            <div class="user-dash-profile-card">
+              <div class="card-mini-header">
+                <h4><i class="fas fa-user-pen"></i> Operator Profile &amp; Account Settings</h4>
+                <span class="profile-security-badge"><i class="fas fa-shield-halved"></i> Identity Clearance</span>
+              </div>
+              <div class="user-dash-profile-forms">
+                <!-- Sub-form A: Profile Information -->
+                <form id="standaloneProfileForm" class="user-dash-form" onsubmit="return false;">
+                  <h5><i class="fas fa-id-card"></i> Personal Details</h5>
+                  <div class="dash-form-grid three-col">
+                    <div class="dash-form-group">
+                      <label for="standaloneFullNameInput"><i class="fas fa-signature"></i> Full Name</label>
+                      <input type="text" id="standaloneFullNameInput" class="dash-input" placeholder="Display Full Name" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="standaloneEmailInput"><i class="fas fa-envelope"></i> Email Address</label>
+                      <input type="email" id="standaloneEmailInput" class="dash-input" placeholder="operator@domain.com" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="standalonePhoneInput"><i class="fas fa-phone"></i> Phone Number</label>
+                      <input type="tel" id="standalonePhoneInput" class="dash-input" placeholder="+1 (555) 123-4567" />
+                    </div>
+                  </div>
+                  <div class="form-actions-inline">
+                    <button type="button" class="btn-dash-action" id="standaloneSaveProfileBtn">
+                      <i class="fas fa-save"></i> <span>Update Profile</span>
+                    </button>
+                    <span id="standaloneProfileMsg" class="dash-form-msg"></span>
+                  </div>
+                </form>
+
+                <hr class="profile-divider" style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.08));" />
+
+                <!-- Sub-form B: Password Update -->
+                <form id="standalonePasswordForm" class="user-dash-form" onsubmit="return false;">
+                  <h5><i class="fas fa-key"></i> Security Credentials</h5>
+                  <div class="dash-form-grid three-col">
+                    <div class="dash-form-group">
+                      <label for="standaloneCurrentPassword"><i class="fas fa-lock"></i> Current Password</label>
+                      <input type="password" id="standaloneCurrentPassword" class="dash-input" placeholder="Current password" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="standaloneNewPassword"><i class="fas fa-shield-alt"></i> New Password</label>
+                      <input type="password" id="standaloneNewPassword" class="dash-input" placeholder="Exactly 8 digits (0-9)" />
+                    </div>
+                    <div class="dash-form-group">
+                      <label for="standaloneConfirmPassword"><i class="fas fa-shield-check"></i> Confirm Password</label>
+                      <input type="password" id="standaloneConfirmPassword" class="dash-input" placeholder="Confirm 8-digit password" />
+                    </div>
+                  </div>
+                  <div class="form-actions-inline">
+                    <button type="button" class="btn-dash-action" id="standaloneChangePasswordBtn">
+                      <i class="fas fa-lock-rotate"></i> <span>Change Password</span>
+                    </button>
+                    <span id="standalonePasswordMsg" class="dash-form-msg"></span>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Account Suspended Restricted Access Notice -->
+      <section class="account-suspended-section" id="accountSuspendedSection" style="display:none;">
+        <div class="section-container" style="max-width: 640px; margin: 4rem auto; text-align: center; padding: 2rem 1rem;">
+          <div class="account-suspended-card" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 3rem 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.25);">
+            <div class="suspended-icon-wrap" style="width: 80px; height: 80px; margin: 0 auto 1.5rem; border-radius: 50%; background: rgba(239, 68, 68, 0.12); display: flex; align-items: center; justify-content: center; color: #EF4444; font-size: 2.2rem;">
+              <i class="fas fa-user-lock"></i>
+            </div>
+            <h2 style="font-size: 1.8rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary);">Account Suspended</h2>
+            <p style="font-size: 1.05rem; line-height: 1.6; color: var(--text-secondary); margin-bottom: 2rem;" id="accountSuspendedMessage">
+              Your account has been suspended. Please contact the platform administrator.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+              <button type="button" class="btn-auth-primary" id="suspendedSignOutBtn" style="min-width: 160px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                <i class="fas fa-arrow-right-from-bracket"></i> <span>Sign Out</span>
+              </button>
             </div>
           </div>
         </div>

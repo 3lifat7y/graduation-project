@@ -1378,33 +1378,102 @@ def run_scan_worker(scan_id: str, adapter_info: Dict[str, Any], driver_info: Dic
 @app.route('/')
 def home():
     """
-    Public entry point for anonymous visitors.
-    If client has an active session and no explicit view parameter is requested,
-    automatically route them to their designated authenticated landing destination.
+    Entry point for the application.
+    Enforces subscription-based and account-status access control:
+    - If anonymous and requesting protected operational views, redirects to /login.
+    - If user is suspended, redirects to /?view=suspended.
+    - If regular user lacks active subscription and requests operational tools/dashboard,
+      redirects to /?view=plans with an explanatory reason.
+    - If no view parameter is specified, routes authenticated users to their landing view.
     """
     view_param = request.args.get("view")
     public_param = request.args.get("public")
+    from modules.auth.routes import get_current_user_from_request
+    from modules.subscriptions.decorators import evaluate_user_entitlement
+    from modules.subscriptions.services import determine_user_landing_view
+    from urllib.parse import quote_plus
+
+    user, _ = get_current_user_from_request(allow_disabled=True)
+
     if not view_param and not public_param:
-        from modules.auth.routes import get_current_user_from_request
-        from modules.subscriptions.services import determine_user_landing_view
-        user, _ = get_current_user_from_request()
         if user and user.is_active:
             _, redirect_url = determine_user_landing_view(user)
             return redirect(redirect_url)
+        elif user and not user.is_active:
+            return redirect("/?view=suspended")
+
+    if view_param:
+        # Check suspended accounts first
+        if user and not user.is_active and view_param != "suspended":
+            return redirect("/?view=suspended")
+
+        # Protected operational views and dashboard
+        if view_param in ["dashboard", "monitoring", "port-scanner", "network-discovery"]:
+            if not user:
+                return redirect("/login?notice=" + quote_plus("Authentication required to access SCOUT operational tools and dashboard."))
+
+            if user.role != "Admin":
+                req_feat = None
+                if view_param == "monitoring":
+                    req_feat = "can_live_monitoring"
+                elif view_param == "port-scanner":
+                    req_feat = "can_port_scan"
+                elif view_param == "network-discovery":
+                    req_feat = "can_network_discovery"
+
+                authorized, reason, context = evaluate_user_entitlement(user.id, required_feature=req_feat)
+                if not authorized:
+                    status = context.get("status")
+                    if status in ("suspended", "disabled"):
+                        return redirect("/?view=suspended")
+                    elif status == "pending":
+                        return redirect("/?view=plans&status=pending")
+                    elif status == "expired":
+                        return redirect("/?view=plans&status=expired&reason=" + quote_plus(reason))
+                    else:
+                        return redirect("/?view=plans&reason=" + quote_plus(reason))
+
+        elif view_param == "plans":
+            if user and not user.is_active:
+                return redirect("/?view=suspended")
+
+        elif view_param == "admin" or view_param.startswith("admin-"):
+            if not user:
+                return redirect("/login?notice=" + quote_plus("Authentication required to access Admin Console."))
+            if user.role != "Admin":
+                return redirect("/?public=1")
 
     return render_template('ddos.html')
 
 
 @app.route('/dashboard')
-@login_required
 def user_dashboard_page():
     """Direct URL access to the authenticated user dashboard."""
-    user = request.current_user
+    from modules.auth.routes import get_current_user_from_request
+    from urllib.parse import quote_plus
+    user, _ = get_current_user_from_request(allow_disabled=True)
+    if not user:
+        return redirect('/login?notice=' + quote_plus('Authentication required to access dashboard.'))
+    if not user.is_active:
+        return redirect("/?view=suspended")
     if user.role == "Admin":
         return redirect("/?view=admin")
-    from modules.subscriptions.services import determine_user_landing_view
-    _, redirect_url = determine_user_landing_view(user)
-    return redirect(redirect_url)
+
+    from modules.subscriptions.decorators import evaluate_user_entitlement
+    from urllib.parse import quote_plus
+    authorized, reason, context = evaluate_user_entitlement(user.id)
+    if not authorized:
+        status = context.get("status")
+        if status in ("suspended", "disabled"):
+            return redirect("/?view=suspended")
+        elif status == "pending":
+            return redirect("/?view=plans&status=pending")
+        elif status == "expired":
+            return redirect("/?view=plans&status=expired&reason=" + quote_plus(reason))
+        else:
+            return redirect("/?view=plans&reason=" + quote_plus(reason))
+
+    return redirect("/?view=dashboard")
 
 
 @app.route('/admin')
@@ -1569,6 +1638,7 @@ def start_service_route():
 
 
 @app.route('/api/monitoring/dependencies', methods=['GET'])
+@subscription_required(feature="can_live_monitoring")
 def get_monitoring_dependencies():
     """Returns real-time packet capture dependency status (Wireshark, Npcap, Scapy, Permissions)."""
     try:
@@ -1948,7 +2018,6 @@ def start_scan():
                             "error": cancel_msg,
                             "message": cancel_msg,
                             "prediction": None,
-                            "label": None,
                             "service_state": get_service_status(include_ipc=True)
                         })
                         return jsonify(current_scan_session), 200
@@ -1967,7 +2036,6 @@ def start_scan():
                             "error": outdated_msg,
                             "message": outdated_msg,
                             "prediction": None,
-                            "label": None,
                             "service_state": svc_state
                         })
                         return jsonify(current_scan_session), 200
@@ -1984,7 +2052,6 @@ def start_scan():
                         "error": auth_detail,
                         "message": f"Service is running but authenticated IPC health check failed: {auth_detail}",
                         "prediction": None,
-                        "label": None,
                         "service_state": svc_state
                     })
                     return jsonify(current_scan_session), 200
@@ -2044,6 +2111,7 @@ def start_scan():
 
 
 @app.route('/api/scan-status', methods=['GET'])
+@subscription_required(feature="can_live_monitoring")
 def get_scan_status():
     """Polls the active scan session state with synchronized service state and detected attacks."""
     ACTIVE_CAPTURE_STATES = {"scanning", "starting", "monitoring", "prediction_available", "no_traffic", "insufficient_traffic"}
@@ -2076,6 +2144,7 @@ def clear_detected_attacks_history():
 
 
 @app.route('/api/detected-attacks', methods=['GET'])
+@subscription_required(feature="can_live_monitoring")
 def get_detected_attacks():
     """Returns all pinned attack detection events."""
     attacks = get_detected_attacks_history()
@@ -2286,7 +2355,7 @@ def rescan_active_session():
 
 
 @app.route('/api/scan-stop', methods=['GET', 'POST'])
-@login_required
+@subscription_required(feature="can_live_monitoring")
 def stop_scan():
     """Stops the active monitoring session cleanly and releases resources."""
     global current_scan_session, is_monitoring
@@ -2324,7 +2393,7 @@ def start_monitoring():
 
 
 @app.route('/api/stop')
-@login_required
+@subscription_required(feature="can_live_monitoring")
 def stop_monitoring():
     """Backward compatibility alias for /api/scan-stop."""
     return stop_scan()
@@ -2363,6 +2432,7 @@ def receive_packet():
 
 
 @app.route('/api/predict')
+@subscription_required(feature="can_live_monitoring")
 def predict_traffic():
     """
     Returns prediction result in both legacy and modern formats
@@ -2437,6 +2507,7 @@ def predict_traffic():
 
 
 @app.route('/api/predict-direct', methods=['POST'])
+@subscription_required(feature="can_live_monitoring")
 def predict_direct():
     """Direct inference endpoint for automated testing."""
     try:
@@ -2486,6 +2557,7 @@ replay_session_stats = {
 
 
 @app.route('/api/replay-feature', methods=['POST'])
+@subscription_required(feature="can_live_monitoring")
 def replay_feature():
     """
     Dedicated endpoint for dataset feature replay and inference verification.
@@ -2608,6 +2680,7 @@ def replay_feature():
 
 
 @app.route('/api/replay-status', methods=['GET'])
+@subscription_required(feature="can_live_monitoring")
 def get_replay_status():
     """Returns dedicated replay telemetry without touching live monitoring state."""
     with replay_stats_lock:
@@ -2625,11 +2698,11 @@ def get_replay_status():
 # Architecture: Independent async manager, zero interference with DDoS core.
 # ==============================================================================
 from modules.port_scanner.scanner import port_scanner_manager
-from modules.common.network_detector import get_active_routable_ip
 from modules.network_discovery.discovery import get_network_discovery_info
 
 
 @app.route('/api/port-scan/network-info', methods=['GET'])
+@subscription_required(feature="can_port_scan")
 def get_port_scan_network_info():
     """Returns local host IP and suggested subnet for network scanning without hardcoded fallbacks."""
     try:
@@ -2678,6 +2751,7 @@ def start_port_scan():
 
 
 @app.route('/api/port-scan/status', methods=['GET'])
+@subscription_required(feature="can_port_scan")
 def get_port_scan_status():
     """Polls real-time progress and accumulated results of the port scan."""
     try:
@@ -2688,6 +2762,7 @@ def get_port_scan_status():
 
 
 @app.route('/api/port-scan/stop', methods=['POST'])
+@subscription_required(feature="can_port_scan")
 def stop_port_scan():
     """Cooperatively cancels the active port scan session immediately."""
     try:
@@ -2701,16 +2776,41 @@ def stop_port_scan():
 # Isolated Network Discovery Endpoints
 # Architecture: Independent multi-method LAN discovery, zero interference with DDoS core or Port Scanner.
 # ==============================================================================
-from modules.network_discovery.discovery import network_discovery_manager, get_network_discovery_info
+from modules.network_discovery.discovery import network_discovery_manager
 
 
 @app.route('/network-discovery')
 def network_discovery_page():
-    """Renders the standalone Network Discovery cybersecurity dashboard."""
+    """
+    Renders the standalone Network Discovery cybersecurity dashboard.
+    Enforces authentication and active subscription with 'can_network_discovery' capability.
+    """
+    from modules.auth.routes import get_current_user_from_request
+    from modules.subscriptions.decorators import evaluate_user_entitlement
+    from urllib.parse import quote_plus
+
+    user, _ = get_current_user_from_request(allow_disabled=True)
+    if not user:
+        return redirect('/login?notice=' + quote_plus('Authentication required to access Network Discovery.'))
+    if not user.is_active:
+        return redirect('/?view=suspended')
+    if user.role != 'Admin':
+        authorized, reason, context = evaluate_user_entitlement(user.id, required_feature="can_network_discovery")
+        if not authorized:
+            status = context.get("status")
+            if status in ("suspended", "disabled"):
+                return redirect('/?view=suspended')
+            elif status == "pending":
+                return redirect('/?view=plans&status=pending')
+            elif status == "expired":
+                return redirect('/?view=plans&status=expired&reason=' + quote_plus(reason))
+            else:
+                return redirect('/?view=plans&reason=' + quote_plus(reason))
     return render_template('network_discovery.html')
 
 
 @app.route('/api/network-discovery/network-info', methods=['GET'])
+@subscription_required(feature="can_network_discovery")
 def get_network_discovery_info_route():
     """Returns detected adapter, IP, subnet mask, prefix length, and default gateway."""
     try:
@@ -2743,6 +2843,7 @@ def start_network_discovery():
 
 
 @app.route('/api/network-discovery/status', methods=['GET'])
+@subscription_required(feature="can_network_discovery")
 def get_network_discovery_status():
     """Polls real-time progress, metrics, and accumulated discovered devices."""
     try:
@@ -2753,6 +2854,7 @@ def get_network_discovery_status():
 
 
 @app.route('/api/network-discovery/stop', methods=['POST'])
+@subscription_required(feature="can_network_discovery")
 def stop_network_discovery():
     """Cooperatively cancels the active network discovery sweep immediately."""
     try:
@@ -2763,6 +2865,7 @@ def stop_network_discovery():
 
 
 @app.route('/api/network-discovery/device/<ip>', methods=['GET'])
+@subscription_required(feature="can_network_discovery")
 def get_network_discovery_device(ip: str):
     """Retrieves deep details for a single discovered device by IP address."""
     try:

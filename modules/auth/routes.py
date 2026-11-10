@@ -39,9 +39,10 @@ def extract_token_from_request() -> Optional[str]:
     return None
 
 
-def get_current_user_from_request() -> Tuple[Optional[User], Optional[str]]:
+def get_current_user_from_request(allow_disabled: bool = False) -> Tuple[Optional[User], Optional[str]]:
     """
-    Validates request session token and retrieves active user from database.
+    Validates request session token and retrieves user from database.
+    If allow_disabled is True, returns the User object even if is_active is False.
     Returns (User, None) on success or (None, error_message) on failure.
     """
     token = extract_token_from_request()
@@ -59,8 +60,8 @@ def get_current_user_from_request() -> Tuple[Optional[User], Optional[str]]:
         user = session.query(User).filter_by(id=user_id).first()
         if not user:
             return None, "User account not found."
-        if not user.is_active:
-            return None, "User account is disabled."
+        if not user.is_active and not allow_disabled:
+            return None, "Your account has been suspended. Please contact the platform administrator."
         if user.session_version != token_ver:
             return None, "Session has been revoked."
         # Expunge to use detached user object safely
@@ -278,7 +279,7 @@ def login():
             return jsonify({
                 "status": "error",
                 "code": "ACCOUNT_DISABLED",
-                "message": "Your account has been deactivated. Please contact an administrator."
+                "message": "Your account has been suspended. Please contact the platform administrator."
             }), 403
 
         # Successful authentication: reset rate limiter
@@ -345,7 +346,7 @@ def logout():
 @auth_bp.route("/me", methods=["GET"])
 def get_current_user():
     """Returns the current authenticated user's profile and active session status."""
-    user, err = get_current_user_from_request()
+    user, err = get_current_user_from_request(allow_disabled=True)
     if not user:
         resp = make_response(jsonify({
             "status": "unauthorized",
@@ -355,10 +356,32 @@ def get_current_user():
         resp.delete_cookie(COOKIE_NAME, httponly=True, samesite="Lax")
         return resp
 
+    if not user.is_active:
+        return jsonify({
+            "status": "forbidden",
+            "authenticated": True,
+            "account_status": "suspended",
+            "code": "ACCOUNT_DISABLED",
+            "message": "Your account has been suspended. Please contact the platform administrator.",
+            "user": user.to_dict()
+        }), 403
+
+    from modules.subscriptions.services import determine_user_landing_view
+    from modules.subscriptions.decorators import evaluate_user_entitlement
+
+    view_key, landing_url = determine_user_landing_view(user)
+    is_authorized, reason, ctx = evaluate_user_entitlement(user.id)
+    sub_status = ctx.get("status", "none")
+    has_sub = bool(is_authorized and sub_status in ("active", "admin"))
+
     return jsonify({
         "status": "success",
         "authenticated": True,
-        "user": user.to_dict()
+        "user": user.to_dict(),
+        "has_active_subscription": has_sub,
+        "subscription_status": sub_status,
+        "view": view_key,
+        "landing_url": landing_url
     }), 200
 
 

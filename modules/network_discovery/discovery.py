@@ -104,7 +104,7 @@ MAC_OUI_DATABASE: Dict[str, str] = {
     "C0:25:E9": "TP-Link", "D8:0D:17": "TP-Link", "E8:48:B8": "TP-Link", "EC:08:6B": "TP-Link",
 
     # ZTE Corporation & Huawei (Common Egyptian / Regional ISP Gateways)
-    "00:19:E0": "Huawei", "00:1E:10": "Huawei", "00:25:9E": "Huawei", "00:46:4B": "Huawei",
+    "00:1E:10": "Huawei", "00:25:9E": "Huawei", "00:46:4B": "Huawei",
     "04:25:C5": "Huawei", "08:19:A6": "Huawei", "0C:96:BF": "Huawei", "10:1B:54": "Huawei",
     "10:47:80": "Huawei", "10:C6:1F": "Huawei", "20:F3:A3": "Huawei", "28:31:52": "Huawei",
     "28:6E:D4": "Huawei", "34:6B:46": "Huawei", "40:4D:8E": "Huawei", "48:46:FB": "Huawei",
@@ -118,7 +118,7 @@ MAC_OUI_DATABASE: Dict[str, str] = {
     "00:9E:C8": "Xiaomi", "04:CF:8C": "Xiaomi", "0C:1D:AF": "Xiaomi", "10:2A:B3": "Xiaomi",
     "18:59:36": "Xiaomi", "28:6C:07": "Xiaomi", "34:80:0D": "Xiaomi", "38:A4:ED": "Xiaomi",
     "48:2C:A0": "Xiaomi", "50:64:2B": "Xiaomi", "58:44:98": "Xiaomi", "64:09:80": "Xiaomi",
-    "74:23:44": "Xiaomi", "78:11:DC": "Xiaomi", "84:F3:EB": "Xiaomi", "A4:C4:94": "Xiaomi",
+    "74:23:44": "Xiaomi", "78:11:DC": "Xiaomi", "A4:C4:94": "Xiaomi",
     "AC:C1:EE": "Xiaomi", "C4:0B:CB": "Xiaomi", "F4:F5:24": "Xiaomi",
 
     # Dell Inc.

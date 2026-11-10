@@ -61,11 +61,13 @@ class SubscriptionPlan(Base):
         return {
             "id": self.id,
             "plan_code": self.plan_code,
+            "code": self.plan_code,
             "name": self.name,
             "description": self.description or "",
             "price": float(self.price),
             "currency": self.currency,
             "duration_value": int(self.duration_value),
+            "duration_days": int(self.duration_value),
             "duration_unit": self.duration_unit,
             "is_active": bool(self.is_active),
             "features": self.get_features(),

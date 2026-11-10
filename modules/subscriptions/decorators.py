@@ -26,7 +26,7 @@ def evaluate_user_entitlement(
     with get_db_session() as session:
         user = session.query(User).filter_by(id=user_id).first()
         if not user or not user.is_active:
-            return False, "User account is inactive or disabled.", {"status": "disabled"}
+            return False, "Your account has been suspended. Please contact the platform administrator.", {"status": "suspended"}
 
         # Administrators bypass subscription constraints
         if user.role == "Admin":
@@ -42,49 +42,62 @@ def evaluate_user_entitlement(
             .first()
         )
 
-        if not active_sub:
-            # Check if user has a pending or rejected subscription
-            pending_sub = (
-                session.query(UserSubscription)
-                .filter_by(user_id=user_id, status="pending")
-                .first()
-            )
-            if pending_sub:
-                return False, "Your subscription is pending administrative activation.", {
-                    "status": "pending",
-                    "plan_name": pending_sub.plan.name if pending_sub.plan else "Pending Plan"
+        if active_sub:
+            # Dynamic expiration check
+            end_time = ensure_utc(active_sub.end_date)
+            if end_time and end_time < now:
+                active_sub.status = "expired"
+                session.flush()
+                return False, "Your subscription has expired. Renew or select a plan to restore access.", {
+                    "status": "expired",
+                    "expired_at": end_time.isoformat()
                 }
 
-            return False, "An active subscription is required to access operational tools. Please select a plan.", {
-                "status": "none"
+            # Check feature entitlement
+            if required_feature:
+                features = active_sub.plan.get_features() if active_sub.plan else {}
+                if not features.get(required_feature, False):
+                    return False, f"Your current subscription plan ('{active_sub.plan.name}') does not include the '{required_feature}' capability.", {
+                        "status": "feature_restricted",
+                        "plan_name": active_sub.plan.name,
+                        "missing_feature": required_feature
+                    }
+
+            return True, "Subscription verified.", {
+                "status": "active",
+                "subscription_id": active_sub.id,
+                "plan_name": active_sub.plan.name,
+                "plan_code": active_sub.plan.plan_code,
+                "end_date": active_sub.end_date.isoformat() if active_sub.end_date else None
             }
 
-        # Dynamic expiration check
-        end_time = ensure_utc(active_sub.end_date)
-        if end_time and end_time < now:
-            active_sub.status = "expired"
-            session.flush()
-            return False, f"Your subscription expired on {end_time.strftime('%Y-%m-%d')}. Please renew your plan.", {
+        # No active subscription: check for pending or expired record
+        pending_sub = (
+            session.query(UserSubscription)
+            .filter_by(user_id=user_id, status="pending")
+            .order_by(UserSubscription.id.desc())
+            .first()
+        )
+        if pending_sub:
+            return False, "Your subscription request is awaiting administrator approval.", {
+                "status": "pending",
+                "plan_name": pending_sub.plan.name if pending_sub.plan else "Pending Plan"
+            }
+
+        expired_sub = (
+            session.query(UserSubscription)
+            .filter_by(user_id=user_id, status="expired")
+            .order_by(UserSubscription.end_date.desc())
+            .first()
+        )
+        if expired_sub:
+            return False, "Your subscription has expired. Renew or select a plan to restore access.", {
                 "status": "expired",
-                "expired_at": end_time.isoformat()
+                "expired_at": expired_sub.end_date.isoformat() if expired_sub.end_date else None
             }
 
-        # Check feature entitlement
-        if required_feature:
-            features = active_sub.plan.get_features() if active_sub.plan else {}
-            if not features.get(required_feature, False):
-                return False, f"Your current subscription plan ('{active_sub.plan.name}') does not include the '{required_feature}' capability.", {
-                    "status": "feature_restricted",
-                    "plan_name": active_sub.plan.name,
-                    "missing_feature": required_feature
-                }
-
-        return True, "Subscription verified.", {
-            "status": "active",
-            "subscription_id": active_sub.id,
-            "plan_name": active_sub.plan.name,
-            "plan_code": active_sub.plan.plan_code,
-            "end_date": active_sub.end_date.isoformat() if active_sub.end_date else None
+        return False, "You don't have an active subscription. Choose a plan to unlock SCOUT operational features.", {
+            "status": "none"
         }
 
 
@@ -105,7 +118,18 @@ def subscription_required(feature: Optional[str] = None) -> Callable[..., Any]:
             authorized, reason, context = evaluate_user_entitlement(user.id, required_feature=feature)
 
             if not authorized:
-                err_code = "FEATURE_NOT_INCLUDED" if context.get("status") == "feature_restricted" else "SUBSCRIPTION_REQUIRED"
+                c_status = context.get("status")
+                if c_status in ("suspended", "disabled"):
+                    err_code = "ACCOUNT_DISABLED"
+                elif c_status == "feature_restricted":
+                    err_code = "FEATURE_NOT_INCLUDED"
+                elif c_status == "expired":
+                    err_code = "SUBSCRIPTION_EXPIRED"
+                elif c_status == "pending":
+                    err_code = "SUBSCRIPTION_PENDING"
+                else:
+                    err_code = "SUBSCRIPTION_REQUIRED"
+
                 return jsonify({
                     "status": "forbidden",
                     "code": err_code,

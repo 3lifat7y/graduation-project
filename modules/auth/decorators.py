@@ -14,7 +14,7 @@ from .routes import get_current_user_from_request
 def login_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """
     Ensures the client has an active, valid, non-expired session.
-    Injects request.current_user. Returns 401 Unauthorized if invalid.
+    Injects request.current_user. Returns 401 Unauthorized if invalid, or 403 Forbidden if suspended.
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -23,13 +23,21 @@ def login_required(f: Callable[..., Any]) -> Callable[..., Any]:
             request.current_user = User(id=1, username="test_admin", email="test@local", role="Admin", is_active=True)
             return f(*args, **kwargs)
 
-        user, err = get_current_user_from_request()
+        user, err = get_current_user_from_request(allow_disabled=True)
         if not user:
             return jsonify({
                 "status": "unauthorized",
                 "code": "AUTH_REQUIRED",
                 "message": err or "Authentication required to access this resource."
             }), 401
+
+        if not user.is_active:
+            return jsonify({
+                "status": "forbidden",
+                "code": "ACCOUNT_DISABLED",
+                "message": "Your account has been suspended. Please contact the platform administrator."
+            }), 403
+
         request.current_user = user
         return f(*args, **kwargs)
     return decorated_function
@@ -38,7 +46,7 @@ def login_required(f: Callable[..., Any]) -> Callable[..., Any]:
 def roles_required(*allowed_roles: str) -> Callable[..., Any]:
     """
     Enforces that the authenticated user possesses one of the allowed roles.
-    Returns 401 if unauthenticated, or 403 Forbidden if role unauthorized.
+    Returns 401 if unauthenticated, or 403 Forbidden if role unauthorized or account suspended.
     """
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
@@ -48,13 +56,21 @@ def roles_required(*allowed_roles: str) -> Callable[..., Any]:
                 request.current_user = User(id=1, username="test_admin", email="test@local", role="Admin", is_active=True)
                 return f(*args, **kwargs)
 
-            user, err = get_current_user_from_request()
+            user, err = get_current_user_from_request(allow_disabled=True)
             if not user:
                 return jsonify({
                     "status": "unauthorized",
                     "code": "AUTH_REQUIRED",
                     "message": err or "Authentication required to access this resource."
                 }), 401
+
+            if not user.is_active:
+                return jsonify({
+                    "status": "forbidden",
+                    "code": "ACCOUNT_DISABLED",
+                    "message": "Your account has been suspended. Please contact the platform administrator."
+                }), 403
+
             request.current_user = user
             if user.role not in allowed_roles:
                 return jsonify({

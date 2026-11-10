@@ -6,13 +6,16 @@ Provides plan catalog CRUD, user account search/moderation, and activation contr
 import re
 import secrets
 from typing import Dict, Any
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
 from sqlalchemy import func
 
 from modules.auth.models import User, utcnow
 from modules.auth.db import get_db_session
 from modules.auth.decorators import admin_required
-from modules.auth.security import normalize_phone_number, is_valid_email
+from modules.auth.security import (
+    normalize_phone_number, is_valid_email,
+    COOKIE_NAME, SESSION_MAX_AGE_SECONDS, create_session_token
+)
 from scripts.create_admin import validate_password_strength
 from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog
 from .services import sync_expired_subscriptions
@@ -118,15 +121,26 @@ def list_admin_plans():
 def create_admin_plan():
     """Creates a new subscription plan."""
     data = request.get_json(silent=True) or {}
-    plan_code = str(data.get("plan_code", "")).strip().upper()
+    raw_code = data.get("plan_code") or data.get("code") or ""
+    plan_code = str(raw_code).strip().upper()
     name = str(data.get("name", "")).strip()
     description = str(data.get("description", "")).strip()
     price = data.get("price", 0.0)
     currency = str(data.get("currency", "USD")).strip().upper()
-    duration_value = data.get("duration_value", 30)
+    duration_val = data.get("duration_value")
+    if duration_val is None:
+        duration_val = data.get("duration_days", 30)
     duration_unit = str(data.get("duration_unit", "days")).strip().lower()
     is_active = bool(data.get("is_active", True))
     features = data.get("features", {})
+    if isinstance(features, dict):
+        features = dict(features)
+        if "can_monitor" in features and "can_live_monitoring" not in features:
+            features["can_live_monitoring"] = bool(features["can_monitor"])
+        if "can_live_monitoring" in features and "can_monitor" not in features:
+            features["can_monitor"] = bool(features["can_live_monitoring"])
+        if "max_scans_per_day" in features and "max_concurrent_scans" not in features:
+            features["max_concurrent_scans"] = features["max_scans_per_day"]
 
     if not plan_code or not name:
         return jsonify({"status": "error", "message": "Plan code and name are required."}), 400
@@ -139,7 +153,7 @@ def create_admin_plan():
         return jsonify({"status": "error", "message": "Invalid price format."}), 400
 
     try:
-        duration_value = int(duration_value)
+        duration_value = int(duration_val)
         if duration_value <= 0:
             return jsonify({"status": "error", "message": "Duration must be greater than zero."}), 400
     except (ValueError, TypeError):
@@ -247,6 +261,18 @@ def update_admin_plan(plan_id: int):
         if not plan:
             return jsonify({"status": "error", "message": "Plan not found."}), 404
 
+        if "plan_code" in data or "code" in data:
+            raw_code = data.get("plan_code") or data.get("code") or ""
+            code_str = str(raw_code).strip().upper()
+            if code_str:
+                if code_str != plan.plan_code:
+                    conflict = session.query(SubscriptionPlan).filter(
+                        func.upper(SubscriptionPlan.plan_code) == code_str,
+                        SubscriptionPlan.id != plan.id
+                    ).first()
+                    if conflict:
+                        return jsonify({"status": "error", "message": f"A plan with code '{code_str}' already exists."}), 409
+                plan.plan_code = code_str
         if "name" in data and str(data["name"]).strip():
             plan.name = str(data["name"]).strip()
         if "description" in data:
@@ -260,9 +286,12 @@ def update_admin_plan(plan_id: int):
                 pass
         if "currency" in data and str(data["currency"]).strip():
             plan.currency = str(data["currency"]).strip().upper()
-        if "duration_value" in data:
+        if "duration_value" in data or "duration_days" in data:
+            val = data.get("duration_value")
+            if val is None:
+                val = data.get("duration_days")
             try:
-                d = int(data["duration_value"])
+                d = int(val)
                 if d > 0:
                     plan.duration_value = d
             except (ValueError, TypeError):
@@ -272,7 +301,14 @@ def update_admin_plan(plan_id: int):
         if "is_active" in data:
             plan.is_active = bool(data["is_active"])
         if "features" in data and isinstance(data["features"], dict):
-            plan.set_features(data["features"])
+            f = dict(data["features"])
+            if "can_monitor" in f and "can_live_monitoring" not in f:
+                f["can_live_monitoring"] = bool(f["can_monitor"])
+            if "can_live_monitoring" in f and "can_monitor" not in f:
+                f["can_monitor"] = bool(f["can_live_monitoring"])
+            if "max_scans_per_day" in f and "max_concurrent_scans" not in f:
+                f["max_concurrent_scans"] = f["max_scans_per_day"]
+            plan.set_features(f)
 
         plan.updated_at = utcnow()
         session.flush()
@@ -439,7 +475,13 @@ def create_admin_user():
     full_name = str(data.get("full_name", "")).strip()
     email = str(data.get("email", "")).strip().lower()
     phone_raw = str(data.get("phone_number") or data.get("phone") or "").strip()
-    role = str(data.get("role", "User")).strip()
+    role_candidate = str(data.get("role", "User")).strip()
+    if role_candidate.upper() == "ADMIN":
+        role = "Admin"
+    elif role_candidate.upper() == "USER":
+        role = "User"
+    else:
+        return jsonify({"status": "error", "message": "Role must be 'User' or 'Admin'."}), 400
     password = str(data.get("password", ""))
     confirm_password = str(data.get("confirm_password", ""))
     username_candidate = str(data.get("username", "")).strip()
@@ -449,9 +491,6 @@ def create_admin_user():
 
     if not is_valid_email(email):
         return jsonify({"status": "error", "message": "Invalid email address format."}), 400
-
-    if role not in ("User", "Admin"):
-        return jsonify({"status": "error", "message": "Role must be 'User' or 'Admin'."}), 400
 
     if confirm_password and password != confirm_password:
         return jsonify({"status": "error", "message": "Password and confirmation password do not match."}), 400
@@ -619,20 +658,50 @@ def get_admin_user_details(user_id: int):
 def update_admin_user_profile(user_id: int):
     """
     Administrative profile modification for any user account.
-    Updates display full_name, email, and phone_number with syntax & duplicate validation.
+    Updates display full_name, email, phone_number, and role with syntax & duplicate validation,
+    safeguards against demoting the last active administrator, and session revocation.
     """
     data = request.get_json(silent=True) or {}
     new_full_name = data.get("full_name")
     new_email = data.get("email")
     new_phone = data.get("phone_number") if "phone_number" in data else data.get("phone")
+    new_role_raw = data.get("role")
 
-    if new_email is None and new_full_name is None and new_phone is None:
+    if new_email is None and new_full_name is None and new_phone is None and new_role_raw is None:
         return jsonify({"status": "error", "message": "No profile fields provided to update."}), 400
+
+    norm_role = None
+    if new_role_raw is not None:
+        clean_role = str(new_role_raw).strip()
+        if clean_role.upper() == "ADMIN":
+            norm_role = "Admin"
+        elif clean_role.upper() == "USER":
+            norm_role = "User"
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Invalid role specified. Supported roles are exactly 'User' and 'Admin'."
+            }), 400
 
     with get_db_session() as session:
         user = session.query(User).filter_by(id=user_id).first()
         if not user:
             return jsonify({"status": "error", "message": "User not found."}), 404
+
+        role_changed = False
+        if norm_role is not None and user.role != norm_role:
+            # Guard: Prevent demoting the last active administrator
+            if user.role == "Admin" and norm_role != "Admin":
+                active_admin_count = session.query(User).filter_by(role="Admin", is_active=True).count()
+                if active_admin_count <= 1:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Cannot demote the last active Administrator on the platform."
+                    }), 400
+
+            user.role = norm_role
+            user.revoke_sessions()
+            role_changed = True
 
         if new_email is not None:
             email_cleaned = str(new_email).strip().lower()
@@ -677,15 +746,33 @@ def update_admin_user_profile(user_id: int):
         if new_full_name is not None:
             user.full_name = str(new_full_name).strip() or None
 
+        current_user = getattr(request, "current_user", None)
+        is_self_update = current_user and current_user.id == user.id
+
         session.flush()
         user_dict = user.to_dict()
 
+        new_token = None
+        if is_self_update and role_changed:
+            new_token = create_session_token(user.id, user.role, user.session_version)
+
     display_label = user_dict.get("full_name") or user_dict.get("email") or user_dict.get("username")
-    return jsonify({
+    resp = make_response(jsonify({
         "status": "success",
         "message": f"User profile for '{display_label}' updated successfully.",
         "user": user_dict
-    }), 200
+    }), 200)
+
+    if new_token:
+        resp.set_cookie(
+            COOKIE_NAME,
+            new_token,
+            max_age=SESSION_MAX_AGE_SECONDS,
+            httponly=True,
+            samesite="Lax",
+            secure=request.is_secure
+        )
+    return resp
 
 
 
@@ -697,9 +784,13 @@ def update_user_role(user_id: int):
     Guards against demoting the last active administrator on the system.
     """
     data = request.get_json(silent=True) or {}
-    new_role = str(data.get("role", "")).strip()
+    raw_role = str(data.get("role", "")).strip()
 
-    if new_role not in ("User", "Admin"):
+    if raw_role.upper() == "ADMIN":
+        new_role = "Admin"
+    elif raw_role.upper() == "USER":
+        new_role = "User"
+    else:
         return jsonify({
             "status": "error",
             "message": "Invalid role specified. Supported roles are exactly 'User' and 'Admin'."
@@ -728,14 +819,34 @@ def update_user_role(user_id: int):
 
         user.role = new_role
         user.revoke_sessions()
+
+        current_user = getattr(request, "current_user", None)
+        is_self_update = current_user and current_user.id == user.id
+
         session.flush()
         user_dict = user.to_dict()
 
-    return jsonify({
+        new_token = None
+        if is_self_update:
+            new_token = create_session_token(user.id, user.role, user.session_version)
+
+    resp = make_response(jsonify({
         "status": "success",
-        "message": f"User role for '{user.username}' updated to '{new_role}'. Active sessions revoked.",
+        "message": f"User role for '{user_dict.get('username')}' updated to '{new_role}'. Active sessions revoked.",
         "user": user_dict
-    }), 200
+    }), 200)
+
+    if new_token:
+        resp.set_cookie(
+            COOKIE_NAME,
+            new_token,
+            max_age=SESSION_MAX_AGE_SECONDS,
+            httponly=True,
+            samesite="Lax",
+            secure=request.is_secure
+        )
+
+    return resp
 
 
 @sub_admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
