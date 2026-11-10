@@ -1543,15 +1543,17 @@ body.dedicated-mode-port-scanner #system-architecture,
 }
 
 .section-title {
-  font-size: 2.2rem;
+  font-size: 1.75rem;
   letter-spacing: -0.02em;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  line-height: 1.25;
 }
 
 .section-subtitle {
-  font-size: 1.05rem;
+  font-size: 0.92rem;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.5;
+  margin-bottom: 16px;
 }
 
 /* Button System (Solid, Premium, Standardized) */
@@ -6240,9 +6242,10 @@ body.dedicated-mode-port-scanner #system-architecture,
 }
 
 .nd-hero-title {
-  font-size: 2.4rem;
+  font-size: 1.85rem;
   letter-spacing: -0.02em;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  line-height: 1.25;
 }
 
 .nd-hero-title .gradient-text {
@@ -6250,9 +6253,9 @@ body.dedicated-mode-port-scanner #system-architecture,
 }
 
 .nd-hero-subtitle {
-  font-size: 1.05rem;
+  font-size: 0.92rem;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 /* KPI Summary Cards */
@@ -11490,9 +11493,9 @@ body.auth-admin .user-role-badge {
   max-width: 580px;
   background: var(--bg-surface, #18181B);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.14));
-  border-radius: 16px;
+  border-radius: 14px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(163, 230, 53, 0.15);
-  padding: 26px;
+  padding: 22px 24px;
   box-sizing: border-box;
   animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 2;
@@ -16204,17 +16207,25 @@ body.auth-page {
 
 .auth-input-icon {
   position: absolute;
-  left: 14px;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.86rem;
   color: var(--text-muted, #71717A);
   pointer-events: none;
+  z-index: 3;
   transition: color var(--transition-fast);
 }
 
 .auth-input {
   width: 100%;
-  height: 44px;
-  padding: 0 40px 0 38px;
+  height: 42px;
+  padding: 0 14px;
   border-radius: var(--radius-sm, 8px);
   border: 1px solid var(--border, #E4E4E7);
   background: var(--bg-base, #FAFAFA);
@@ -16223,6 +16234,24 @@ body.auth-page {
   font-size: 0.88rem;
   box-sizing: border-box;
   transition: all var(--transition-fast);
+}
+
+textarea.auth-input {
+  height: auto;
+  min-height: 80px;
+  padding: 10px 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.auth-input-wrap .auth-input {
+  padding-left: 40px !important;
+  padding-right: 14px;
+}
+
+.auth-input-wrap:has(.auth-toggle-pwd) .auth-input,
+.auth-input-wrap.has-pwd-toggle .auth-input {
+  padding-right: 42px !important;
 }
 
 [data-theme="dark"] .auth-input {
@@ -18964,5 +18993,434 @@ textarea:focus-visible,
   background: #E2E8F0;
   color: #0F172A;
 }
+
+/* ==============================================================================
+   SCOUT Payment Configuration & Receiving Account Modals Refinement
+   ============================================================================== */
+
+/* Modal Badges & Close Buttons */
+.auth-modal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--brand-accent, #A3E635);
+  background: rgba(163, 230, 53, 0.1);
+  border: 1px solid rgba(163, 230, 53, 0.25);
+  margin-bottom: 4px;
+}
+
+[data-theme="light"] .auth-modal-badge {
+  color: #4D7C0F;
+  background: rgba(101, 163, 13, 0.1);
+  border-color: rgba(101, 163, 13, 0.25);
+}
+
+.auth-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted, #71717A);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 5;
+}
+
+.auth-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #F4F4F5);
+  border-color: var(--border-color, rgba(255, 255, 255, 0.15));
+}
+
+[data-theme="light"] .auth-modal-close {
+  color: #64748B;
+}
+
+[data-theme="light"] .auth-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary, #09090B);
+  border-color: #CBD5E1;
+}
+
+/* Modal Dialog Dimensions & Spacing */
+#adminReceivingAccountModal .auth-modal-dialog {
+  max-width: 520px;
+  padding: 22px 24px;
+  border-radius: 14px;
+}
+
+#adminPaymentMethodModal .auth-modal-dialog {
+  max-width: 580px;
+  padding: 22px 24px;
+  border-radius: 14px;
+}
+
+/* Modal Header & Typography across all Auth & Admin Modals */
+.auth-modal .auth-modal-header,
+#adminReceivingAccountModal .auth-modal-header,
+#adminPaymentMethodModal .auth-modal-header,
+#receiptViewerModal .auth-modal-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 16px;
+  padding-right: 36px;
+  position: relative;
+}
+
+.auth-modal .auth-modal-header-content,
+#adminReceivingAccountModal .auth-modal-header-content,
+#adminPaymentMethodModal .auth-modal-header-content,
+#receiptViewerModal .auth-modal-header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+
+.auth-modal .auth-modal-title,
+#adminReceivingAccountModal .auth-modal-title,
+#adminPaymentMethodModal .auth-modal-title,
+#receiptViewerModal .auth-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary, #F4F4F5);
+  margin: 0;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.auth-modal .auth-modal-subtitle,
+#adminReceivingAccountModal .auth-modal-subtitle,
+#adminPaymentMethodModal .auth-modal-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted, #A1A1AA);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Form Groups, Labels & Field Wrappers */
+.auth-modal .auth-form-group,
+.auth-modal .form-group,
+#adminReceivingAccountModal .auth-form-group,
+#adminPaymentMethodModal .auth-form-group {
+  margin-bottom: 13px;
+}
+
+.auth-modal .auth-form-label,
+.auth-modal .auth-label,
+#adminReceivingAccountModal .auth-form-label,
+#adminPaymentMethodModal .auth-form-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary, #F4F4F5);
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+/* Input Wrapping & Absolute Dedicated Icon Slot */
+.auth-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.auth-input-wrap .auth-input-icon,
+.auth-input-wrap .auth-field-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  color: var(--text-muted, #71717A);
+  pointer-events: none;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  transition: color 0.2s ease;
+}
+
+.auth-input-wrap:focus-within .auth-input-icon,
+.auth-input-wrap:focus-within .auth-field-icon {
+  color: var(--brand-accent, #A3E635);
+}
+
+[data-theme="light"] .auth-input-wrap:focus-within .auth-input-icon,
+[data-theme="light"] .auth-input-wrap:focus-within .auth-field-icon {
+  color: #65A30D;
+}
+
+/* Input Fields with 40px left padding when wrapped in auth-input-wrap to prevent ANY overlap */
+.auth-modal input.auth-input,
+.auth-modal select.auth-input,
+#adminReceivingAccountModal .auth-input,
+#adminPaymentMethodModal .auth-input {
+  width: 100% !important;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  background: var(--bg-base, #09090B);
+  color: var(--text-primary, #F4F4F5);
+  font-family: inherit;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.auth-modal .auth-input-wrap input.auth-input,
+.auth-modal .auth-input-wrap select.auth-input,
+#adminReceivingAccountModal .auth-input-wrap .auth-input,
+#adminPaymentMethodModal .auth-input-wrap .auth-input {
+  padding: 0 14px 0 40px !important;
+}
+
+.auth-modal textarea.auth-input,
+#adminPaymentMethodModal textarea.auth-input {
+  width: 100% !important;
+  height: auto;
+  min-height: 72px;
+  padding: 10px 14px !important;
+  line-height: 1.45;
+  resize: vertical;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  background: var(--bg-base, #09090B);
+  color: var(--text-primary, #F4F4F5);
+  font-family: inherit;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.auth-modal .auth-input:focus,
+#adminReceivingAccountModal .auth-input:focus,
+#adminPaymentMethodModal .auth-input:focus {
+  outline: none;
+  border-color: var(--brand-accent, #A3E635);
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.18);
+  background: var(--bg-surface, #18181B);
+}
+
+/* Checkbox alignment */
+.auth-modal .checkbox-group,
+#adminReceivingAccountModal .checkbox-group,
+#adminPaymentMethodModal .checkbox-group {
+  margin-top: 8px;
+  margin-bottom: 6px;
+}
+
+.auth-modal .auth-checkbox-label,
+#adminReceivingAccountModal .auth-checkbox-label,
+#adminPaymentMethodModal .auth-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-primary, #F4F4F5);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-modal .auth-checkbox-label input[type="checkbox"],
+#adminReceivingAccountModal .auth-checkbox-label input[type="checkbox"],
+#adminPaymentMethodModal .auth-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-accent, #A3E635);
+  cursor: pointer;
+}
+
+/* Modal Footers & Action Buttons */
+.auth-modal .plan-modal-footer,
+#adminReceivingAccountModal .plan-modal-footer,
+#adminPaymentMethodModal .plan-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.auth-modal .btn-admin-action.cancel,
+#adminReceivingAccountModal .btn-admin-action.cancel,
+#adminPaymentMethodModal .btn-admin-action.cancel {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted, #A1A1AA);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  transition: all 0.2s ease;
+}
+
+.auth-modal .btn-admin-action.cancel:hover,
+#adminReceivingAccountModal .btn-admin-action.cancel:hover,
+#adminPaymentMethodModal .btn-admin-action.cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #F4F4F5);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.auth-modal .btn-auth-submit,
+#adminReceivingAccountModal .btn-auth-submit,
+#adminPaymentMethodModal .btn-auth-submit {
+  width: auto !important;
+  height: 38px;
+  padding: 0 20px !important;
+  margin-top: 0 !important;
+  font-size: 0.83rem !important;
+  font-weight: 700 !important;
+  border-radius: 7px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  cursor: pointer;
+  box-sizing: border-box !important;
+}
+
+/* Light Theme Overrides for All Modals */
+[data-theme="light"] .auth-modal .auth-modal-dialog,
+[data-theme="light"] #adminReceivingAccountModal .auth-modal-dialog,
+[data-theme="light"] #adminPaymentMethodModal .auth-modal-dialog {
+  background: #FFFFFF;
+  border-color: #E2E8F0;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .auth-modal .auth-modal-title,
+[data-theme="light"] #adminReceivingAccountModal .auth-modal-title,
+[data-theme="light"] #adminPaymentMethodModal .auth-modal-title,
+[data-theme="light"] #receiptViewerModal .auth-modal-title {
+  color: #0F172A;
+}
+
+[data-theme="light"] .auth-modal .auth-modal-subtitle,
+[data-theme="light"] #adminReceivingAccountModal .auth-modal-subtitle,
+[data-theme="light"] #adminPaymentMethodModal .auth-modal-subtitle {
+  color: #64748B;
+}
+
+[data-theme="light"] .auth-modal .auth-form-label,
+[data-theme="light"] .auth-modal .auth-label,
+[data-theme="light"] #adminReceivingAccountModal .auth-form-label,
+[data-theme="light"] #adminPaymentMethodModal .auth-form-label {
+  color: #334155;
+}
+
+[data-theme="light"] .auth-modal .auth-input,
+[data-theme="light"] #adminReceivingAccountModal .auth-input,
+[data-theme="light"] #adminPaymentMethodModal .auth-input {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #0F172A;
+}
+
+[data-theme="light"] .auth-modal .auth-input:focus,
+[data-theme="light"] #adminReceivingAccountModal .auth-input:focus,
+[data-theme="light"] #adminPaymentMethodModal .auth-input:focus {
+  background: #FFFFFF;
+  border-color: #65A30D;
+  box-shadow: 0 0 0 3px rgba(101, 163, 13, 0.18);
+}
+
+[data-theme="light"] .auth-modal .auth-input-wrap .auth-input-icon,
+[data-theme="light"] .auth-modal .auth-input-wrap .auth-field-icon,
+[data-theme="light"] #adminReceivingAccountModal .auth-input-wrap .auth-input-icon,
+[data-theme="light"] #adminReceivingAccountModal .auth-input-wrap .auth-field-icon,
+[data-theme="light"] #adminPaymentMethodModal .auth-input-wrap .auth-input-icon,
+[data-theme="light"] #adminPaymentMethodModal .auth-input-wrap .auth-field-icon {
+  color: #64748B;
+}
+
+[data-theme="light"] .auth-modal .auth-checkbox-label,
+[data-theme="light"] #adminReceivingAccountModal .auth-checkbox-label,
+[data-theme="light"] #adminPaymentMethodModal .auth-checkbox-label {
+  color: #334155;
+}
+
+[data-theme="light"] .auth-modal .plan-modal-footer,
+[data-theme="light"] #adminReceivingAccountModal .plan-modal-footer,
+[data-theme="light"] #adminPaymentMethodModal .plan-modal-footer {
+  border-top-color: #E2E8F0;
+}
+
+[data-theme="light"] .auth-modal .btn-admin-action.cancel,
+[data-theme="light"] #adminReceivingAccountModal .btn-admin-action.cancel,
+[data-theme="light"] #adminPaymentMethodModal .btn-admin-action.cancel {
+  background: #F1F5F9;
+  color: #334155;
+  border-color: #CBD5E1;
+}
+
+[data-theme="light"] .auth-modal .btn-admin-action.cancel:hover,
+[data-theme="light"] #adminReceivingAccountModal .btn-admin-action.cancel:hover,
+[data-theme="light"] #adminPaymentMethodModal .btn-admin-action.cancel:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+/* Mobile & Tablet Responsiveness */
+@media (max-width: 640px) {
+  .auth-modal .auth-modal-dialog,
+  #adminReceivingAccountModal .auth-modal-dialog,
+  #adminPaymentMethodModal .auth-modal-dialog {
+    padding: 18px 16px;
+    max-width: 95vw;
+  }
+
+  .auth-modal .auth-form-row,
+  #adminReceivingAccountModal .auth-form-row,
+  #adminPaymentMethodModal .auth-form-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .auth-modal .plan-modal-footer,
+  #adminReceivingAccountModal .plan-modal-footer,
+  #adminPaymentMethodModal .plan-modal-footer {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .auth-modal .plan-modal-footer .btn-admin-action.cancel,
+  .auth-modal .plan-modal-footer .btn-admin-action.reject,
+  .auth-modal .plan-modal-footer .btn-auth-submit,
+  #adminReceivingAccountModal .btn-admin-action.cancel,
+  #adminPaymentMethodModal .btn-admin-action.cancel,
+  #adminReceivingAccountModal .btn-auth-submit,
+  #adminPaymentMethodModal .btn-auth-submit {
+    width: 100% !important;
+  }
+}
+
 
 

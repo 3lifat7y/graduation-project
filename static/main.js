@@ -13973,6 +13973,13 @@ document.addEventListener("DOMContentLoaded", () => {
   if (adminPaymentMethodModalBackdrop) adminPaymentMethodModalBackdrop.addEventListener("click", closePaymentMethodModal);
   if (pmModalCancelBtn) pmModalCancelBtn.addEventListener("click", closePaymentMethodModal);
   if (adminCreatePaymentMethodBtn) adminCreatePaymentMethodBtn.addEventListener("click", () => openPaymentMethodModal(null, null));
+  if (pmModalSaveBtn) {
+    pmModalSaveBtn.addEventListener("click", (e) => {
+      if (adminPaymentMethodForm && typeof adminPaymentMethodForm.requestSubmit === "function") {
+        adminPaymentMethodForm.requestSubmit();
+      }
+    });
+  }
 
   if (adminPaymentMethodForm) {
     adminPaymentMethodForm.addEventListener("submit", async (e) => {
@@ -13982,7 +13989,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const name = pmModalName ? pmModalName.value.trim() : "";
       const providerType = pmModalProviderType ? pmModalProviderType.value : "electronic_wallet";
       const icon = pmModalIcon ? pmModalIcon.value.trim() : "fas fa-wallet";
-      const displayOrder = pmModalDisplayOrder ? parseInt(pmModalDisplayOrder.value || "0") : 0;
+      const displayOrder = (pmModalDisplayOrder && !isNaN(parseInt(pmModalDisplayOrder.value))) ? parseInt(pmModalDisplayOrder.value) : 0;
       const isActive = pmModalIsActive ? pmModalIsActive.checked : true;
       const desc = pmModalDescription ? pmModalDescription.value.trim() : "";
       const instructions = pmModalInstructions ? pmModalInstructions.value.trim() : "";
@@ -14025,7 +14032,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (res.ok && data.status === "success") {
           closePaymentMethodModal();
-          loadAdminPaymentMethods();
+          await loadAdminPaymentMethods();
         } else {
           if (adminPaymentMethodModalAlert) {
             adminPaymentMethodModalAlert.className = "auth-alert error";
@@ -14081,6 +14088,13 @@ document.addEventListener("DOMContentLoaded", () => {
   if (adminReceivingAccountModalCloseBtn) adminReceivingAccountModalCloseBtn.addEventListener("click", closeReceivingAccountModal);
   if (adminReceivingAccountModalBackdrop) adminReceivingAccountModalBackdrop.addEventListener("click", closeReceivingAccountModal);
   if (raModalCancelBtn) raModalCancelBtn.addEventListener("click", closeReceivingAccountModal);
+  if (raModalSaveBtn) {
+    raModalSaveBtn.addEventListener("click", (e) => {
+      if (adminReceivingAccountForm && typeof adminReceivingAccountForm.requestSubmit === "function") {
+        adminReceivingAccountForm.requestSubmit();
+      }
+    });
+  }
 
   if (adminReceivingAccountForm) {
     adminReceivingAccountForm.addEventListener("submit", async (e) => {
@@ -14090,7 +14104,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const identifier = raModalIdentifier ? raModalIdentifier.value.trim() : "";
       const holder = raModalHolderName ? raModalHolderName.value.trim() : "";
       const desc = raModalDescription ? raModalDescription.value.trim() : "";
-      const displayOrder = raModalDisplayOrder ? parseInt(raModalDisplayOrder.value || "0") : 0;
+      const displayOrder = (raModalDisplayOrder && !isNaN(parseInt(raModalDisplayOrder.value))) ? parseInt(raModalDisplayOrder.value) : 0;
       const isActive = raModalIsActive ? raModalIsActive.checked : true;
 
       if (!identifier || !holder) {
@@ -14128,7 +14142,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (res.ok && data.status === "success") {
           closeReceivingAccountModal();
-          loadAdminPaymentMethods();
+          await loadAdminPaymentMethods();
         } else {
           if (adminReceivingAccountModalAlert) {
             adminReceivingAccountModalAlert.className = "auth-alert error";

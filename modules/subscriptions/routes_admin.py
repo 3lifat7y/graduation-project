@@ -17,7 +17,7 @@ from modules.auth.security import (
     COOKIE_NAME, SESSION_MAX_AGE_SECONDS, create_session_token
 )
 from scripts.create_admin import validate_password_strength
-from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog
+from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog, PaymentMethod, PaymentReceivingAccount
 from .services import sync_expired_subscriptions
 
 sub_admin_bp = Blueprint("sub_admin", __name__, url_prefix="/api/admin")
@@ -1476,7 +1476,7 @@ def get_admin_payment_method(method_id: int):
     }), 200
 
 
-@sub_admin_bp.route("/payment-methods/<int:method_id>", methods=["PUT"])
+@sub_admin_bp.route("/payment-methods/<int:method_id>", methods=["PUT", "PATCH"])
 @admin_required
 def update_admin_payment_method(method_id: int):
     """Updates payment method properties."""
@@ -1543,7 +1543,21 @@ def add_admin_receiving_account(method_id: int):
     }), 201
 
 
-@sub_admin_bp.route("/receiving-accounts/<int:account_id>", methods=["PUT"])
+@sub_admin_bp.route("/receiving-accounts/<int:account_id>", methods=["GET"])
+@admin_required
+def get_admin_receiving_account(account_id: int):
+    """Retrieves single receiving account details."""
+    with get_db_session() as session:
+        account = session.query(PaymentReceivingAccount).filter_by(id=account_id).first()
+        if not account:
+            return jsonify({"status": "error", "message": "Receiving account not found."}), 404
+        return jsonify({
+            "status": "success",
+            "account": account.to_dict()
+        }), 200
+
+
+@sub_admin_bp.route("/receiving-accounts/<int:account_id>", methods=["PUT", "PATCH"])
 @admin_required
 def update_admin_receiving_account(account_id: int):
     """Updates receiving account details."""

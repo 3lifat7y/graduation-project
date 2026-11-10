@@ -453,6 +453,112 @@ class TestManualPaymentSystem(unittest.TestCase):
         self.assertEqual(resubmit_res.status_code, 201)
         self.assertEqual(resubmit_res.get_json()["subscription"]["status"], "pending")
 
+    def test_08_edit_and_save_receiving_account_persistence(self):
+        """
+        Comprehensive test for editing and saving receiving account details:
+        Verifies phone number/identifier, holder name, notes, order, and active flag
+        persist in the database, return via GET endpoints, and reflect immediately in checkout.
+        """
+        self.login("admin_pay", "AdminPass123!@#")
+
+        # 1. Update receiving account via PUT
+        updated_phone = "01099887766"
+        updated_holder = "SCOUT Primary Financial Hub"
+        updated_desc = "Updated corporate receiving wallet"
+        update_res = self.client.put(f"/api/admin/receiving-accounts/{self.acc1_id}", json={
+            "account_identifier": updated_phone,
+            "account_holder_name": updated_holder,
+            "description": updated_desc,
+            "display_order": 5,
+            "is_active": True
+        })
+        self.assertEqual(update_res.status_code, 200)
+        acc_payload = update_res.get_json()["account"]
+        self.assertEqual(acc_payload["account_identifier"], updated_phone)
+        self.assertEqual(acc_payload["account_holder_name"], updated_holder)
+        self.assertEqual(acc_payload["description"], updated_desc)
+        self.assertEqual(acc_payload["display_order"], 5)
+        self.assertTrue(acc_payload["is_active"])
+
+        # 2. Verify direct database persistence across an independent session
+        with self.SessionFactory() as session:
+            db_acc = session.query(PaymentReceivingAccount).filter_by(id=self.acc1_id).first()
+            self.assertIsNotNone(db_acc)
+            self.assertEqual(db_acc.account_identifier, updated_phone)
+            self.assertEqual(db_acc.account_holder_name, updated_holder)
+            self.assertEqual(db_acc.description, updated_desc)
+            self.assertEqual(db_acc.display_order, 5)
+            self.assertTrue(db_acc.is_active)
+
+        # 3. Verify single account GET endpoint
+        get_res = self.client.get(f"/api/admin/receiving-accounts/{self.acc1_id}")
+        self.assertEqual(get_res.status_code, 200)
+        self.assertEqual(get_res.get_json()["account"]["account_identifier"], updated_phone)
+
+        # 4. Verify admin payment-methods listing reflects the updated account
+        admin_methods_res = self.client.get("/api/admin/payment-methods")
+        self.assertEqual(admin_methods_res.status_code, 200)
+        instapay_method = next(m for m in admin_methods_res.get_json()["payment_methods"] if m["id"] == self.instapay_id)
+        instapay_acc = next(a for a in instapay_method["accounts"] if a["id"] == self.acc1_id)
+        self.assertEqual(instapay_acc["account_identifier"], updated_phone)
+        self.assertEqual(instapay_acc["account_holder_name"], updated_holder)
+
+        # 5. Verify user checkout endpoint reflects the updated receiving details immediately
+        user_methods_res = self.client.get("/api/payment-methods")
+        self.assertEqual(user_methods_res.status_code, 200)
+        pub_instapay = next(m for m in user_methods_res.get_json()["payment_methods"] if m["id"] == self.instapay_id)
+        pub_acc = next(a for a in pub_instapay["accounts"] if a["id"] == self.acc1_id)
+        self.assertEqual(pub_acc["account_identifier"], updated_phone)
+        self.assertEqual(pub_acc["account_holder_name"], updated_holder)
+
+        # 6. Verify user submitting checkout records snapshot with the updated account identifier
+        self.login("operator_pay2", "UserPass123!@#")
+        checkout_res = self.client.post("/api/subscriptions/checkout/submit", data={
+            "plan_id": self.plan_id,
+            "payment_method_id": self.instapay_id,
+            "receiving_account_id": self.acc1_id,
+            "transaction_reference": "TX-VERIFY-UPDATED-PHONE-1",
+            "receipt": (io.BytesIO(VALID_PNG_BYTES), "receipt.png")
+        }, content_type="multipart/form-data")
+        self.assertEqual(checkout_res.status_code, 201)
+        sub_data = checkout_res.get_json()["subscription"]
+        self.assertEqual(sub_data["receiving_account_identifier"], updated_phone)
+        self.assertEqual(sub_data["receiving_account_holder"], updated_holder)
+
+        # 7. Test alias support via PATCH (e.g. 'phone_number')
+        self.login("admin_pay", "AdminPass123!@#")
+        patch_phone = "01122334455"
+        patch_res = self.client.patch(f"/api/admin/receiving-accounts/{self.acc1_id}", json={
+            "phone_number": patch_phone
+        })
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.get_json()["account"]["account_identifier"], patch_phone)
+
+        # 8. Test validation error when empty identifier is sent
+        err_res = self.client.put(f"/api/admin/receiving-accounts/{self.acc1_id}", json={
+            "account_identifier": "   "
+        })
+        self.assertEqual(err_res.status_code, 400)
+        self.assertIn("cannot be empty", err_res.get_json()["message"])
+
+    def test_09_payment_methods_edit_dialog_and_modal_contract(self):
+        """Verifies HTML modal contracts: submit button types and icon classes."""
+        with open("templates/ddos.html", "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # Both save buttons must be type="submit" to submit forms reliably
+        self.assertIn('id="raModalSaveBtn"', html)
+        self.assertIn('<button type="submit" class="btn-auth-submit" id="raModalSaveBtn"', html)
+        self.assertIn('id="pmModalSaveBtn"', html)
+        self.assertIn('<button type="submit" class="btn-auth-submit" id="pmModalSaveBtn"', html)
+
+        # Header content wrapper must wrap titles
+        self.assertIn('id="adminReceivingAccountModalTitle"', html)
+        self.assertIn('auth-modal-header-content', html)
+
+        # Icon wrapper must contain auth-input-icon
+        self.assertIn('auth-input-icon auth-field-icon', html)
+
 
 if __name__ == "__main__":
     unittest.main()

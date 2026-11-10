@@ -335,8 +335,8 @@ def toggle_payment_method(method_id: int, is_active: Optional[bool] = None) -> T
 
 def add_receiving_account(method_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
     """Adds a receiving account to a payment method."""
-    identifier = str(data.get("account_identifier") or "").strip()
-    holder = str(data.get("account_holder_name") or "").strip()
+    identifier = str(data.get("account_identifier") or data.get("identifier") or data.get("phone_number") or data.get("account_number") or "").strip()
+    holder = str(data.get("account_holder_name") or data.get("holder_name") or data.get("account_holder") or "").strip()
     if not identifier:
         return False, "Account identifier (phone number, email, or wallet ID) is required.", {}
     if not holder:
@@ -344,7 +344,10 @@ def add_receiving_account(method_id: int, data: Dict[str, Any]) -> Tuple[bool, s
 
     description = str(data.get("description") or "").strip()
     is_active = bool(data.get("is_active", True))
-    display_order = int(data.get("display_order") or 0)
+    try:
+        display_order = int(data.get("display_order") or 0)
+    except (ValueError, TypeError):
+        display_order = 0
 
     with get_db_session() as session:
         method = session.query(PaymentMethod).filter_by(id=method_id).first()
@@ -373,14 +376,28 @@ def update_receiving_account(account_id: int, data: Dict[str, Any]) -> Tuple[boo
         if not account:
             return False, "Receiving account not found.", {}
 
-        if "account_identifier" in data:
-            val = str(data["account_identifier"]).strip()
+        # Support identifier aliases (account_identifier, identifier, phone_number, account_number)
+        ident = None
+        for key in ("account_identifier", "identifier", "phone_number", "account_number"):
+            if key in data and data[key] is not None:
+                ident = data[key]
+                break
+
+        if ident is not None:
+            val = str(ident).strip()
             if not val:
                 return False, "Account identifier cannot be empty.", {}
             account.account_identifier = val
 
-        if "account_holder_name" in data:
-            val = str(data["account_holder_name"]).strip()
+        # Support holder name aliases (account_holder_name, holder_name, account_holder)
+        holder = None
+        for key in ("account_holder_name", "holder_name", "account_holder"):
+            if key in data and data[key] is not None:
+                holder = data[key]
+                break
+
+        if holder is not None:
+            val = str(holder).strip()
             if not val:
                 return False, "Account holder name cannot be empty.", {}
             account.account_holder_name = val
