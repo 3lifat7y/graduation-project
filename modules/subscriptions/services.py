@@ -429,6 +429,104 @@ def extend_subscription(
     return True, f"Subscription #{subscription_id} extended by {extension_days} days.", sub_dict
 
 
+def assign_manual_subscription(
+    user_id: int,
+    plan_id: int,
+    admin_id: int,
+    duration_days: Optional[int] = None,
+    start_date: Optional[datetime] = None,
+    notes: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Directly creates and activates a subscription for a user under administrative authority.
+    Transition: None/Expired/Pending -> Active.
+    Policy:
+      - Validates administrator authority, active user account, and plan validity.
+      - Supercedes any existing active or pending subscription for the user to prevent duplicates.
+      - Calculates expiration based on plan configuration or explicit duration override.
+      - Records a comprehensive SubscriptionAuditLog entry (action="MANUALLY_ASSIGNED").
+    """
+    with get_db_session() as session:
+        admin = session.query(User).filter_by(id=admin_id).first()
+        if not admin or admin.role != "Admin":
+            return False, "Only Administrators may manually assign subscriptions.", {}
+
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return False, "User account not found.", {}
+        if not user.is_active:
+            return False, "Cannot assign subscription to an inactive or suspended user.", {}
+
+        plan = session.query(SubscriptionPlan).filter_by(id=plan_id).first()
+        if not plan:
+            return False, "Subscription plan not found.", {}
+
+        # Calculate duration in days
+        if duration_days and duration_days > 0:
+            calc_days = duration_days
+        elif plan.duration_unit == "months":
+            calc_days = plan.duration_value * 30
+        elif plan.duration_unit == "years":
+            calc_days = plan.duration_value * 365
+        else:
+            calc_days = plan.duration_value
+
+        effective_start = ensure_utc(start_date or utcnow())
+        effective_end = effective_start + timedelta(days=calc_days)
+
+        # Supercede existing active subscriptions for this user to avoid duplicates
+        existing_actives = session.query(UserSubscription).filter(
+            UserSubscription.user_id == user_id,
+            UserSubscription.status == "active"
+        ).all()
+        for old_sub in existing_actives:
+            old_sub.status = "canceled"
+            old_sub.cancellation_reason = f"Superceded by manually assigned subscription for plan '{plan.name}'."
+
+        # Supercede existing pending requests for this user
+        existing_pendings = session.query(UserSubscription).filter(
+            UserSubscription.user_id == user_id,
+            UserSubscription.status == "pending"
+        ).all()
+        for p_sub in existing_pendings:
+            p_sub.status = "canceled"
+            p_sub.cancellation_reason = "Superceded by direct manual subscription assignment."
+
+        now = utcnow()
+        sub = UserSubscription(
+            user_id=user_id,
+            plan_id=plan_id,
+            status="active",
+            start_date=effective_start,
+            end_date=effective_end,
+            activated_at=now,
+            activated_by_id=admin_id,
+            payment_status="approved",
+            payment_method_name_snapshot="Manual Administrative Assignment",
+            payment_method_type_snapshot="administrative_override",
+            plan_name_snapshot=plan.name,
+            plan_price_snapshot=float(plan.price),
+            admin_notes=notes or "Manually assigned by Administrator."
+        )
+        session.add(sub)
+        session.flush()
+
+        note_str = f" Notes: {notes}" if notes else ""
+        audit = SubscriptionAuditLog(
+            subscription_id=sub.id,
+            actor_id=admin_id,
+            action="MANUALLY_ASSIGNED",
+            previous_status=None,
+            new_status="active",
+            details=f"Admin '{admin.username}' manually assigned and activated plan '{plan.name}' ({plan.plan_code}) for user '{user.username}'. Valid from {effective_start.strftime('%Y-%m-%d')} to {effective_end.strftime('%Y-%m-%d')} ({calc_days} days).{note_str}"
+        )
+        session.add(audit)
+        session.flush()
+        sub_dict = sub.to_dict()
+
+    return True, f"Subscription #{sub.id} successfully assigned and activated for {user.username}.", sub_dict
+
+
 def determine_user_landing_view(user: User) -> Tuple[str, str]:
     """
     Centralized post-login and default routing resolver.

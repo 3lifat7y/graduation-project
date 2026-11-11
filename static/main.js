@@ -10165,6 +10165,64 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Operator Moderation Handlers: Toggle Role (Promote / Demote)
+  async function toggleUserRole(userId, newRole, btn) {
+    if (!userId || !newRole) return;
+    const isDemoting = newRole !== "Admin";
+    const actionText = isDemoting ? "demote to Operator" : "promote to Administrator";
+
+    const confirmRes = await showAdminConfirmationModal({
+      title: isDemoting ? "Demote Administrator" : "Promote Operator to Administrator",
+      badge: "Role Management",
+      badgeIcon: isDemoting ? "fa-user-minus" : "fa-shield-halved",
+      targetName: `Operator #${userId}`,
+      targetMeta: `Target Role: ${newRole}`,
+      consequencesText: isDemoting
+        ? "Demoting this user from Administrator will revoke administrative access and active session privileges. The user will be redirected to the user interface."
+        : "Promoting this user to Administrator grants full platform access, including user management, subscriptions, and system settings.",
+      isDestructive: isDemoting,
+      confirmText: isDemoting ? "Confirm Demotion" : "Confirm Promotion",
+      confirmIcon: isDemoting ? "fa-user-minus" : "fa-shield-halved"
+    });
+    if (!confirmRes.confirmed) return;
+
+    const origHtml = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; }
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await res.json();
+      if (!res.ok || data.status !== "success") {
+        showToast(data.message || `Failed to ${actionText}.`, "error");
+      } else {
+        showToast(data.message || `Role updated to ${newRole} successfully.`, "success");
+        if (currentUser && currentUser.id === parseInt(userId, 10)) {
+          currentUser.role = newRole;
+          if (newRole !== "Admin") {
+            setTimeout(() => { window.location.href = "/?view=dashboard"; }, 1000);
+            return;
+          }
+        }
+      }
+      await loadAdminUsers();
+      if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+      if (adminUserDetailsModal && adminUserDetailsModal.style.display !== "none") {
+        const dId = document.getElementById("dossierUserId");
+        if (dId && dId.textContent === `#${userId}`) {
+          openAdminUserDetails(userId);
+        }
+      }
+    } catch (_) {
+      showToast(`Network error attempting to ${actionText}.`, "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+    }
+  }
+
   // Operator Moderation Handlers: Delete / Archive Account
   async function deleteAdminUser(userId, username, btn) {
     if (!userId) return;
@@ -10333,6 +10391,9 @@ document.addEventListener("DOMContentLoaded", () => {
           actionsToolbar.innerHTML = `<span class="text-muted"><i class="fas fa-info-circle"></i> This is your currently authenticated Administrator account.</span>`;
         } else {
           actionsToolbar.innerHTML = `
+            <button type="button" class="btn-admin-action activate" id="dossierAssignSubBtn" style="background:#84CC16; color:#0F172A; font-weight:600;">
+              <i class="fas fa-user-plus"></i> Assign Subscription
+            </button>
             <button type="button" class="btn-admin-action ${u.is_active ? 'reject' : 'activate'}" id="dossierToggleStatusBtn">
               <i class="fas ${u.is_active ? 'fa-user-lock' : 'fa-user-check'}"></i> ${u.is_active ? 'Suspend Account' : 'Reactivate Account'}
             </button>
@@ -10340,6 +10401,10 @@ document.addEventListener("DOMContentLoaded", () => {
               <i class="fas fa-trash-can"></i> Delete / Archive Account
             </button>
           `;
+          const assignSubBtn = document.getElementById("dossierAssignSubBtn");
+          if (assignSubBtn) {
+            assignSubBtn.addEventListener("click", () => openAdminAssignSubModal(u.id));
+          }
           const toggleStatusBtn = document.getElementById("dossierToggleStatusBtn");
           if (toggleStatusBtn) {
             toggleStatusBtn.addEventListener("click", () => {
@@ -11500,6 +11565,232 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ============================================================================
+  // Admin Assign Subscription Modal Controller
+  // ============================================================================
+  const adminAssignSubModal = document.getElementById("adminAssignSubModal");
+  const adminAssignSubModalCloseBtn = document.getElementById("adminAssignSubModalCloseBtn");
+  const adminAssignSubModalBackdrop = document.getElementById("adminAssignSubModalBackdrop");
+  const adminAssignSubForm = document.getElementById("adminAssignSubForm");
+  const adminAssignSubAlert = document.getElementById("adminAssignSubAlert");
+  const openAssignSubBtn = document.getElementById("openAssignSubBtn");
+
+  const assignUserSelect = document.getElementById("assignSubUserId");
+  const assignPlanSelect = document.getElementById("assignSubPlanId");
+  const assignPlanPreview = document.getElementById("assignSubPlanPreview");
+  const assignPlanPriceDisplay = document.getElementById("assignPlanPriceDisplay");
+  const assignPlanDurationDisplay = document.getElementById("assignPlanDurationDisplay");
+  const assignPlanFeaturesDisplay = document.getElementById("assignPlanFeaturesDisplay");
+  const assignDurationInput = document.getElementById("assignSubDurationDays");
+  const assignStartDateInput = document.getElementById("assignSubStartDate");
+  const assignNotesInput = document.getElementById("assignSubNotes");
+  const assignSubmitBtn = document.getElementById("adminAssignSubSubmitBtn");
+
+  let adminCachedPlans = [];
+
+  function closeAdminAssignSubModal() {
+    if (adminAssignSubModal) adminAssignSubModal.style.display = "none";
+    document.body.style.overflow = "";
+    if (adminAssignSubAlert) {
+      adminAssignSubAlert.style.display = "none";
+      adminAssignSubAlert.textContent = "";
+    }
+  }
+
+  if (adminAssignSubModalCloseBtn) adminAssignSubModalCloseBtn.addEventListener("click", closeAdminAssignSubModal);
+  if (adminAssignSubModalBackdrop) adminAssignSubModalBackdrop.addEventListener("click", closeAdminAssignSubModal);
+
+  async function openAdminAssignSubModal(preselectedUserId = null) {
+    if (!adminAssignSubModal) return;
+
+    if (adminAssignSubAlert) {
+      adminAssignSubAlert.style.display = "none";
+      adminAssignSubAlert.textContent = "";
+    }
+    if (assignNotesInput) assignNotesInput.value = "";
+    if (assignDurationInput) assignDurationInput.value = "";
+    if (assignStartDateInput) assignStartDateInput.value = "";
+    if (assignPlanPreview) assignPlanPreview.style.display = "none";
+
+    // Set default start date to now (local datetime-local format)
+    if (assignStartDateInput) {
+      const now = new Date();
+      const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      assignStartDateInput.value = localIso;
+    }
+
+    if (assignUserSelect) {
+      assignUserSelect.innerHTML = `<option value="">Loading operators...</option>`;
+    }
+    if (assignPlanSelect) {
+      assignPlanSelect.innerHTML = `<option value="">Loading subscription plans...</option>`;
+    }
+
+    adminAssignSubModal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+
+    // Load operators and active plans concurrently
+    try {
+      const [usersRes, plansRes] = await Promise.all([
+        fetch("/api/admin/users?per_page=500&status=active", { credentials: "same-origin" }),
+        fetch("/api/admin/plans?status=active", { credentials: "same-origin" })
+      ]);
+
+      const [usersData, plansData] = await Promise.all([
+        usersRes.json(),
+        plansRes.json()
+      ]);
+
+      if (assignUserSelect) {
+        if (usersData && usersData.status === "success" && Array.isArray(usersData.users)) {
+          assignUserSelect.innerHTML = `<option value="">— Select an Operator —</option>` +
+            usersData.users.map(u => {
+              const label = `${escapeHtml(u.username)} (${escapeHtml(u.email || 'No email')})${u.full_name ? ' · ' + escapeHtml(u.full_name) : ''}`;
+              const isSelected = preselectedUserId && String(u.id) === String(preselectedUserId) ? " selected" : "";
+              return `<option value="${u.id}"${isSelected}>#${u.id} — ${label}</option>`;
+            }).join("");
+        } else {
+          assignUserSelect.innerHTML = `<option value="">Failed to load operators</option>`;
+        }
+      }
+
+      if (assignPlanSelect) {
+        if (plansData && plansData.status === "success" && Array.isArray(plansData.plans)) {
+          adminCachedPlans = plansData.plans;
+          assignPlanSelect.innerHTML = `<option value="">— Select a Subscription Plan —</option>` +
+            plansData.plans.map(p => {
+              return `<option value="${p.id}">${escapeHtml(p.name)} (${p.plan_code}) — $${parseFloat(p.price).toFixed(2)} / ${p.duration_days || p.duration_value} ${p.duration_unit || 'days'}</option>`;
+            }).join("");
+        } else {
+          assignPlanSelect.innerHTML = `<option value="">Failed to load plans</option>`;
+        }
+      }
+    } catch (err) {
+      if (adminAssignSubAlert) {
+        adminAssignSubAlert.className = "auth-alert error";
+        adminAssignSubAlert.textContent = "Network error loading operators and plans.";
+        adminAssignSubAlert.style.display = "block";
+      }
+    }
+  }
+
+  if (openAssignSubBtn) {
+    openAssignSubBtn.addEventListener("click", () => openAdminAssignSubModal());
+  }
+
+  // Update Plan Preview Box on plan selection
+  if (assignPlanSelect) {
+    assignPlanSelect.addEventListener("change", () => {
+      const selectedId = parseInt(assignPlanSelect.value, 10);
+      const plan = adminCachedPlans.find(p => p.id === selectedId);
+      if (plan && assignPlanPreview) {
+        assignPlanPreview.style.display = "block";
+        if (assignPlanPriceDisplay) assignPlanPriceDisplay.textContent = `$${parseFloat(plan.price).toFixed(2)} ${plan.currency || 'USD'}`;
+        if (assignPlanDurationDisplay) assignPlanDurationDisplay.textContent = `${plan.duration_days || plan.duration_value} ${plan.duration_unit || 'days'}`;
+        if (assignDurationInput && !assignDurationInput.value) {
+          assignDurationInput.placeholder = `Default: ${plan.duration_days || plan.duration_value} days`;
+        }
+        if (assignPlanFeaturesDisplay) {
+          const feats = plan.features || {};
+          const badges = [];
+          if (feats.can_live_monitoring || feats.can_monitor) badges.push("Live DDoS Monitoring");
+          if (feats.can_port_scan) badges.push("Port Scanner");
+          if (feats.can_network_discovery) badges.push("Network Discovery");
+          if (feats.daily_port_scan_limit) badges.push(`Max Scans: ${feats.daily_port_scan_limit}/day`);
+          assignPlanFeaturesDisplay.textContent = "Features: " + (badges.length > 0 ? badges.join(" • ") : "Standard Platform Access");
+        }
+      } else if (assignPlanPreview) {
+        assignPlanPreview.style.display = "none";
+      }
+    });
+  }
+
+  // Handle Form Submission
+  if (adminAssignSubForm) {
+    adminAssignSubForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const userId = assignUserSelect ? assignUserSelect.value : "";
+      const planId = assignPlanSelect ? assignPlanSelect.value : "";
+      const durationVal = assignDurationInput ? assignDurationInput.value.trim() : "";
+      const startDateVal = assignStartDateInput ? assignStartDateInput.value : "";
+      const notesVal = assignNotesInput ? assignNotesInput.value.trim() : "";
+
+      if (!userId || !planId) {
+        if (adminAssignSubAlert) {
+          adminAssignSubAlert.className = "auth-alert error";
+          adminAssignSubAlert.textContent = "Please select both an operator and a subscription plan.";
+          adminAssignSubAlert.style.display = "block";
+        }
+        return;
+      }
+
+      const origHtml = assignSubmitBtn ? assignSubmitBtn.innerHTML : "";
+      if (assignSubmitBtn) {
+        assignSubmitBtn.disabled = true;
+        assignSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Assigning...';
+      }
+
+      try {
+        const payload = {
+          user_id: parseInt(userId, 10),
+          plan_id: parseInt(planId, 10),
+          notes: notesVal || undefined
+        };
+        if (durationVal) {
+          const dInt = parseInt(durationVal, 10);
+          if (dInt > 0) payload.duration_days = dInt;
+        }
+        if (startDateVal) {
+          payload.start_date = new Date(startDateVal).toISOString();
+        }
+
+        const res = await fetch("/api/admin/subscriptions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === "success") {
+          closeAdminAssignSubModal();
+          showToast(data.message || "Subscription successfully assigned and activated.", "success");
+          loadAdminSubscriptions();
+          if (typeof loadAdminMetrics === "function") loadAdminMetrics();
+          if (typeof loadPageUserDetails === "function") {
+            const fpId = document.getElementById("fpDossierUserId");
+            if (fpId && fpId.textContent === `#${userId}`) {
+              loadPageUserDetails(userId);
+            }
+          }
+          if (adminUserDetailsModal && adminUserDetailsModal.style.display !== "none") {
+            const dId = document.getElementById("dossierUserId");
+            if (dId && dId.textContent === `#${userId}`) {
+              openAdminUserDetails(userId);
+            }
+          }
+        } else {
+          if (adminAssignSubAlert) {
+            adminAssignSubAlert.className = "auth-alert error";
+            adminAssignSubAlert.textContent = data.message || "Failed to assign subscription.";
+            adminAssignSubAlert.style.display = "block";
+          }
+        }
+      } catch (err) {
+        if (adminAssignSubAlert) {
+          adminAssignSubAlert.className = "auth-alert error";
+          adminAssignSubAlert.textContent = "Network error processing subscription assignment.";
+          adminAssignSubAlert.style.display = "block";
+        }
+      } finally {
+        if (assignSubmitBtn) {
+          assignSubmitBtn.disabled = false;
+          assignSubmitBtn.innerHTML = origHtml;
+        }
+      }
+    });
+  }
+
   // ==============================================================================
   // Dedicated Full-Page Management Experience Controller (Part 1, 2, 3, 6 & 7)
   // ==============================================================================
@@ -11602,6 +11893,9 @@ document.addEventListener("DOMContentLoaded", () => {
           actionsToolbar.innerHTML = `<span class="text-muted"><i class="fas fa-info-circle"></i> This is your currently authenticated Administrator account.</span>`;
         } else {
           actionsToolbar.innerHTML = `
+            <button type="button" class="btn-management-primary" id="fpDossierAssignSubBtn" style="background:#84CC16; color:#0F172A; font-weight:600;">
+              <i class="fas fa-user-plus"></i> Assign Subscription
+            </button>
             <button type="button" class="btn-management-primary" id="fpDossierEditBtn">
               <i class="fas fa-pen-to-square"></i> Edit Operator
             </button>
@@ -11612,6 +11906,10 @@ document.addEventListener("DOMContentLoaded", () => {
               <i class="fas fa-trash-can"></i> Delete Account
             </button>
           `;
+          const assignSubBtn = document.getElementById("fpDossierAssignSubBtn");
+          if (assignSubBtn) {
+            assignSubBtn.addEventListener("click", () => openAdminAssignSubModal(u.id));
+          }
           const editBtn = document.getElementById("fpDossierEditBtn");
           if (editBtn) {
             editBtn.addEventListener("click", () => switchView("admin-user-edit", true, u.id));

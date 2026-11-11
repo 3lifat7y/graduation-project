@@ -2853,6 +2853,9 @@
                     <option value="expired">Expired Only</option>
                     <option value="canceled">Canceled Only</option>
                   </select>
+                  <button type="button" class="btn-admin-primary" id="openAssignSubBtn" style="padding: 0 16px; height: 38px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; border-radius: 8px;">
+                    <i class="fas fa-user-plus"></i> Assign Subscription
+                  </button>
                   <button type="button" class="btn-admin-refresh" id="refreshSubsBtn">
                     <i class="fas fa-rotate"></i> Refresh
                   </button>
@@ -4635,6 +4638,71 @@
           <button type="submit" class="btn-auth-submit" id="adminExtendSubSubmitBtn">
             <span class="auth-btn-text">Apply Extension</span>
             <i class="fas fa-calendar-plus auth-btn-icon"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Assign Subscription -->
+  <div class="auth-modal" id="adminAssignSubModal" role="dialog" aria-modal="true" aria-labelledby="adminAssignSubModalTitle" style="display:none !important; z-index: 10460;">
+    <div class="auth-modal-backdrop" id="adminAssignSubModalBackdrop"></div>
+    <div class="auth-modal-dialog">
+      <div class="auth-modal-header">
+        <div class="auth-modal-header-content">
+          <div class="auth-modal-badge"><i class="fas fa-user-plus"></i> Manual Assignment</div>
+          <h3 class="auth-modal-title" id="adminAssignSubModalTitle">Assign Subscription to User</h3>
+          <p class="auth-modal-subtitle">Directly assign and activate a subscription plan for an operator with custom duration and terms.</p>
+        </div>
+        <button type="button" class="auth-modal-close" id="adminAssignSubModalCloseBtn" aria-label="Close dialog"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="auth-alert" id="adminAssignSubAlert" style="display:none;"></div>
+        <form id="adminAssignSubForm" novalidate>
+          <div class="auth-form-group">
+            <label for="assignSubUserId" class="auth-label"><i class="fas fa-user"></i> Select Operator *</label>
+            <select id="assignSubUserId" class="auth-input" required>
+              <option value="">— Select an Operator —</option>
+            </select>
+          </div>
+
+          <div class="auth-form-group">
+            <label for="assignSubPlanId" class="auth-label"><i class="fas fa-layer-group"></i> Select Subscription Plan *</label>
+            <select id="assignSubPlanId" class="auth-input" required>
+              <option value="">— Select a Subscription Plan —</option>
+            </select>
+          </div>
+
+          <!-- Dynamic Plan Details Preview Box -->
+          <div class="extend-preview-box" id="assignSubPlanPreview" style="display:none; padding: 12px 14px; border-radius: 8px; background: rgba(163, 230, 53, 0.08); border: 1px solid rgba(163, 230, 53, 0.25); margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">
+              <span>Plan Price: <strong id="assignPlanPriceDisplay" style="color: #A3E635; font-weight:600;">—</strong></span>
+              <span>Default Duration: <strong id="assignPlanDurationDisplay" style="color: var(--text-primary); font-weight:600;">—</strong></span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);" id="assignPlanFeaturesDisplay">
+              Features: —
+            </div>
+          </div>
+
+          <div class="auth-form-row">
+            <div class="auth-form-group">
+              <label for="assignSubDurationDays" class="auth-label"><i class="fas fa-clock"></i> Duration (Days)</label>
+              <input type="number" min="1" id="assignSubDurationDays" class="auth-input" placeholder="Leave blank to use plan default" />
+            </div>
+            <div class="auth-form-group">
+              <label for="assignSubStartDate" class="auth-label"><i class="fas fa-calendar-day"></i> Start Date</label>
+              <input type="datetime-local" id="assignSubStartDate" class="auth-input" />
+            </div>
+          </div>
+
+          <div class="auth-form-group">
+            <label for="assignSubNotes" class="auth-label"><i class="fas fa-note-sticky"></i> Administrative Notes / Reason</label>
+            <input type="text" id="assignSubNotes" class="auth-input" placeholder="e.g. VIP grant, manual onboarding, offline payment verified" />
+          </div>
+
+          <button type="submit" class="btn-auth-submit" id="adminAssignSubSubmitBtn">
+            <span class="auth-btn-text">Assign & Activate Subscription</span>
+            <i class="fas fa-check-circle auth-btn-icon"></i>
           </button>
         </form>
       </div>

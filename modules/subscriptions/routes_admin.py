@@ -18,7 +18,7 @@ from modules.auth.security import (
 )
 from scripts.create_admin import validate_password_strength
 from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog, PaymentMethod, PaymentReceivingAccount
-from .services import sync_expired_subscriptions
+from .services import sync_expired_subscriptions, assign_manual_subscription
 
 sub_admin_bp = Blueprint("sub_admin", __name__, url_prefix="/api/admin")
 
@@ -978,6 +978,67 @@ def list_admin_subscriptions():
         "subscriptions": sub_list,
         "count": len(sub_list)
     }), 200
+
+
+@sub_admin_bp.route("/subscriptions", methods=["POST"])
+@sub_admin_bp.route("/subscriptions/assign", methods=["POST"])
+@admin_required
+def assign_manual_subscription_route():
+    """
+    Manually assigns and immediately activates a subscription plan for an existing operator.
+    Atomic operation with duplicate active subscription mitigation and comprehensive audit trail.
+    """
+    from datetime import datetime
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    plan_id = data.get("plan_id")
+    duration_days = data.get("duration_days")
+    start_date_str = data.get("start_date")
+    notes = data.get("notes") or data.get("admin_notes")
+
+    if not user_id or not plan_id:
+        return jsonify({"status": "error", "message": "'user_id' and 'plan_id' are required fields."}), 400
+
+    try:
+        user_id_val = int(user_id)
+        plan_id_val = int(plan_id)
+    except (ValueError, TypeError):
+        return jsonify({"status": "error", "message": "Invalid 'user_id' or 'plan_id' format."}), 400
+
+    calc_days = None
+    if duration_days is not None and str(duration_days).strip():
+        try:
+            calc_days = int(duration_days)
+            if calc_days <= 0:
+                return jsonify({"status": "error", "message": "Duration days must be a positive integer."}), 400
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Invalid duration_days format."}), 400
+
+    start_dt = None
+    if start_date_str:
+        try:
+            start_dt = datetime.fromisoformat(str(start_date_str).replace("Z", "+00:00"))
+        except Exception:
+            return jsonify({"status": "error", "message": "Invalid start_date ISO format."}), 400
+
+    current_admin = request.current_user
+    success, message, sub_dict = assign_manual_subscription(
+        user_id=user_id_val,
+        plan_id=plan_id_val,
+        admin_id=current_admin.id,
+        duration_days=calc_days,
+        start_date=start_dt,
+        notes=str(notes).strip() if notes else None
+    )
+
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "subscription": sub_dict
+    }), 201
 
 
 @sub_admin_bp.route("/requests", methods=["GET"])
