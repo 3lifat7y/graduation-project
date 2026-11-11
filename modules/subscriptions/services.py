@@ -6,10 +6,14 @@ with mandatory audit logging and referential integrity.
 
 from datetime import datetime, timezone, timedelta
 from typing import Tuple, Dict, Any, Optional
+import re
+import threading
+from sqlalchemy import func
 
 from modules.auth.models import User, utcnow
 from modules.auth.db import get_db_session
-from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog, ensure_utc
+from modules.auth.security import normalize_phone_number
+from .models import SubscriptionPlan, UserSubscription, SubscriptionAuditLog, FreePlanClaim, ensure_utc
 
 
 def request_subscription(user_id: int, plan_id: int, notes: Optional[str] = None) -> Tuple[bool, str, Dict[str, Any]]:
@@ -601,4 +605,263 @@ def sync_expired_subscriptions() -> int:
         if count > 0:
             session.flush()
         return count
+
+
+# ==============================================================================
+# Free Plan Activation & Anti-Abuse Eligibility Services
+# ==============================================================================
+
+_free_activation_lock = threading.Lock()
+
+
+def normalize_claim_email(email: Optional[str]) -> str:
+    """Normalizes email by lowercasing, stripping whitespace, and removing dot/plus aliases for Gmail."""
+    if not email:
+        return ""
+    email = str(email).strip().lower()
+    if "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if domain in ("gmail.com", "googlemail.com"):
+        local = local.split("+")[0].replace(".", "")
+        domain = "gmail.com"
+    else:
+        local = local.split("+")[0]
+    return f"{local}@{domain}"
+
+
+def extract_phone_digits(phone: Optional[str]) -> Optional[str]:
+    """Extracts consecutive digits from phone number for format-invariant matching."""
+    if not phone:
+        return None
+    digits = re.sub(r"\D", "", str(phone))
+    return digits if len(digits) >= 7 else None
+
+
+def phones_match(phone1: Optional[str], phone2: Optional[str]) -> bool:
+    """Compares two phone numbers taking into account international format, E.164, and trailing digits."""
+    if not phone1 or not phone2:
+        return False
+    p1 = str(phone1).strip()
+    p2 = str(phone2).strip()
+    if p1 == p2:
+        return True
+    norm1 = normalize_phone_number(p1)
+    norm2 = normalize_phone_number(p2)
+    if norm1 and norm2 and norm1 == norm2:
+        return True
+    d1 = extract_phone_digits(p1)
+    d2 = extract_phone_digits(p2)
+    if d1 and d2:
+        if d1 == d2:
+            return True
+        if len(d1) >= 7 and len(d2) >= 7:
+            if d1.endswith(d2) or d2.endswith(d1):
+                return True
+    return False
+
+
+def check_free_plan_eligibility(
+    user_id: int,
+    plan_id: Optional[int] = None,
+    session: Optional[Any] = None
+) -> Tuple[bool, str]:
+    """
+    Strictly verifies one-time lifetime eligibility for Free Subscription Plans.
+    Identifies and evaluates users across:
+    1. Registered User Account (user_id)
+    2. Email address (including normalized and aliased forms)
+    3. Phone number (including E.164 and digit-only variants)
+    
+    Returns:
+        (is_eligible: bool, reason_message: str)
+    """
+    def _run_check(s):
+        user = s.query(User).filter_by(id=user_id).first()
+        if not user:
+            return False, "User account not found."
+        if not user.is_active:
+            return False, "Your account is inactive or suspended."
+
+        if plan_id is not None:
+            plan = s.query(SubscriptionPlan).filter_by(id=plan_id).first()
+            if not plan:
+                return False, "Subscription plan not found."
+            if not plan.is_active:
+                return False, "This subscription plan is not currently active."
+            if not (plan.is_free or plan.price == 0.0):
+                return False, f"Plan '{plan.name}' is a paid plan, not a free plan."
+
+        # 1. Check account-level prior claims
+        claim_by_user = s.query(FreePlanClaim).filter_by(user_id=user.id).first()
+        if claim_by_user:
+            return False, "You have already claimed a free subscription plan."
+
+        sub_by_user = s.query(UserSubscription).join(SubscriptionPlan).filter(
+            UserSubscription.user_id == user.id,
+            (SubscriptionPlan.is_free == True) | (SubscriptionPlan.price == 0.0) | (UserSubscription.plan_price_snapshot == 0.0),
+            UserSubscription.status.in_(["active", "expired", "canceled", "pending"])
+        ).first()
+        if sub_by_user:
+            return False, "You have already activated a free subscription plan on this account."
+
+        # 2. Check email-level prior claims (anti-abuse against new accounts with same/aliased email)
+        user_email = str(user.email or "").strip().lower()
+        norm_email = normalize_claim_email(user_email)
+
+        if norm_email:
+            claim_by_email = s.query(FreePlanClaim).filter(
+                (func.lower(FreePlanClaim.email) == user_email) |
+                (FreePlanClaim.normalized_email == norm_email)
+            ).first()
+            if claim_by_email:
+                return False, "This email address has already been used to claim a free subscription plan."
+
+            # Check if any user sharing the same email ever activated a free plan
+            same_email_users = [u.id for u in s.query(User.id).filter(func.lower(User.email) == user_email).all()]
+            if same_email_users:
+                sub_by_same_email = s.query(UserSubscription).join(SubscriptionPlan).filter(
+                    UserSubscription.user_id.in_(same_email_users),
+                    (SubscriptionPlan.is_free == True) | (SubscriptionPlan.price == 0.0) | (UserSubscription.plan_price_snapshot == 0.0),
+                    UserSubscription.status.in_(["active", "expired", "canceled", "pending"])
+                ).first()
+                if sub_by_same_email:
+                    return False, "An account with this email address has already claimed a free subscription plan."
+
+        # 3. Check phone-level prior claims (anti-abuse against new accounts with different email but same phone)
+        user_phone = str(user.phone_number or "").strip() if user.phone_number else None
+        if user_phone:
+            # Query all free claims with a phone number
+            claims_with_phone = s.query(FreePlanClaim).filter(FreePlanClaim.phone_number.isnot(None)).all()
+            for c in claims_with_phone:
+                if phones_match(user_phone, c.phone_number) or phones_match(user_phone, c.normalized_phone):
+                    return False, "This phone number has already been used to claim a free subscription plan."
+
+            # Check if any other user who ever had a free subscription matches this phone
+            all_users_with_phone = s.query(User).filter(User.phone_number.isnot(None), User.id != user.id).all()
+            for other_u in all_users_with_phone:
+                if phones_match(user_phone, other_u.phone_number):
+                    sub_by_same_phone = s.query(UserSubscription).join(SubscriptionPlan).filter(
+                        UserSubscription.user_id == other_u.id,
+                        (SubscriptionPlan.is_free == True) | (SubscriptionPlan.price == 0.0) | (UserSubscription.plan_price_snapshot == 0.0),
+                        UserSubscription.status.in_(["active", "expired", "canceled", "pending"])
+                    ).first()
+                    if sub_by_same_phone:
+                        return False, "An account with this phone number has already claimed a free subscription plan."
+
+        return True, "User is eligible for a free subscription plan."
+
+    if session:
+        return _run_check(session)
+    with get_db_session() as session:
+        return _run_check(session)
+
+
+def activate_free_subscription(
+    user_id: int,
+    plan_id: int,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Immediately activates a Free Subscription Plan for an eligible user.
+    - Bypasses payment methods, receipt uploads, and admin approval.
+    - Enforces strict one-time lifetime eligibility (account, email, phone).
+    - Prevents concurrent / duplicate activations using thread-safe synchronization.
+    - Grants features immediately and writes audit records.
+    """
+    with _free_activation_lock:
+        with get_db_session() as session:
+            user = session.query(User).filter_by(id=user_id).first()
+            if not user or not user.is_active:
+                return False, "User account is inactive or not found.", {}
+
+            plan = session.query(SubscriptionPlan).filter_by(id=plan_id).first()
+            if not plan:
+                return False, "Subscription plan not found.", {}
+            if not plan.is_active:
+                return False, "This subscription plan is not currently active.", {}
+            if not (plan.is_free or plan.price == 0.0):
+                return False, f"Plan '{plan.name}' is not a free plan.", {}
+
+            # Strict eligibility check
+            eligible, reason = check_free_plan_eligibility(user_id=user.id, plan_id=plan.id, session=session)
+            if not eligible:
+                return False, reason, {}
+
+            now = ensure_utc(utcnow())
+
+            # Supercede / cancel any existing active or pending subscriptions
+            existing_subs = session.query(UserSubscription).filter(
+                UserSubscription.user_id == user.id,
+                UserSubscription.status.in_(["active", "pending"])
+            ).all()
+            for old_sub in existing_subs:
+                old_sub.status = "canceled"
+                old_sub.cancellation_reason = f"Superceded by free plan '{plan.name}' activation."
+
+            # Calculate duration in days
+            if plan.duration_unit == "months":
+                duration_days = plan.duration_value * 30
+            elif plan.duration_unit == "years":
+                duration_days = plan.duration_value * 365
+            else:
+                duration_days = plan.duration_value
+
+            start_date = now
+            end_date = start_date + timedelta(days=duration_days)
+
+            # Create active subscription immediately
+            sub = UserSubscription(
+                user_id=user.id,
+                plan_id=plan.id,
+                status="active",
+                start_date=start_date,
+                end_date=end_date,
+                activated_at=now,
+                activated_by_id=user.id,
+                payment_status="approved",
+                plan_name_snapshot=plan.name,
+                plan_price_snapshot=0.0,
+                admin_notes="Direct self-activation of Free Subscription Plan."
+            )
+            session.add(sub)
+            session.flush()
+
+            # Record permanent claim for anti-abuse tracking
+            user_email = str(user.email or "").strip().lower()
+            norm_email = normalize_claim_email(user_email)
+            user_phone = str(user.phone_number or "").strip() if user.phone_number else None
+            norm_phone = normalize_phone_number(user_phone) if user_phone else None
+
+            claim = FreePlanClaim(
+                user_id=user.id,
+                plan_id=plan.id,
+                subscription_id=sub.id,
+                email=user_email,
+                normalized_email=norm_email,
+                phone_number=user_phone,
+                normalized_phone=norm_phone,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                claimed_at=now
+            )
+            session.add(claim)
+
+            # Audit trail
+            audit = SubscriptionAuditLog(
+                subscription_id=sub.id,
+                actor_id=user.id,
+                action="FREE_ACTIVATION",
+                previous_status=None,
+                new_status="active",
+                details=f"User activated free subscription plan '{plan.name}' ({plan.plan_code}). Valid until {end_date.strftime('%Y-%m-%d')} ({duration_days} days)."
+            )
+            session.add(audit)
+            session.flush()
+
+            sub_dict = sub.to_dict()
+
+        return True, "Free Plan activated successfully! Access granted immediately.", sub_dict
+
 

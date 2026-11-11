@@ -138,6 +138,7 @@ def create_admin_plan():
         duration_val = data.get("duration_days", 30)
     duration_unit = str(data.get("duration_unit", "days")).strip().lower()
     is_active = bool(data.get("is_active", True))
+    is_free = bool(data.get("is_free", False))
     features = data.get("features", {})
     if isinstance(features, dict):
         features = dict(features)
@@ -151,12 +152,15 @@ def create_admin_plan():
     if not plan_code or not name:
         return jsonify({"status": "error", "message": "Plan code and name are required."}), 400
 
-    try:
-        price = float(price)
-        if price < 0:
-            return jsonify({"status": "error", "message": "Price cannot be negative."}), 400
-    except (ValueError, TypeError):
-        return jsonify({"status": "error", "message": "Invalid price format."}), 400
+    if is_free:
+        price = 0.0
+    else:
+        try:
+            price = float(price)
+            if price < 0:
+                return jsonify({"status": "error", "message": "Price cannot be negative."}), 400
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Invalid price format."}), 400
 
     try:
         duration_value = int(duration_val)
@@ -184,7 +188,8 @@ def create_admin_plan():
             currency=currency,
             duration_value=duration_value,
             duration_unit=duration_unit,
-            is_active=is_active
+            is_active=is_active,
+            is_free=is_free
         )
         plan.set_features(features)
         session.add(plan)
@@ -284,13 +289,20 @@ def update_admin_plan(plan_id: int):
             plan.name = str(data["name"]).strip()
         if "description" in data:
             plan.description = str(data["description"]).strip()
+        if "is_free" in data:
+            plan.is_free = bool(data["is_free"])
+            if plan.is_free:
+                plan.price = 0.0
         if "price" in data:
-            try:
-                p = float(data["price"])
-                if p >= 0:
-                    plan.price = p
-            except (ValueError, TypeError):
-                pass
+            if plan.is_free:
+                plan.price = 0.0
+            else:
+                try:
+                    p = float(data["price"])
+                    if p >= 0:
+                        plan.price = p
+                except (ValueError, TypeError):
+                    pass
         if "currency" in data and str(data["currency"]).strip():
             plan.currency = str(data["currency"]).strip().upper()
         if "duration_value" in data or "duration_days" in data:

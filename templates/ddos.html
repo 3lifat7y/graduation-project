@@ -2139,6 +2139,18 @@
                 </div>
               </div>
             </div>
+
+            <!-- Empty State: No Operational Tools Enabled in Plan -->
+            <div class="user-dash-no-tools-card" id="dashNoToolsCard" style="display: none;">
+              <div class="dash-no-tools-icon"><i class="fas fa-shield-halved"></i></div>
+              <div class="dash-no-tools-content">
+                <h4>No Operational Tools Enabled</h4>
+                <p>Your current subscription tier provides basic platform access but does not include operational tool modules. Upgrade your plan to unlock Live Monitoring, Port Scanner, or Network Discovery.</p>
+              </div>
+              <button type="button" class="btn-dash-action" onclick="switchView('plans')">
+                <span>Browse Subscription Plans</span> <i class="fas fa-arrow-right"></i>
+              </button>
+            </div>
           </div>
 
           <!-- User Dashboard Secondary Row: Subscription Details & Threat Alerts -->
@@ -2175,7 +2187,7 @@
             <div class="user-dash-threat-summary-card">
               <div class="card-mini-header">
                 <h4><i class="fas fa-shield-halved"></i> Threat Telemetry Snapshot</h4>
-                <span class="status-live-pill"><span class="status-live-dot"></span> Telemetry Online</span>
+                <span class="status-live-pill" id="userDashTelemetryStatus"><span class="status-live-dot"></span> Telemetry Standby</span>
               </div>
               <div class="dash-threat-stat-body">
                 <div class="threat-kpi-row">
@@ -2184,20 +2196,24 @@
                     <span class="kpi-label">Detected Attacks</span>
                   </div>
                   <div class="threat-kpi-item">
-                    <span class="kpi-num" id="userDashRecallRate">99.86%</span>
-                    <span class="kpi-label">Detection Recall</span>
+                    <span class="kpi-num" id="userDashCaptureState">Standby</span>
+                    <span class="kpi-label">Interception State</span>
                   </div>
                   <div class="threat-kpi-item">
-                    <span class="kpi-num">15</span>
-                    <span class="kpi-label">Class Multi-Vector</span>
+                    <span class="kpi-num" id="userDashRecentEventTime">—</span>
+                    <span class="kpi-label">Latest Threat Time</span>
                   </div>
                 </div>
-                <p class="threat-kpi-note" id="userDashThreatNote">
-                  Autonomous AI intrusion engine is active. All packet flows are monitored against 15 trained hostile vector classes.
-                </p>
-                <a href="/?view=monitoring" class="btn-dash-secondary" id="dashViewMonitorThreats">
-                  <i class="fas fa-chart-line"></i> View Real-Time Telemetry
-                </a>
+                <div id="userDashRecentEventsContainer" class="user-dash-recent-events" style="margin-top: 12px;">
+                  <p class="threat-kpi-note" id="userDashThreatNote">
+                    No hostile intrusion vectors detected in current session buffer. Passive interception is ready.
+                  </p>
+                </div>
+                <div style="margin-top: 14px; display: flex; gap: 10px; align-items: center;">
+                  <a href="/?view=monitoring" class="btn-dash-secondary" id="dashViewMonitorThreats">
+                    <i class="fas fa-chart-line"></i> View Real-Time Telemetry
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -2814,7 +2830,10 @@
             <div class="admin-panel" id="adminPanelRequests" style="display:none;">
               <div class="panel-header-row">
                 <div class="panel-title-wrap">
-                  <h3>Pending Subscription Requests</h3>
+                  <div class="panel-title-with-badge">
+                    <h3>Pending Subscription Requests</h3>
+                    <span class="admin-panel-count-badge" id="adminPendingCountBadge" style="display:none;">0</span>
+                  </div>
                   <p>Review and provision subscription access for operators awaiting administrative activation.</p>
                 </div>
                 <button type="button" class="btn-admin-refresh" id="refreshRequestsBtn">
@@ -3471,6 +3490,16 @@
 
                   <div class="management-form-row">
                     <div class="management-form-group">
+                      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem; font-weight:600; margin-bottom: 6px;">
+                        <input type="checkbox" id="fpCreatePlanIsFree" />
+                        <span><i class="fas fa-gift" style="color:var(--accent-cyan); margin-right:4px;"></i> Free Plan</span>
+                      </label>
+                      <div class="management-help-text">When enabled, automatically sets price to $0.00 and allows immediate user activation</div>
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
                       <label for="fpCreatePlanPrice" class="management-label">Price (USD) <span class="required-star">*</span></label>
                       <input type="number" id="fpCreatePlanPrice" class="management-input" step="0.01" min="0" placeholder="0.00" required />
                       <div class="management-help-text">Set 0.00 for complimentary/community access</div>
@@ -3678,6 +3707,16 @@
 
                   <div class="management-form-row">
                     <div class="management-form-group">
+                      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem; font-weight:600; margin-bottom: 6px;">
+                        <input type="checkbox" id="fpEditPlanIsFree" />
+                        <span><i class="fas fa-gift" style="color:var(--accent-cyan); margin-right:4px;"></i> Free Plan</span>
+                      </label>
+                      <div class="management-help-text">When enabled, automatically sets price to $0.00 and allows immediate user activation</div>
+                    </div>
+                  </div>
+
+                  <div class="management-form-row">
+                    <div class="management-form-group">
                       <label for="fpEditPlanPrice" class="management-label">Price (USD) <span class="required-star">*</span></label>
                       <input type="number" id="fpEditPlanPrice" class="management-input" step="0.01" min="0" required />
                     </div>
@@ -3707,16 +3746,16 @@
 
                   <div style="display:flex; flex-wrap:wrap; gap:20px; padding: 12px 0;">
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
-                      <input type="checkbox" id="fpEditPlanFeatMonitoring" /> Live Network Monitoring Access
+                      <input type="checkbox" id="fpEditPlanFeatMonitoring" /> <i class="fas fa-satellite-dish" style="color:var(--brand-accent, #A3E635);"></i> Live Network Monitoring
                     </label>
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
-                      <input type="checkbox" id="fpEditPlanFeatPortScan" /> Port Scanner Access
+                      <input type="checkbox" id="fpEditPlanFeatPortScan" /> <i class="fas fa-bullseye" style="color:#60A5FA;"></i> Port Scanner
                     </label>
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
-                      <input type="checkbox" id="fpEditPlanFeatDiscovery" /> Subnet Network Discovery Access
+                      <input type="checkbox" id="fpEditPlanFeatDiscovery" /> <i class="fas fa-sitemap" style="color:#C084FC;"></i> Network Discovery
                     </label>
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.86rem;">
-                      <input type="checkbox" id="fpEditPlanIsActive" /> Active in Public Catalog
+                      <input type="checkbox" id="fpEditPlanIsActive" /> <i class="fas fa-globe"></i> Active in Public Catalog
                     </label>
                   </div>
 
@@ -4411,6 +4450,18 @@
           <!-- Section 2: Pricing & Term -->
           <div class="plan-modal-section">
             <h5 class="plan-modal-sec-title"><i class="fas fa-coins"></i> Pricing & Term Duration</h5>
+            <div class="auth-form-row" style="margin-bottom: 12px;">
+              <label class="entitlement-card-label" style="margin-bottom: 0; padding: 10px 14px; cursor: pointer; width: 100%;">
+                <input type="checkbox" id="planFormIsFree" />
+                <div class="entitlement-card-content" style="gap: 10px;">
+                  <div class="entitlement-card-icon" style="color: var(--accent-cyan);"><i class="fas fa-gift"></i></div>
+                  <div class="entitlement-card-text">
+                    <strong>Free Plan</strong>
+                    <p style="margin: 0; font-size: 0.8rem;">Sets price to $0.00 and enables direct immediate activation for eligible users.</p>
+                  </div>
+                </div>
+              </label>
+            </div>
             <div class="auth-form-row four-col">
               <div class="auth-form-group">
                 <label for="planFormPrice" class="auth-label">Price <span class="required-star">*</span></label>
@@ -4447,10 +4498,10 @@
               <label class="entitlement-card-label">
                 <input type="checkbox" id="planFormCanLiveMonitoring" checked />
                 <div class="entitlement-card-content">
-                  <div class="entitlement-card-icon"><i class="fas fa-tower-broadcast"></i></div>
+                  <div class="entitlement-card-icon"><i class="fas fa-satellite-dish"></i></div>
                   <div class="entitlement-card-text">
-                    <strong>Live Telemetry & Detection</strong>
-                    <p>Real-time packet capture, flow feature extraction, and AI classification.</p>
+                    <strong>Live Network Monitoring</strong>
+                    <p>Real-time packet interception, flow extraction, and 15-class AI attack classification.</p>
                   </div>
                 </div>
               </label>
@@ -4458,10 +4509,10 @@
               <label class="entitlement-card-label">
                 <input type="checkbox" id="planFormCanPortScan" checked />
                 <div class="entitlement-card-content">
-                  <div class="entitlement-card-icon"><i class="fas fa-network-wired"></i></div>
+                  <div class="entitlement-card-icon"><i class="fas fa-bullseye"></i></div>
                   <div class="entitlement-card-text">
-                    <strong>Port Scanner & Probing</strong>
-                    <p>High-concurrency TCP port scanning and active service inspection.</p>
+                    <strong>Port Scanner</strong>
+                    <p>High-concurrency TCP port scanning and active service vulnerability identification.</p>
                   </div>
                 </div>
               </label>
@@ -4469,10 +4520,10 @@
               <label class="entitlement-card-label">
                 <input type="checkbox" id="planFormCanNetworkDiscovery" />
                 <div class="entitlement-card-content">
-                  <div class="entitlement-card-icon"><i class="fas fa-compass"></i></div>
+                  <div class="entitlement-card-icon"><i class="fas fa-sitemap"></i></div>
                   <div class="entitlement-card-text">
-                    <strong>Subnet Reconnaissance</strong>
-                    <p>Layer-2 ARP broadcast scanning and local asset discovery.</p>
+                    <strong>Network Discovery</strong>
+                    <p>Layer-2 ARP and ICMP subnet sweeps, MAC fingerprinting, and live LAN device inventory.</p>
                   </div>
                 </div>
               </label>

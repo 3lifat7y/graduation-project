@@ -7,8 +7,13 @@ from flask import Blueprint, request, jsonify, send_from_directory, abort
 
 from modules.auth.decorators import login_required
 from modules.auth.db import get_db_session
-from .models import SubscriptionPlan, UserSubscription
-from .services import request_subscription
+from modules.auth.models import utcnow
+from .models import SubscriptionPlan, UserSubscription, ensure_utc
+from .services import (
+    request_subscription,
+    check_free_plan_eligibility,
+    activate_free_subscription
+)
 from .services_payment import (
     get_active_payment_methods_for_checkout,
     submit_manual_payment,
@@ -41,6 +46,16 @@ def get_public_plans():
         )
         plan_list = [p.to_dict() for p in plans]
 
+        # If user is logged in, check free plan eligibility.
+        # If the user has already activated or is ineligible, hide free plans from their available plans catalog.
+        if user:
+            is_eligible, _ = check_free_plan_eligibility(user_id=user.id, session=session)
+            if not is_eligible:
+                plan_list = [
+                    p for p in plan_list
+                    if not (p.get("is_free") or p.get("price") == 0.0)
+                ]
+
     return jsonify({
         "status": "success",
         "plans": plan_list,
@@ -62,6 +77,18 @@ def get_my_subscription():
             .first()
         )
         if active_sub:
+            now = ensure_utc(utcnow())
+            end_time = ensure_utc(active_sub.end_date)
+            if end_time and end_time < now:
+                active_sub.status = "expired"
+                session.flush()
+                sub_dict = active_sub.to_dict(include_admin_notes=False)
+                return jsonify({
+                    "status": "success",
+                    "has_subscription": False,
+                    "subscription": sub_dict
+                }), 200
+
             sub_dict = active_sub.to_dict(include_admin_notes=False)
             return jsonify({
                 "status": "success",
@@ -115,6 +142,30 @@ def submit_subscription_request():
     if not resolved_plan_id:
         return jsonify({"status": "error", "message": f"Subscription plan '{plan_id}' not found."}), 400
 
+    # If the requested plan is a Free Plan, activate immediately without manual payment or admin approval
+    with get_db_session() as session:
+        target_plan = session.query(SubscriptionPlan).filter_by(id=resolved_plan_id).first()
+        is_free_plan = bool(target_plan and (target_plan.is_free or target_plan.price == 0.0))
+
+    if is_free_plan:
+        ip_addr = request.headers.get("X-Forwarded-For", request.remote_addr)
+        if ip_addr and "," in ip_addr:
+            ip_addr = ip_addr.split(",")[0].strip()
+        ua_str = request.user_agent.string if request.user_agent else None
+        success, message, sub_dict = activate_free_subscription(
+            user_id=user.id,
+            plan_id=resolved_plan_id,
+            ip_address=ip_addr,
+            user_agent=ua_str
+        )
+        if not success:
+            return jsonify({"status": "error", "message": message}), 400
+        return jsonify({
+            "status": "success",
+            "message": message,
+            "subscription": sub_dict
+        }), 201
+
     success, message, sub_dict = request_subscription(
         user_id=user.id,
         plan_id=resolved_plan_id,
@@ -129,6 +180,75 @@ def submit_subscription_request():
         "message": message,
         "subscription": sub_dict
     }), 201
+
+
+@sub_user_bp.route("/subscriptions/free/activate", methods=["POST"])
+@login_required
+def activate_free_plan_route():
+    """
+    Direct user self-activation endpoint for Free Subscription Plans.
+    Activates immediately with no manual payment checkout or admin approval.
+    Enforces strict one-time lifetime eligibility across user account, email, and phone.
+    """
+    user = request.current_user
+    data = request.get_json(silent=True) or {}
+    plan_id = data.get("plan_id")
+    if not plan_id:
+        return jsonify({"status": "error", "message": "Field 'plan_id' is required."}), 400
+
+    resolved_plan_id = None
+    try:
+        resolved_plan_id = int(plan_id)
+    except (ValueError, TypeError):
+        with get_db_session() as session:
+            p = session.query(SubscriptionPlan).filter_by(plan_code=str(plan_id)).first()
+            if p:
+                resolved_plan_id = p.id
+
+    if not resolved_plan_id:
+        return jsonify({"status": "error", "message": f"Subscription plan '{plan_id}' not found."}), 400
+
+    ip_addr = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if ip_addr and "," in ip_addr:
+        ip_addr = ip_addr.split(",")[0].strip()
+    ua_str = request.user_agent.string if request.user_agent else None
+
+    success, message, sub_dict = activate_free_subscription(
+        user_id=user.id,
+        plan_id=resolved_plan_id,
+        ip_address=ip_addr,
+        user_agent=ua_str
+    )
+
+    if not success:
+        return jsonify({"status": "error", "message": message}), 400
+
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "subscription": sub_dict
+    }), 201
+
+
+@sub_user_bp.route("/subscriptions/free/eligibility", methods=["GET"])
+@login_required
+def check_free_plan_eligibility_route():
+    """Returns whether the authenticated user is eligible to claim a free plan."""
+    user = request.current_user
+    plan_id = request.args.get("plan_id")
+    resolved_plan_id = None
+    if plan_id:
+        try:
+            resolved_plan_id = int(plan_id)
+        except (ValueError, TypeError):
+            pass
+
+    eligible, reason = check_free_plan_eligibility(user_id=user.id, plan_id=resolved_plan_id)
+    return jsonify({
+        "status": "success",
+        "is_eligible": eligible,
+        "message": reason
+    }), 200
 
 
 # ==============================================================================

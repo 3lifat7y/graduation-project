@@ -56,7 +56,8 @@ def evaluate_user_entitlement(
             # Check feature entitlement
             if required_feature:
                 features = active_sub.plan.get_features() if active_sub.plan else {}
-                if not features.get(required_feature, False):
+                has_feat = bool(features.get(required_feature, False) or (required_feature == "can_live_monitoring" and features.get("can_monitor", False)))
+                if not has_feat:
                     return False, f"Your current subscription plan ('{active_sub.plan.name}') does not include the '{required_feature}' capability.", {
                         "status": "feature_restricted",
                         "plan_name": active_sub.plan.name,

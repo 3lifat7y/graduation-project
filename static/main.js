@@ -2853,14 +2853,19 @@ document.addEventListener("DOMContentLoaded", () => {
         pendingBadge.textContent = "";
       }
 
-      if (sidebarToolsNavGroup) sidebarToolsNavGroup.style.display = "block";
       const f = (sub.plan && sub.plan.features) || sub.features || {};
       const mItem = document.getElementById("sidebarMonitoringNavItem");
       const pItem = document.getElementById("sidebarPortScannerNavItem");
       const nItem = document.getElementById("sidebarNetworkDiscoveryNavItem");
-      if (mItem) mItem.style.display = (f.can_live_monitoring !== false) ? "flex" : "none";
-      if (pItem) pItem.style.display = (f.can_port_scan !== false) ? "flex" : "none";
-      if (nItem) nItem.style.display = (f.can_network_discovery !== false) ? "flex" : "none";
+      const hasMon = Boolean(f.can_live_monitoring || f.can_monitor);
+      const hasPort = Boolean(f.can_port_scan);
+      const hasNd = Boolean(f.can_network_discovery);
+      if (mItem) mItem.style.display = hasMon ? "flex" : "none";
+      if (pItem) pItem.style.display = hasPort ? "flex" : "none";
+      if (nItem) nItem.style.display = hasNd ? "flex" : "none";
+      if (sidebarToolsNavGroup) {
+        sidebarToolsNavGroup.style.display = (hasMon || hasPort || hasNd) ? "block" : "none";
+      }
 
     } else if (isSubPending) {
       // Case E: Pending Approval
@@ -3063,11 +3068,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         currentUserSubscription = data.subscription;
         if (currentUser) updateAuthUI(currentUser);
+        const udSection = document.getElementById("user-dashboard");
+        if (udSection && udSection.style.display !== "none") {
+          loadUserDashboard();
+        }
         return data.subscription;
       }
     } catch (_) {}
     currentUserSubscription = null;
     if (currentUser) updateAuthUI(currentUser);
+    const udSection = document.getElementById("user-dashboard");
+    if (udSection && udSection.style.display !== "none") {
+      loadUserDashboard();
+    }
     return null;
   }
 
@@ -3367,6 +3380,20 @@ document.addEventListener("DOMContentLoaded", () => {
           }, 120);
           return;
         }
+        const f = (currentUserSubscription && (currentUserSubscription.features || (currentUserSubscription.plan && currentUserSubscription.plan.features))) || {};
+        if (!f.can_network_discovery) {
+          switchView("plans");
+          const pName = (currentUserSubscription.plan && currentUserSubscription.plan.name) || currentUserSubscription.plan_name || "Active";
+          window.setTimeout(() => {
+            const alertBox = document.getElementById("subAlertBox");
+            if (alertBox) {
+              alertBox.className = "sub-alert-box warning";
+              alertBox.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Your current subscription plan ('${pName}') does not include the Network Discovery capability. Please upgrade your plan.`;
+              alertBox.style.display = "flex";
+            }
+          }, 120);
+          return;
+        }
       }
       autoCloseSidebarAfterNav();
       window.location.href = "/network-discovery";
@@ -3401,6 +3428,31 @@ document.addEventListener("DOMContentLoaded", () => {
             alertBox.style.display = "flex";
           }
         }, 120);
+      } else {
+        const f = (currentUserSubscription && (currentUserSubscription.features || (currentUserSubscription.plan && currentUserSubscription.plan.features))) || {};
+        if (targetView === "monitoring" && !(f.can_live_monitoring || f.can_monitor)) {
+          targetView = "plans";
+          const pName = (currentUserSubscription.plan && currentUserSubscription.plan.name) || currentUserSubscription.plan_name || "Active";
+          window.setTimeout(() => {
+            const alertBox = document.getElementById("subAlertBox");
+            if (alertBox) {
+              alertBox.className = "sub-alert-box warning";
+              alertBox.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Your current subscription plan ('${pName}') does not include the Live Network Monitoring capability. Please upgrade your plan.`;
+              alertBox.style.display = "flex";
+            }
+          }, 120);
+        } else if (targetView === "port-scanner" && !f.can_port_scan) {
+          targetView = "plans";
+          const pName = (currentUserSubscription.plan && currentUserSubscription.plan.name) || currentUserSubscription.plan_name || "Active";
+          window.setTimeout(() => {
+            const alertBox = document.getElementById("subAlertBox");
+            if (alertBox) {
+              alertBox.className = "sub-alert-box warning";
+              alertBox.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Your current subscription plan ('${pName}') does not include the Active Port Scanner capability. Please upgrade your plan.`;
+              alertBox.style.display = "flex";
+            }
+          }, 120);
+        }
       }
     }
 
@@ -7589,6 +7641,79 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ============================================================================
+  // Canonical Operational Features Definition & Shared Helpers
+  // ============================================================================
+  const SCOUT_OPERATIONAL_FEATURES = [
+    {
+      key: "can_live_monitoring",
+      aliasKey: "can_monitor",
+      name: "Live Network Monitoring",
+      icon: "fa-satellite-dish",
+      description: "Passive packet interception, real-time 77-feature flow extraction, and 15-class autonomous AI attack classification.",
+      shortDesc: "Real-time traffic telemetry and 15-class autonomous AI attack classification"
+    },
+    {
+      key: "can_port_scan",
+      name: "Port Scanner",
+      icon: "fa-bullseye",
+      description: "High-concurrency TCP port scanning and active service vulnerability identification.",
+      shortDesc: "High-concurrency TCP port scanning and service vulnerability identification"
+    },
+    {
+      key: "can_network_discovery",
+      name: "Network Discovery",
+      icon: "fa-sitemap",
+      description: "Layer-2 ARP and ICMP subnet sweeps, MAC fingerprinting, and live LAN device inventory.",
+      shortDesc: "Subnet host reconnaissance, ARP sweeps, and live LAN device inventory"
+    }
+  ];
+
+  function getSelectedPlanFeatures(featuresObj) {
+    const f = featuresObj || {};
+    const selected = [];
+    for (const feat of SCOUT_OPERATIONAL_FEATURES) {
+      const isEnabled = Boolean(f[feat.key] || (feat.aliasKey && f[feat.aliasKey]));
+      if (isEnabled) {
+        selected.push(feat);
+      }
+    }
+    return selected;
+  }
+
+  function renderPlanFeaturesListHtml(featuresObj, options = {}) {
+    const selected = getSelectedPlanFeatures(featuresObj);
+    const maxScans = (featuresObj && (featuresObj.max_concurrent_scans || featuresObj.max_scans_per_day)) || 1;
+    const isPublic = Boolean(options.isPublic);
+
+    if (selected.length === 0) {
+      return `
+        <li class="${isPublic ? 'public-plan-feature-item' : 'plan-feature-item'} no-features text-muted">
+          <i class="fas fa-shield-halved"></i>
+          <span>Basic Platform Access (No operational tools included)</span>
+        </li>
+      `;
+    }
+
+    let itemsHtml = selected.map(feat => `
+      <li class="${isPublic ? 'public-plan-feature-item enabled' : 'plan-feature-item'}">
+        <i class="fas ${feat.icon}"></i>
+        <span><strong>${escapeHtml(feat.name)}:</strong> ${escapeHtml(feat.shortDesc)}</span>
+      </li>
+    `).join("");
+
+    if (!isPublic && (featuresObj && (featuresObj.max_concurrent_scans || featuresObj.max_scans_per_day))) {
+      itemsHtml += `
+        <li class="plan-feature-item">
+          <i class="fas fa-gauge-high"></i>
+          <span>Max Concurrent Scans: <strong>${maxScans}</strong></span>
+        </li>
+      `;
+    }
+
+    return itemsHtml;
+  }
+
+  // ============================================================================
   // User Dashboard Mission Control Controller
   // ============================================================================
   async function loadUserDashboard() {
@@ -7597,61 +7722,86 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const opName = document.getElementById("dashOperatorName");
-    const avatar = document.getElementById("dashUserAvatar");
-    const email = document.getElementById("dashUserEmail");
-    const role = document.getElementById("dashUserRole");
-    const statusPill = document.getElementById("dashStatusPill");
-    const planName = document.getElementById("dashPlanName");
-    const countdown = document.getElementById("dashExpirationCountdown");
+    const opName = document.getElementById("userDashGreeting") || document.getElementById("dashOperatorName");
+    const avatar = document.getElementById("userDashAvatar") || document.getElementById("dashUserAvatar");
+    const email = document.getElementById("userDashEmail") || document.getElementById("dashUserEmail");
+    const role = document.getElementById("userDashRoleBadge") || document.getElementById("dashUserRole");
+    const statusPill = document.getElementById("userDashStatusPill") || document.getElementById("dashStatusPill");
+    const planName = document.getElementById("userDashPlanName") || document.getElementById("dashPlanName");
+    const countdown = document.getElementById("userDashCountdown") || document.getElementById("dashExpirationCountdown");
 
     const displayName = currentUser.full_name || currentUser.username || "Operator";
-    if (opName) opName.textContent = displayName;
-    if (avatar) avatar.textContent = displayName.charAt(0).toUpperCase();
+    if (opName) opName.textContent = "Welcome back, " + displayName;
+    if (avatar) {
+      const parts = displayName.trim().split(/\s+/).filter(Boolean);
+      let initials = "OP";
+      if (parts.length >= 2) {
+        initials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      } else if (parts.length === 1 && parts[0].length >= 2) {
+        initials = parts[0].substring(0, 2).toUpperCase();
+      } else if (parts.length === 1) {
+        initials = parts[0][0].toUpperCase();
+      }
+      avatar.textContent = initials;
+    }
     if (email) email.textContent = currentUser.email || "";
-    if (role) role.textContent = currentUser.role || "Operator";
+    if (role) role.textContent = (currentUser.role || "Operator") + " Clearance";
 
     const sub = currentUserSubscription;
     const isAdmin = currentUser.role === "Admin";
+    const isSubActive = isAdmin || Boolean(sub && sub.status === "active" && (sub.is_valid_active !== false));
 
     if (isAdmin) {
       if (statusPill) {
-        statusPill.className = "dash-status-pill active";
-        statusPill.innerHTML = '<span class="status-pulse-dot"></span> System Root Clearance';
+        statusPill.className = "plan-status-pill active";
+        statusPill.innerHTML = '<i class="fas fa-shield-check"></i> System Root Clearance';
       }
       if (planName) planName.textContent = "Enterprise Root (Unlimited)";
-      if (countdown) countdown.textContent = "Perpetual Administrator Access";
-    } else if (sub && sub.status === "active") {
+      if (countdown) countdown.innerHTML = '<i class="fas fa-infinity"></i> Perpetual Administrator Access';
+    } else if (sub && sub.status === "active" && (sub.is_valid_active !== false)) {
       if (statusPill) {
-        statusPill.className = "dash-status-pill active";
-        statusPill.innerHTML = '<span class="status-pulse-dot"></span> Active Clearance';
+        statusPill.className = "plan-status-pill active";
+        statusPill.innerHTML = '<i class="fas fa-check-circle"></i> Active Clearance';
       }
-      if (planName) planName.textContent = (sub.plan && sub.plan.name) || sub.plan_id || "Active Plan";
+      const pName = (sub.plan && sub.plan.name) || sub.plan_name || sub.plan_id || "Active Plan";
+      if (planName) planName.textContent = pName;
 
-      let remainingText = "Active";
-      if (sub.end_date) {
-        try {
-          const end = new Date(sub.end_date);
-          const now = new Date();
-          const diffDays = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-          remainingText = diffDays > 0 ? `${diffDays} Days Remaining` : "Expiring Today";
-        } catch (_) {}
+      let remainingText = "Active Clearance";
+      let remDays = sub.days_remaining;
+      if (remDays === null || remDays === undefined) {
+        if (sub.end_date) {
+          try {
+            const end = new Date(sub.end_date);
+            const now = new Date();
+            remDays = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+          } catch (_) {}
+        }
       }
-      if (countdown) countdown.textContent = remainingText;
+      if (remDays !== null && remDays !== undefined) {
+        remainingText = remDays > 1 ? `${remDays} Days Remaining` : (remDays === 1 ? "1 Day Remaining" : "Expiring Today");
+      }
+      if (countdown) countdown.innerHTML = `<i class="fas fa-clock"></i> ${remainingText}`;
     } else if (sub && sub.status === "pending") {
       if (statusPill) {
-        statusPill.className = "dash-status-pill pending";
-        statusPill.innerHTML = '<span class="status-pulse-dot"></span> Verification Pending';
+        statusPill.className = "plan-status-pill pending";
+        statusPill.innerHTML = '<i class="fas fa-hourglass-half"></i> Verification Pending';
       }
-      if (planName) planName.textContent = (sub.plan && sub.plan.name) || sub.plan_id || "Requested Plan";
-      if (countdown) countdown.textContent = "Awaiting Administrator Approval";
+      if (planName) planName.textContent = (sub.plan && sub.plan.name) || sub.plan_name || sub.plan_id || "Requested Plan";
+      if (countdown) countdown.innerHTML = '<i class="fas fa-clock"></i> Awaiting Administrator Approval';
+    } else if (sub && (sub.status === "expired" || sub.is_valid_active === false)) {
+      if (statusPill) {
+        statusPill.className = "plan-status-pill expired";
+        statusPill.innerHTML = '<i class="fas fa-circle-exclamation"></i> Subscription Expired';
+      }
+      if (planName) planName.textContent = (sub.plan && sub.plan.name) || sub.plan_name || sub.plan_id || "Expired Plan";
+      if (countdown) countdown.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Renewal Required';
     } else {
       if (statusPill) {
-        statusPill.className = "dash-status-pill expired";
-        statusPill.innerHTML = '<span class="status-pulse-dot"></span> Inactive';
+        statusPill.className = "plan-status-pill expired";
+        statusPill.innerHTML = '<i class="fas fa-circle-xmark"></i> Inactive';
       }
       if (planName) planName.textContent = "No Active Subscription";
-      if (countdown) countdown.textContent = "Subscription Required";
+      if (countdown) countdown.innerHTML = '<i class="fas fa-lock"></i> Subscription Required';
     }
 
     // Entitlement checks for tool launchpad cards
@@ -7659,92 +7809,126 @@ document.addEventListener("DOMContentLoaded", () => {
       can_live_monitoring: true,
       can_port_scan: true,
       can_network_discovery: true
-    } : ((sub && sub.status === "active" && sub.plan && sub.plan.features) || {});
+    } : (isSubActive ? ((sub && (sub.features || (sub.plan && sub.plan.features))) || {}) : {});
 
     // Tool 1: Live Monitoring
-    const canMonitor = isAdmin || Boolean(features.can_live_monitoring);
+    const canMonitor = isAdmin || (isSubActive && Boolean(features.can_live_monitoring || features.can_monitor));
     const monitorCard = document.getElementById("dashToolMonitorCard");
-    const monitorBadge = document.getElementById("dashMonitoringEntitlementBadge");
+    const monitorBadge = document.getElementById("dashMonitorEntitlementBadge") || document.getElementById("dashMonitoringEntitlementBadge");
     const launchMonitorBtn = document.getElementById("dashLaunchMonitorBtn");
     if (monitorCard) {
       if (canMonitor) {
+        monitorCard.style.display = "flex";
         monitorCard.classList.remove("locked");
         if (monitorBadge) {
-          monitorBadge.className = "tool-entitlement-badge";
+          monitorBadge.className = "tool-entitlement-badge unlocked";
           monitorBadge.innerHTML = '<i class="fas fa-circle-check"></i> Unlocked';
         }
         if (launchMonitorBtn) {
           launchMonitorBtn.disabled = false;
-          launchMonitorBtn.innerHTML = '<span>Launch Telemetry</span> <i class="fas fa-arrow-right"></i>';
+          launchMonitorBtn.className = "btn-dash-action";
+          launchMonitorBtn.innerHTML = '<span>Launch Monitoring</span> <i class="fas fa-arrow-right"></i>';
+          launchMonitorBtn.onclick = () => switchView("monitoring");
         }
+      } else if (isSubActive) {
+        monitorCard.style.display = "none";
       } else {
+        monitorCard.style.display = "flex";
         monitorCard.classList.add("locked");
         if (monitorBadge) {
           monitorBadge.className = "tool-entitlement-badge locked";
           monitorBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
         }
         if (launchMonitorBtn) {
-          launchMonitorBtn.disabled = true;
+          launchMonitorBtn.disabled = false;
+          launchMonitorBtn.className = "btn-dash-action locked-btn";
           launchMonitorBtn.innerHTML = '<span>Plan Upgrade Required</span> <i class="fas fa-lock"></i>';
+          launchMonitorBtn.onclick = () => switchView("plans");
         }
       }
     }
 
     // Tool 2: Port Scanner
-    const canPort = isAdmin || Boolean(features.can_port_scan);
+    const canPort = isAdmin || (isSubActive && Boolean(features.can_port_scan));
     const portCard = document.getElementById("dashToolPortCard");
     const portBadge = document.getElementById("dashPortEntitlementBadge");
     const launchPortBtn = document.getElementById("dashLaunchPortBtn");
     if (portCard) {
       if (canPort) {
+        portCard.style.display = "flex";
         portCard.classList.remove("locked");
         if (portBadge) {
-          portBadge.className = "tool-entitlement-badge";
+          portBadge.className = "tool-entitlement-badge unlocked";
           portBadge.innerHTML = '<i class="fas fa-circle-check"></i> Unlocked';
         }
         if (launchPortBtn) {
           launchPortBtn.disabled = false;
-          launchPortBtn.innerHTML = '<span>Launch Scanner</span> <i class="fas fa-arrow-right"></i>';
+          launchPortBtn.className = "btn-dash-action";
+          launchPortBtn.innerHTML = '<span>Launch Port Scanner</span> <i class="fas fa-arrow-right"></i>';
+          launchPortBtn.onclick = () => switchView("port-scanner");
         }
+      } else if (isSubActive) {
+        portCard.style.display = "none";
       } else {
+        portCard.style.display = "flex";
         portCard.classList.add("locked");
         if (portBadge) {
           portBadge.className = "tool-entitlement-badge locked";
           portBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
         }
         if (launchPortBtn) {
-          launchPortBtn.disabled = true;
+          launchPortBtn.disabled = false;
+          launchPortBtn.className = "btn-dash-action locked-btn";
           launchPortBtn.innerHTML = '<span>Plan Upgrade Required</span> <i class="fas fa-lock"></i>';
+          launchPortBtn.onclick = () => switchView("plans");
         }
       }
     }
 
     // Tool 3: Network Discovery
-    const canNd = isAdmin || Boolean(features.can_network_discovery);
+    const canNd = isAdmin || (isSubActive && Boolean(features.can_network_discovery));
     const ndCard = document.getElementById("dashToolNdCard");
     const ndBadge = document.getElementById("dashNdEntitlementBadge");
     const launchNdBtn = document.getElementById("dashLaunchNdBtn");
     if (ndCard) {
       if (canNd) {
+        ndCard.style.display = "flex";
         ndCard.classList.remove("locked");
         if (ndBadge) {
-          ndBadge.className = "tool-entitlement-badge";
+          ndBadge.className = "tool-entitlement-badge unlocked";
           ndBadge.innerHTML = '<i class="fas fa-circle-check"></i> Unlocked';
         }
         if (launchNdBtn) {
           launchNdBtn.disabled = false;
+          launchNdBtn.className = "btn-dash-action";
           launchNdBtn.innerHTML = '<span>Launch Discovery</span> <i class="fas fa-arrow-right"></i>';
+          launchNdBtn.onclick = () => switchView("network-discovery");
         }
+      } else if (isSubActive) {
+        ndCard.style.display = "none";
       } else {
+        ndCard.style.display = "flex";
         ndCard.classList.add("locked");
         if (ndBadge) {
           ndBadge.className = "tool-entitlement-badge locked";
           ndBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
         }
         if (launchNdBtn) {
-          launchNdBtn.disabled = true;
+          launchNdBtn.disabled = false;
+          launchNdBtn.className = "btn-dash-action locked-btn";
           launchNdBtn.innerHTML = '<span>Plan Upgrade Required</span> <i class="fas fa-lock"></i>';
+          launchNdBtn.onclick = () => switchView("plans");
         }
+      }
+    }
+
+    // Empty-state card when no operational tools are included in active plan
+    const noToolsCard = document.getElementById("dashNoToolsCard");
+    if (noToolsCard) {
+      if (isSubActive && !canMonitor && !canPort && !canNd) {
+        noToolsCard.style.display = "flex";
+      } else {
+        noToolsCard.style.display = "none";
       }
     }
 
@@ -7757,40 +7941,112 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isAdmin) {
       if (detailTier) detailTier.textContent = "Root Enterprise";
-      if (detailStatus) detailStatus.textContent = "Active Clearance";
+      if (detailStatus) detailStatus.textContent = "ACTIVE";
       if (detailStart) detailStart.textContent = "System Root";
       if (detailEnd) detailEnd.textContent = "Perpetual";
       if (detailRemaining) detailRemaining.textContent = "Unlimited Access";
     } else if (sub) {
-      if (detailTier) detailTier.textContent = (sub.plan && sub.plan.name) || sub.plan_id;
+      if (detailTier) detailTier.textContent = (sub.plan && sub.plan.name) || sub.plan_name || sub.plan_id || "Standard";
       if (detailStatus) detailStatus.textContent = sub.status ? sub.status.toUpperCase() : "—";
-      if (detailStart) detailStart.textContent = formatUtcDate(sub.start_date || sub.created_at);
+      if (detailStart) detailStart.textContent = formatUtcDate(sub.activated_at || sub.start_date || sub.created_at);
       if (detailEnd) detailEnd.textContent = formatUtcDate(sub.end_date);
 
       let remStr = "—";
-      if (sub.status === "active" && sub.end_date) {
-        try {
-          const diffDays = Math.ceil((new Date(sub.end_date) - new Date()) / (1000 * 60 * 60 * 24));
-          remStr = diffDays > 0 ? `${diffDays} days` : "Expires today";
-        } catch (_) {}
+      if (sub.status === "active" && (sub.is_valid_active !== false) && sub.end_date) {
+        let diffDays = sub.days_remaining;
+        if (diffDays === null || diffDays === undefined) {
+          try {
+            diffDays = Math.ceil((new Date(sub.end_date) - new Date()) / (1000 * 60 * 60 * 24));
+          } catch (_) {}
+        }
+        remStr = (diffDays !== null && diffDays !== undefined) ? (diffDays > 0 ? `${diffDays} days` : "Expires today") : "Active";
       } else if (sub.status === "pending") {
         remStr = "Awaiting Approval";
-      } else if (sub.status === "expired") {
+      } else if (sub.status === "expired" || sub.is_valid_active === false) {
         remStr = "Expired";
       }
       if (detailRemaining) detailRemaining.textContent = remStr;
     } else {
       if (detailTier) detailTier.textContent = "None";
-      if (detailStatus) detailStatus.textContent = "Unsubscribed";
+      if (detailStatus) detailStatus.textContent = "UNSUBSCRIBED";
       if (detailStart) detailStart.textContent = "—";
       if (detailEnd) detailEnd.textContent = "—";
       if (detailRemaining) detailRemaining.textContent = "No Active Period";
     }
 
-    // Telemetry Snapshot count
+    // Telemetry Snapshot and Real Threat Events
     const threatCount = document.getElementById("userDashThreatCount");
-    if (threatCount) {
-      threatCount.textContent = detectedAttacksRegistry ? detectedAttacksRegistry.size : 0;
+    const captureState = document.getElementById("userDashCaptureState");
+    const lastEventTime = document.getElementById("userDashRecentEventTime");
+    const telemetryStatus = document.getElementById("userDashTelemetryStatus");
+    const recentEventsContainer = document.getElementById("userDashRecentEventsContainer");
+
+    if (canMonitor) {
+      try {
+        const attackRes = await fetch("/api/detected-attacks", { credentials: "same-origin" });
+        if (attackRes.ok) {
+          const attackData = await attackRes.json();
+          const attacks = attackData.detected_attacks || [];
+          if (threatCount) threatCount.textContent = attacks.length;
+
+          if (telemetryStatus) {
+            telemetryStatus.innerHTML = '<span class="status-live-dot"></span> Telemetry Online';
+          }
+          if (captureState) {
+            captureState.textContent = attacks.length > 0 ? "Threats Pinned" : "Monitoring";
+          }
+
+          if (attacks.length > 0) {
+            const latest = attacks[attacks.length - 1];
+            if (lastEventTime) {
+              lastEventTime.textContent = latest.timestamp ? formatUtcDate(latest.timestamp, true) : "Just now";
+            }
+            if (recentEventsContainer) {
+              const recentSlice = attacks.slice(-3).reverse();
+              recentEventsContainer.innerHTML = `
+                <div class="dash-recent-threats-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                  ${recentSlice.map(atk => `
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #F87171; font-weight: 600;"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(atk.attack_type || "Hostile Vector")}</span>
+                        <span style="color: var(--text-secondary, #94A3B8); font-size: 0.78rem;">${escapeHtml(atk.src_ip || "Unknown IP")} &rarr; ${escapeHtml(atk.dst_ip || "Host")}</span>
+                      </div>
+                      <span style="color: var(--text-muted, #64748B); font-size: 0.75rem;">${atk.timestamp ? formatUtcDate(atk.timestamp, true) : "Detected"}</span>
+                    </div>
+                  `).join("")}
+                </div>
+              `;
+            }
+          } else {
+            if (lastEventTime) lastEventTime.textContent = "None";
+            if (recentEventsContainer) {
+              recentEventsContainer.innerHTML = `
+                <p class="threat-kpi-note" id="userDashThreatNote" style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 8px;">
+                  <i class="fas fa-shield-check" style="color: #10B981; margin-right: 6px;"></i> No hostile intrusion vectors detected in current session buffer. Autonomous passive interception is ready.
+                </p>
+              `;
+            }
+          }
+        }
+      } catch (_) {
+        if (threatCount && detectedAttacksRegistry) {
+          threatCount.textContent = detectedAttacksRegistry.size;
+        }
+      }
+    } else {
+      if (threatCount) threatCount.textContent = "—";
+      if (captureState) captureState.textContent = "Restricted";
+      if (lastEventTime) lastEventTime.textContent = "—";
+      if (telemetryStatus) {
+        telemetryStatus.innerHTML = '<span class="status-live-dot" style="background: #F87171;"></span> Telemetry Locked';
+      }
+      if (recentEventsContainer) {
+        recentEventsContainer.innerHTML = `
+          <p class="threat-kpi-note" style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 8px;">
+            <i class="fas fa-lock" style="color: #F87171; margin-right: 6px;"></i> Threat telemetry is restricted. An active subscription with Live Monitoring clearance is required to view real-time attack data.
+          </p>
+        `;
+      }
     }
 
     // Operator Profile & Password Management forms
@@ -8129,7 +8385,7 @@ document.addEventListener("DOMContentLoaded", () => {
           subMetaRow.style.display = "flex";
           if (subMetaStart) subMetaStart.textContent = formatUtcDate(sub.start_date);
           if (subMetaEnd) subMetaEnd.textContent = formatUtcDate(sub.end_date);
-          if (subMetaTier) subMetaTier.textContent = sub.plan_id;
+          if (subMetaTier) subMetaTier.textContent = (sub.plan && sub.plan.name) || sub.plan_name || sub.plan_id;
         }
       } else if (sub.status === "pending") {
         if (subStatusDot) subStatusDot.className = "sub-status-dot pending";
@@ -8166,7 +8422,7 @@ document.addEventListener("DOMContentLoaded", () => {
           subMetaRow.style.display = "flex";
           if (subMetaStart) subMetaStart.textContent = formatUtcDate(sub.start_date);
           if (subMetaEnd) subMetaEnd.textContent = formatUtcDate(sub.end_date);
-          if (subMetaTier) subMetaTier.textContent = sub.plan_id;
+          if (subMetaTier) subMetaTier.textContent = (sub.plan && sub.plan.name) || sub.plan_name || sub.plan_id;
         }
       } else {
         if (subStatusDot) subStatusDot.className = "sub-status-dot canceled";
@@ -8213,8 +8469,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const isFeatured = p.id === "SCOUT-PRO";
         const isCurrentPlan = isSubActive && activeSub.plan_id === p.id;
         const isPendingPlan = isSubPending && activeSub.plan_id === p.id;
+        const isFree = Boolean(p.is_free || p.price === 0);
 
-        const priceDisplay = p.price === 0 ? "Free" : `$${p.price.toFixed(2)}`;
+        const priceDisplay = isFree || p.price === 0 ? "Free" : `$${p.price.toFixed(2)}`;
         const durationDisplay = p.duration_days ? `/ ${p.duration_days} Days` : "";
 
         const f = p.features || {};
@@ -8234,6 +8491,8 @@ document.addEventListener("DOMContentLoaded", () => {
           btnHtml = `<button type="button" class="btn-plan-select current" disabled><i class="fas fa-circle-check"></i> Current Plan</button>`;
         } else if (isPendingPlan) {
           btnHtml = `<button type="button" class="btn-plan-select pending" disabled><i class="fas fa-clock"></i> Pending Approval</button>`;
+        } else if (isFree) {
+          btnHtml = `<button type="button" class="btn-plan-select btn-plan-free" data-plan-id="${escapeHtml(p.id)}" data-plan-is-free="true"><i class="fas fa-gift"></i> Claim Free Plan</button>`;
         } else {
           btnHtml = `<button type="button" class="btn-plan-select" data-plan-id="${escapeHtml(p.id)}"><i class="fas fa-arrow-right"></i> Select Plan</button>`;
         }
@@ -8251,25 +8510,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span class="plan-duration">${durationDisplay}</span>
               </div>
               <ul class="plan-features-list">
-                <li class="plan-feature-item ${canMonitor ? '' : 'disabled'}">
-                  <i class="fas ${canMonitor ? 'fa-check' : 'fa-xmark'}"></i>
-                  <span>Live Traffic Telemetry & 15-Class AI Intrusion Detection</span>
-                </li>
-                <li class="plan-feature-item ${canPort ? '' : 'disabled'}">
-                  <i class="fas ${canPort ? 'fa-check' : 'fa-xmark'}"></i>
-                  <span>Active Port Scanning & TCP Service Enumeration</span>
-                </li>
-                <li class="plan-feature-item ${canNd ? '' : 'disabled'}">
-                  <i class="fas ${canNd ? 'fa-check' : 'fa-xmark'}"></i>
-                  <span>Subnet Reconnaissance & Network Discovery</span>
-                </li>
-                <li class="plan-feature-item">
-                  <i class="fas fa-check"></i>
-                  <span>Max Concurrent Scans: <strong>${maxScans}</strong></span>
-                </li>
+                ${renderPlanFeaturesListHtml(p.features, { isPublic: false })}
               </ul>
             </div>
-            <div>
+            <div class="plan-card-footer" style="margin-top: auto; width: 100%;">
               ${btnHtml}
             </div>
           </div>
@@ -8287,15 +8531,76 @@ document.addEventListener("DOMContentLoaded", () => {
             openAuthModal("signin", "Please sign in or create an account to request a subscription plan.");
           } else {
             const planId = btn.getAttribute("data-plan-id");
+            const isFree = btn.getAttribute("data-plan-is-free") === "true";
             if (planId) {
               const matchedPlan = plans.find(pl => String(pl.id) === String(planId) || String(pl.plan_code) === String(planId));
-              openCheckout(planId, matchedPlan);
+              if (isFree || (matchedPlan && (matchedPlan.is_free || matchedPlan.price === 0))) {
+                activateFreePlan(planId, btn);
+              } else {
+                openCheckout(planId, matchedPlan);
+              }
             }
           }
         });
       });
     } catch (_) {
       plansCatalogGrid.innerHTML = `<div class="plans-loading-placeholder">Network error loading plans catalog.</div>`;
+    }
+  }
+
+  // Free Plan Immediate Activation Handler
+  async function activateFreePlan(planId, btnEl) {
+    if (!planId) return;
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Activating Free Plan...';
+    }
+
+    try {
+      const res = await fetch("/api/subscriptions/free/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ plan_id: planId })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        if (subAlertBox) {
+          subAlertBox.className = "sub-alert-box success";
+          subAlertBox.innerHTML = '<i class="fas fa-circle-check"></i> ' + (data.message || "Free Plan activated successfully! Access granted immediately.");
+          subAlertBox.style.display = "flex";
+          subAlertBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        if (typeof showToast === "function") {
+          showToast(data.message || "Free Plan activated successfully!", "success");
+        }
+        await loadUserSubscription();
+        await loadPlansCatalog();
+      } else {
+        if (subAlertBox) {
+          subAlertBox.className = "sub-alert-box warning";
+          subAlertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> ' + (data.message || "Failed to activate Free Plan.");
+          subAlertBox.style.display = "flex";
+          subAlertBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        if (typeof showToast === "function") {
+          showToast(data.message || "Failed to activate Free Plan.", "error");
+        }
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.innerHTML = '<i class="fas fa-gift"></i> Claim Free Plan';
+        }
+      }
+    } catch (_) {
+      if (subAlertBox) {
+        subAlertBox.className = "sub-alert-box warning";
+        subAlertBox.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Network error activating Free Plan.';
+        subAlertBox.style.display = "flex";
+      }
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.innerHTML = '<i class="fas fa-gift"></i> Claim Free Plan';
+      }
     }
   }
 
@@ -8954,21 +9259,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Features
       if (featGrid) {
-        const f = p.features || {};
-        featGrid.innerHTML = `
-          <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
-            <i class="fas ${f.can_live_monitoring ? 'fa-check text-success' : 'fa-xmark text-danger'}"></i>
-            <span>Live Telemetry & Detection</span>
-          </div>
-          <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
-            <i class="fas ${f.can_port_scan ? 'fa-check text-success' : 'fa-xmark text-danger'}"></i>
-            <span>Port Vulnerability Scanner</span>
-          </div>
-          <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
-            <i class="fas ${f.can_network_discovery ? 'fa-check text-success' : 'fa-xmark text-danger'}"></i>
-            <span>Subnet Reconnaissance</span>
-          </div>
-        `;
+        const selected = getSelectedPlanFeatures(p.features);
+        if (selected.length === 0) {
+          featGrid.innerHTML = `
+            <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;" class="text-muted">
+              <i class="fas fa-shield-halved"></i>
+              <span>No operational features assigned to this plan.</span>
+            </div>
+          `;
+        } else {
+          featGrid.innerHTML = selected.map(feat => `
+            <div style="padding:10px 14px; border-radius:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:8px;">
+              <i class="fas ${feat.icon} text-success"></i>
+              <span><strong>${escapeHtml(feat.name)}</strong></span>
+            </div>
+          `).join("");
+        }
       }
 
       // Recent subscribers
@@ -9390,78 +9696,99 @@ document.addEventListener("DOMContentLoaded", () => {
         const planName = r.plan_name || (r.plan && r.plan.name) || r.plan_code || `Plan #${r.plan_id}`;
         const priceStr = (r.plan_price !== undefined && r.plan_price !== null) ? `$${r.plan_price.toFixed(2)}${r.plan_duration ? ' / ' + r.plan_duration : ''}` : (r.plan ? `$${r.plan.price.toFixed(2)}` : "—");
         const dateStr = formatUtcDate(r.created_at || r.start_date);
+        const payMethodName = r.payment_method_name || (r.payment_method && r.payment_method.display_name) || "";
+        const receivingAcc = r.receiving_account_identifier || (r.receiving_account && r.receiving_account.account_identifier) || "";
+        const txRef = r.transaction_reference || "";
 
         cardsHtml += `
           <div class="admin-request-card" data-card-request-id="${r.id}">
             <div class="request-card-header">
               <div class="request-user-info">
-                <div class="admin-user-avatar">${escapeHtml(initials)}</div>
+                <div class="admin-user-avatar" title="${escapeHtml(opName)}">${escapeHtml(initials)}</div>
                 <div class="request-user-details">
-                  <span class="request-username">${escapeHtml(opName)}</span>
-                  ${opSub ? `<span class="request-email text-muted">${escapeHtml(opSub)}</span>` : ''}
+                  <span class="request-username" title="${escapeHtml(opName)}">${escapeHtml(opName)}</span>
+                  ${opSub ? `<span class="request-email text-muted" title="${escapeHtml(opSub)}">${escapeHtml(opSub)}</span>` : ''}
                 </div>
               </div>
               <div class="request-badge-wrap">
                 <span class="sub-badge pending"><i class="fas fa-clock"></i> Pending Approval</span>
+                <span class="request-id-badge" title="Subscription Request #${r.id}">#${r.id}</span>
               </div>
             </div>
+
             <div class="request-card-body">
+              <div class="request-plan-banner">
+                <div class="request-plan-title-wrap">
+                  <span class="request-plan-icon"><i class="fas fa-shield-halved"></i></span>
+                  <div class="request-plan-meta">
+                    <span class="request-data-label">Requested Tier</span>
+                    <span class="request-plan-name" title="${escapeHtml(planName)}">${escapeHtml(planName)}</span>
+                  </div>
+                </div>
+                <div class="request-plan-price-wrap">
+                  <span class="request-data-label">Plan Pricing</span>
+                  <span class="request-plan-price">${escapeHtml(priceStr)}</span>
+                </div>
+              </div>
+
               <div class="request-data-grid">
                 <div class="request-data-item">
-                  <span class="request-data-label"><i class="fas fa-shield-halved"></i> Requested Plan</span>
-                  <span class="request-data-val font-semibold">${escapeHtml(planName)}</span>
-                </div>
-                <div class="request-data-item">
-                  <span class="request-data-label"><i class="fas fa-receipt"></i> Plan Pricing</span>
-                  <span class="request-data-val">${escapeHtml(priceStr)}</span>
-                </div>
-                <div class="request-data-item">
                   <span class="request-data-label"><i class="fas fa-calendar-alt"></i> Request Date</span>
-                  <span class="request-data-val">${dateStr}</span>
+                  <span class="request-data-val" title="${escapeHtml(dateStr)}">${escapeHtml(dateStr)}</span>
                 </div>
                 <div class="request-data-item">
-                  <span class="request-data-label"><i class="fas fa-fingerprint"></i> Subscription ID</span>
-                  <span class="request-data-val"><code>#${r.id}</code></span>
+                  <span class="request-data-label"><i class="fas fa-hashtag"></i> Request ID</span>
+                  <span class="request-data-val font-mono">#${r.id}</span>
                 </div>
-                ${r.payment_method_name ? `
                 <div class="request-data-item">
                   <span class="request-data-label"><i class="fas fa-wallet"></i> Payment Method</span>
-                  <span class="request-data-val font-semibold">${escapeHtml(r.payment_method_name)}</span>
+                  <span class="request-data-val" title="${escapeHtml(payMethodName || 'Not specified')}">${escapeHtml(payMethodName || '—')}</span>
                 </div>
                 <div class="request-data-item">
                   <span class="request-data-label"><i class="fas fa-arrow-right-to-bracket"></i> Receiving Account</span>
-                  <span class="request-data-val font-mono">${escapeHtml(r.receiving_account_identifier || '—')}</span>
+                  <span class="request-data-val font-mono" title="${escapeHtml(receivingAcc || '—')}">${escapeHtml(receivingAcc || '—')}</span>
                 </div>
-                ` : ''}
-                ${r.transaction_reference ? `
                 <div class="request-data-item">
                   <span class="request-data-label"><i class="fas fa-barcode"></i> Tx Reference</span>
-                  <span class="request-data-val font-mono">${escapeHtml(r.transaction_reference)}</span>
+                  <span class="request-data-val font-mono" title="${escapeHtml(txRef || '—')}">${escapeHtml(txRef || '—')}</span>
                 </div>
-                ` : ''}
+                <div class="request-data-item">
+                  <span class="request-data-label"><i class="fas fa-file-invoice"></i> Payment Receipt</span>
+                  <span class="request-data-val">
+                    ${r.receipt_url ? `
+                      <span class="receipt-indicator-pill has-receipt"><i class="fas fa-paperclip"></i> Attached</span>
+                    ` : `
+                      <span class="receipt-indicator-pill no-receipt"><i class="fas fa-circle-minus"></i> None</span>
+                    `}
+                  </span>
+                </div>
               </div>
-              ${r.receipt_url ? `
-              <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-base); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);">
-                <span style="font-size: 0.8rem; color: var(--text-secondary);"><i class="fas fa-file-invoice"></i> Payment Receipt</span>
-                <button type="button" class="btn-receipt-thumb" data-view-receipt="${escapeHtml(r.receipt_url)}" data-filename="${escapeHtml(r.receipt_original_name || 'receipt.png')}">
-                  <i class="fas fa-magnifying-glass-plus"></i> View Receipt
+            </div>
+
+            <div class="request-card-footer">
+              <div class="request-btn-grid">
+                <button type="button" class="btn-admin-action details" data-sub-details-id="${r.id}" title="View Request Details & Dossier">
+                  <i class="fas fa-folder-open"></i> Details
+                </button>
+                ${r.receipt_url ? `
+                <button type="button" class="btn-admin-action receipt" data-view-receipt="${escapeHtml(r.receipt_url)}" data-filename="${escapeHtml(r.receipt_original_name || 'receipt.png')}" title="View uploaded payment receipt">
+                  <i class="fas fa-file-invoice"></i> View Receipt
+                </button>
+                ` : `
+                <button type="button" class="btn-admin-action receipt disabled-locked" disabled title="No payment receipt attached">
+                  <i class="fas fa-file-invoice"></i> View Receipt
+                </button>
+                `}
+                <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
+                  <i class="fas fa-check"></i> Approve
+                </button>
+                <button type="button" class="btn-admin-action reject" data-rej-id="${r.id}" title="Reject request">
+                  <i class="fas fa-xmark"></i> Reject
+                </button>
+                <button type="button" class="btn-admin-action cancel icon-only" data-sub-delete-id="${r.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete pending request record">
+                  <i class="fas fa-trash-can"></i>
                 </button>
               </div>
-              ` : ''}
-            </div>
-            <div class="request-card-footer">
-              <button type="button" class="btn-admin-action details" data-sub-details-id="${r.id}" title="View Request Details & Dossier">
-                <i class="fas fa-folder-open"></i> Details
-              </button>
-              <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
-                <i class="fas fa-check"></i> Approve
-              </button>
-              <button type="button" class="btn-admin-action reject" data-rej-id="${r.id}" title="Reject request">
-                <i class="fas fa-xmark"></i> Reject
-              </button>
-              <button type="button" class="btn-admin-action cancel" data-sub-delete-id="${r.id}" data-user="${escapeHtml(opName)}" data-plan="${escapeHtml(planName)}" title="Delete pending request record">
-                <i class="fas fa-trash-can"></i>
-              </button>
             </div>
           </div>
         `;
@@ -9481,6 +9808,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 <button type="button" class="btn-admin-action details" data-sub-details-id="${r.id}" title="View Request Details">
                   <i class="fas fa-folder-open"></i> Details
                 </button>
+                ${r.receipt_url ? `
+                <button type="button" class="btn-admin-action receipt" data-view-receipt="${escapeHtml(r.receipt_url)}" data-filename="${escapeHtml(r.receipt_original_name || 'receipt.png')}" title="View Payment Receipt">
+                  <i class="fas fa-file-invoice"></i> View Receipt
+                </button>
+                ` : ''}
                 <button type="button" class="btn-admin-action activate" data-act-id="${r.id}" title="Approve and activate subscription">
                   <i class="fas fa-check"></i> Approve
                 </button>
@@ -10697,13 +11029,20 @@ document.addEventListener("DOMContentLoaded", () => {
         const priceStr = `${escapeHtml(p.currency || 'USD')} ${p.price === 0 ? 'Free' : '$' + p.price.toFixed(2)}`;
         const durationStr = `${p.duration_value} ${p.duration_unit || 'days'}`;
         const f = p.features || {};
-        const feats = [];
-        if (f.can_live_monitoring) feats.push("Live Telemetry");
-        if (f.can_port_scan) feats.push("Port Scanner");
-        if (f.can_network_discovery) feats.push("Network Discovery");
-        const featsStr = feats.join(", ") || "None";
+        const selectedFeats = getSelectedPlanFeatures(f);
+        const featsStr = selectedFeats.map(s => s.name).join(", ") || "None";
         const subsCount = p.total_subscribers ?? p.subscribers_count ?? 0;
         const activeSubsCount = p.active_subscribers ?? 0;
+        let featListHtml = "";
+        if (selectedFeats.length === 0) {
+          featListHtml = `<li class="plan-feature-item text-muted"><i class="fas fa-shield-halved"></i> No operational tools enabled</li>`;
+        } else {
+          featListHtml = selectedFeats.map(feat => `
+            <li class="plan-feature-item enabled">
+              <i class="fas ${feat.icon}"></i> ${escapeHtml(feat.name)}
+            </li>
+          `).join("");
+        }
 
         cardsHtml += `
           <div class="admin-plan-card ${p.is_active ? 'plan-active' : 'plan-archived'}" data-card-plan-id="${p.id}">
@@ -10730,15 +11069,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="plan-card-features">
               <span class="plan-features-title"><i class="fas fa-shield-halved"></i> Entitlements & Features:</span>
               <ul class="plan-features-list">
-                <li class="${f.can_live_monitoring ? 'enabled' : 'disabled'}">
-                  <i class="fas ${f.can_live_monitoring ? 'fa-check' : 'fa-xmark'}"></i> Live Telemetry & Monitoring
-                </li>
-                <li class="${f.can_port_scan ? 'enabled' : 'disabled'}">
-                  <i class="fas ${f.can_port_scan ? 'fa-check' : 'fa-xmark'}"></i> Port Vulnerability Scanner
-                </li>
-                <li class="${f.can_network_discovery ? 'enabled' : 'disabled'}">
-                  <i class="fas ${f.can_network_discovery ? 'fa-check' : 'fa-xmark'}"></i> Network Discovery & Mapping
-                </li>
+                ${featListHtml}
               </ul>
             </div>
             <div class="plan-card-footer">
@@ -10921,7 +11252,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (durUnitInput) durUnitInput.value = plan.duration_unit || "days";
 
     const f = plan.features || {};
-    if (monCheck) monCheck.checked = Boolean(f.can_live_monitoring);
+    if (monCheck) monCheck.checked = Boolean(f.can_live_monitoring || f.can_monitor);
     if (portCheck) portCheck.checked = Boolean(f.can_port_scan);
     if (ndCheck) ndCheck.checked = Boolean(f.can_network_discovery);
     if (activeCheck) activeCheck.checked = Boolean(plan.is_active);
@@ -11074,6 +11405,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const planFormIsFreeEl = document.getElementById("planFormIsFree");
+  if (planFormIsFreeEl) {
+    planFormIsFreeEl.addEventListener("change", () => {
+      const priceInput = document.getElementById("planFormPrice");
+      if (!priceInput) return;
+      if (planFormIsFreeEl.checked) {
+        priceInput.value = "0.00";
+        priceInput.setAttribute("readonly", "readonly");
+      } else {
+        priceInput.removeAttribute("readonly");
+      }
+    });
+  }
+
   if (adminPlanForm) {
     adminPlanForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -11090,6 +11435,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const canPortScan = document.getElementById("planFormCanPortScan")?.checked ?? true;
       const canNetworkDiscovery = document.getElementById("planFormCanNetworkDiscovery")?.checked ?? false;
       const isActive = document.getElementById("planFormIsActive")?.checked ?? true;
+      const isFree = document.getElementById("planFormIsFree")?.checked ?? false;
 
       if (!name || (mode === "create" && !planCode)) {
         if (adminPlanAlert) {
@@ -11100,7 +11446,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      if (price < 0 || isNaN(price)) {
+      const effectivePrice = isFree ? 0.0 : price;
+
+      if (!isFree && (price < 0 || isNaN(price))) {
         if (adminPlanAlert) {
           adminPlanAlert.className = "auth-alert error";
           adminPlanAlert.textContent = "Price must be a valid non-negative number.";
@@ -11121,13 +11469,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const payload = {
         name,
         description,
-        price,
+        price: effectivePrice,
+        is_free: isFree,
         currency,
         duration_value: durationValue,
         duration_unit: durationUnit,
         is_active: isActive,
         features: {
           can_live_monitoring: canLiveMonitoring,
+          can_monitor: canLiveMonitoring,
           can_port_scan: canPortScan,
           can_network_discovery: canNetworkDiscovery
         }
@@ -12068,6 +12418,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (featPort) featPort.checked = true;
     if (featNd) featNd.checked = false;
     if (active) active.checked = true;
+
+    const isFreeCheck = document.getElementById("fpCreatePlanIsFree");
+    if (isFreeCheck) {
+      isFreeCheck.checked = false;
+      isFreeCheck.onchange = () => {
+        if (isFreeCheck.checked) {
+          if (price) {
+            price.value = "0.00";
+            price.setAttribute("readonly", "readonly");
+          }
+        } else {
+          if (price) {
+            price.removeAttribute("readonly");
+          }
+        }
+      };
+    }
+    if (price) price.removeAttribute("readonly");
     if (code) code.focus();
   }
 
@@ -12129,14 +12497,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dDesc) dDesc.textContent = p.description || "No tier description provided.";
 
       if (dFeatures) {
+        const selected = getSelectedPlanFeatures(p.features);
+        let fHtml = selected.map(feat => `
+          <span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;">
+            <i class="fas ${feat.icon}"></i> ${escapeHtml(feat.name)}
+          </span>
+        `).join(" ");
         const f = p.features || {};
-        let fHtml = "";
-        if (f.can_monitor !== false) fHtml += `<span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-check"></i> Live Monitoring</span>`;
-        if (f.can_port_scan !== false) fHtml += `<span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-check"></i> Port Scanner</span>`;
-        if (f.can_network_discovery) fHtml += `<span class="badge-pill bg-success-soft" style="padding:4px 10px; border-radius:6px; background:rgba(16,185,129,0.15); color:#10B981; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-check"></i> Network Discovery</span>`;
-        if (f.max_scans_per_day) fHtml += `<span class="badge-pill bg-info-soft" style="padding:4px 10px; border-radius:6px; background:rgba(2,132,199,0.15); color:#0284C7; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-crosshairs"></i> ${f.max_scans_per_day} Scans/Day</span>`;
-        if (f.traffic_packet_limit) fHtml += `<span class="badge-pill bg-info-soft" style="padding:4px 10px; border-radius:6px; background:rgba(2,132,199,0.15); color:#0284C7; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-bolt"></i> ${f.traffic_packet_limit} Packets</span>`;
-        dFeatures.innerHTML = fHtml || `<span class="text-muted">Standard platform access privileges</span>`;
+        if (f.max_scans_per_day) fHtml += ` <span class="badge-pill bg-info-soft" style="padding:4px 10px; border-radius:6px; background:rgba(2,132,199,0.15); color:#0284C7; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-crosshairs"></i> ${f.max_scans_per_day} Scans/Day</span>`;
+        if (f.traffic_packet_limit) fHtml += ` <span class="badge-pill bg-info-soft" style="padding:4px 10px; border-radius:6px; background:rgba(2,132,199,0.15); color:#0284C7; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;"><i class="fas fa-bolt"></i> ${f.traffic_packet_limit} Packets</span>`;
+        dFeatures.innerHTML = fHtml || `<span class="text-muted">Standard platform access privileges (No operational tools)</span>`;
       }
 
       if (actionsToolbar) {
@@ -12247,10 +12617,36 @@ document.addEventListener("DOMContentLoaded", () => {
       if (descInput) descInput.value = p.description || "";
       if (scansInput) scansInput.value = f.max_scans_per_day || f.max_concurrent_scans || 100;
       if (trafficInput) trafficInput.value = f.traffic_packet_limit || 10000;
-      if (featMon) featMon.checked = Boolean(f.can_live_monitoring !== false && f.can_monitor !== false);
-      if (featPort) featPort.checked = Boolean(f.can_port_scan !== false);
+      if (featMon) featMon.checked = Boolean(f.can_live_monitoring || f.can_monitor);
+      if (featPort) featPort.checked = Boolean(f.can_port_scan);
       if (featNd) featNd.checked = Boolean(f.can_network_discovery);
       if (activeCheck) activeCheck.checked = Boolean(p.is_active);
+
+      const isFreeCheck = document.getElementById("fpEditPlanIsFree");
+      const isFree = Boolean(p.is_free || p.price === 0.0);
+      if (isFreeCheck) {
+        isFreeCheck.checked = isFree;
+        isFreeCheck.onchange = () => {
+          if (isFreeCheck.checked) {
+            if (priceInput) {
+              priceInput.value = "0.00";
+              priceInput.setAttribute("readonly", "readonly");
+            }
+          } else {
+            if (priceInput) {
+              priceInput.removeAttribute("readonly");
+            }
+          }
+        };
+      }
+      if (priceInput) {
+        if (isFree) {
+          priceInput.value = "0.00";
+          priceInput.setAttribute("readonly", "readonly");
+        } else {
+          priceInput.removeAttribute("readonly");
+        }
+      }
 
       if (bcName) bcName.textContent = p.name || p.plan_code || p.code;
       const navBack = (e) => {
@@ -12751,6 +13147,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const canPort = document.getElementById("fpCreatePlanFeatPortScan")?.checked ?? true;
         const canNd = document.getElementById("fpCreatePlanFeatDiscovery")?.checked ?? false;
         const isActive = document.getElementById("fpCreatePlanIsActive")?.checked ?? true;
+        const isFree = document.getElementById("fpCreatePlanIsFree")?.checked ?? false;
         const alertEl = document.getElementById("fullPagePlanCreateAlert");
 
         if (!code || !name) {
@@ -12767,6 +13164,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const origHtml = createPlanSubmitBtn.innerHTML;
         createPlanSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Creating...';
 
+        const effectivePrice = isFree ? 0.0 : (isNaN(price) ? 0.0 : price);
+
         try {
           const resp = await fetch("/api/admin/plans", {
             method: "POST",
@@ -12776,7 +13175,8 @@ document.addEventListener("DOMContentLoaded", () => {
               plan_code: code,
               code: code,
               name: name,
-              price: isNaN(price) ? 0.0 : price,
+              price: effectivePrice,
+              is_free: isFree,
               duration_value: isNaN(duration) ? 30 : duration,
               duration_days: isNaN(duration) ? 30 : duration,
               duration_unit: "days",
@@ -12839,6 +13239,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const canPort = document.getElementById("fpEditPlanFeatPortScan")?.checked ?? true;
         const canNd = document.getElementById("fpEditPlanFeatDiscovery")?.checked ?? false;
         const isActive = document.getElementById("fpEditPlanIsActive")?.checked ?? true;
+        const isFree = document.getElementById("fpEditPlanIsFree")?.checked ?? false;
         const alertEl = document.getElementById("fullPagePlanEditAlert");
 
         if (!pid) return;
@@ -12857,6 +13258,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const origHtml = editPlanSubmitBtn.innerHTML;
         editPlanSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving...';
 
+        const effectivePrice = isFree ? 0.0 : (isNaN(price) ? 0.0 : price);
+
         try {
           const resp = await fetch(`/api/admin/plans/${pid}`, {
             method: "PUT",
@@ -12866,7 +13269,8 @@ document.addEventListener("DOMContentLoaded", () => {
               plan_code: code,
               code: code,
               name: name,
-              price: isNaN(price) ? 0.0 : price,
+              price: effectivePrice,
+              is_free: isFree,
               duration_value: isNaN(duration) ? 30 : duration,
               duration_days: isNaN(duration) ? 30 : duration,
               duration_unit: "days",
@@ -13110,8 +13514,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const isFeatured = p.plan_code === "SCOUT-PRO" || p.id === "SCOUT-PRO";
         const isCurrentPlan = isSubActive && (activeSub.plan_id === p.id || activeSub.plan_code === p.plan_code);
         const isPendingPlan = isSubPending && (activeSub.plan_id === p.id || activeSub.plan_code === p.plan_code);
+        const isFree = Boolean(p.is_free || p.price === 0);
 
-        const priceDisplay = p.price === 0 ? "Free" : `$${p.price.toFixed(2)}`;
+        const priceDisplay = isFree || p.price === 0 ? "Free" : `$${p.price.toFixed(2)}`;
         const durationDisplay = `/ ${p.duration_value} ${p.duration_unit || 'days'}`;
 
         const f = p.features || {};
@@ -13128,6 +13533,8 @@ document.addEventListener("DOMContentLoaded", () => {
           btnHtml = `<button type="button" class="btn-public-plan-cta current" disabled><i class="fas fa-circle-check"></i> Current Active Plan</button>`;
         } else if (isPendingPlan) {
           btnHtml = `<button type="button" class="btn-public-plan-cta pending" disabled><i class="fas fa-clock"></i> Activation Pending</button>`;
+        } else if (isFree) {
+          btnHtml = `<button type="button" class="btn-public-plan-cta btn-plan-free" data-public-plan-id="${p.id}" data-plan-is-free="true"><i class="fas fa-gift"></i> Claim Free Plan</button>`;
         } else {
           btnHtml = `<button type="button" class="btn-public-plan-cta" data-public-plan-id="${p.id}"><i class="fas fa-bolt"></i> Select ${escapeHtml(p.name)}</button>`;
         }
@@ -13146,21 +13553,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span class="public-plan-term">${durationDisplay}</span>
               </div>
               <ul class="public-plan-features-list">
-                <li class="public-plan-feature-item ${canMonitor ? 'enabled' : 'disabled'}">
-                  <i class="fas ${canMonitor ? 'fa-check' : 'fa-xmark'}"></i>
-                  <span>Real-Time Traffic Telemetry & 15-Class Hostile ML Inference</span>
-                </li>
-                <li class="public-plan-feature-item ${canPort ? 'enabled' : 'disabled'}">
-                  <i class="fas ${canPort ? 'fa-check' : 'fa-xmark'}"></i>
-                  <span>Active Port Security Scanning & Vulnerability Enumeration</span>
-                </li>
-                <li class="public-plan-feature-item ${canNd ? 'enabled' : 'disabled'}">
-                  <i class="fas ${canNd ? 'fa-check' : 'fa-xmark'}"></i>
-                  <span>Autonomous Subnet Host & Asset Discovery</span>
-                </li>
+                ${renderPlanFeaturesListHtml(p.features, { isPublic: true })}
               </ul>
             </div>
-            <div>
+            <div class="public-plan-card-footer" style="margin-top: auto; width: 100%;">
               ${btnHtml}
             </div>
           </div>
@@ -13545,6 +13941,11 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    if (plan.is_free || plan.price === 0) {
+      activateFreePlan(plan.id);
+      return;
+    }
+
     checkoutSelectedPlan = plan;
     checkoutSelectedMethod = null;
     checkoutSelectedAccount = null;
@@ -13573,19 +13974,32 @@ document.addEventListener("DOMContentLoaded", () => {
     if (cpTotal) cpTotal.textContent = `${priceFormatted} ${plan.currency || 'USD'}`;
 
     if (cpFeatures) {
-      const f = plan.features || {};
-      const items = [
-        { label: "Live Traffic Telemetry & 15-Class AI Intrusion Detection", enabled: f.can_live_monitoring !== false },
-        { label: "Active Port Scanning & TCP Service Enumeration", enabled: f.can_port_scan !== false },
-        { label: "Subnet Reconnaissance & Network Discovery", enabled: f.can_network_discovery === true },
-        { label: `Max Concurrent Scans: ${f.max_concurrent_scans || 1}`, enabled: true }
-      ];
-      cpFeatures.innerHTML = items.map(it => `
-        <li class="checkout-feature-item ${it.enabled ? '' : 'text-muted'}" style="${it.enabled ? '' : 'opacity:0.6;'}">
-          <i class="fas ${it.enabled ? 'fa-check text-success' : 'fa-xmark text-muted'}"></i>
-          <span>${escapeHtml(it.label)}</span>
-        </li>
-      `).join("");
+      const selected = getSelectedPlanFeatures(plan.features);
+      if (selected.length === 0) {
+        cpFeatures.innerHTML = `
+          <li class="checkout-feature-item text-muted">
+            <i class="fas fa-shield-halved"></i>
+            <span>Basic Platform Access (No operational tools included)</span>
+          </li>
+        `;
+      } else {
+        let listHtml = selected.map(feat => `
+          <li class="checkout-feature-item">
+            <i class="fas ${feat.icon} text-success"></i>
+            <span><strong>${escapeHtml(feat.name)}:</strong> ${escapeHtml(feat.shortDesc)}</span>
+          </li>
+        `).join("");
+        if (plan.features && (plan.features.max_concurrent_scans || plan.features.max_scans_per_day)) {
+          const maxScans = plan.features.max_concurrent_scans || plan.features.max_scans_per_day || 1;
+          listHtml += `
+            <li class="checkout-feature-item">
+              <i class="fas fa-gauge-high text-success"></i>
+              <span>Max Concurrent Scans: <strong>${maxScans}</strong></span>
+            </li>
+          `;
+        }
+        cpFeatures.innerHTML = listHtml;
+      }
     }
 
     // Reset Steps

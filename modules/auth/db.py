@@ -141,6 +141,14 @@ def init_db(engine_override: Engine = None) -> None:
                     if col_name not in sub_cols:
                         conn.exec_driver_sql(f"ALTER TABLE user_subscriptions ADD COLUMN {col_name} {col_type};")
                 conn.commit()
+
+            # Ensure is_free column on subscription_plans exists
+            plan_res = conn.exec_driver_sql("PRAGMA table_info(subscription_plans);").fetchall()
+            plan_cols = [row[1] for row in plan_res]
+            if plan_cols and "is_free" not in plan_cols:
+                conn.exec_driver_sql("ALTER TABLE subscription_plans ADD COLUMN is_free BOOLEAN DEFAULT 0;")
+                conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_subscription_plans_is_free ON subscription_plans (is_free);")
+                conn.commit()
     except Exception:
         pass
 

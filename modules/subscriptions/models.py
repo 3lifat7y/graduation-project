@@ -28,6 +28,7 @@ class SubscriptionPlan(Base):
     duration_value = Column(Integer, nullable=False, default=30)
     duration_unit = Column(String(20), nullable=False, default="days")  # 'days', 'months', 'years'
     is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_free = Column(Boolean, nullable=False, default=False, index=True)
     features_json = Column(Text, nullable=True)  # JSON-encoded dict of feature flags
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
@@ -70,6 +71,7 @@ class SubscriptionPlan(Base):
             "duration_days": int(self.duration_value),
             "duration_unit": self.duration_unit,
             "is_active": bool(self.is_active),
+            "is_free": bool(self.is_free or self.price == 0.0),
             "features": self.get_features(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -259,8 +261,10 @@ class UserSubscription(Base):
             "plan_name": self.plan_name_snapshot or (self.plan.name if self.plan else None),
             "plan_code": self.plan.plan_code if self.plan else None,
             "plan_price": self.plan_price_snapshot if self.plan_price_snapshot is not None else (self.plan.price if self.plan else None),
+            "plan_price_snapshot": self.plan_price_snapshot if self.plan_price_snapshot is not None else (self.plan.price if self.plan else 0.0),
             "plan_currency": self.payment_currency or (self.plan.currency if self.plan else "USD"),
             "plan_duration": f"{self.plan.duration_value} {self.plan.duration_unit}" if self.plan else None,
+            "plan": self.plan.to_dict() if self.plan else None,
             "status": self.status,
             "is_valid_active": is_active_now,
             "start_date": self.start_date.isoformat() if self.start_date else None,
@@ -333,3 +337,45 @@ class SubscriptionAuditLog(Base):
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "details": self.details
         }
+
+
+class FreePlanClaim(Base):
+    """
+    Permanent audit and anti-abuse enforcement record for free plan activations.
+    Tracks user_id, normalized email, and normalized phone to enforce
+    one-time lifetime eligibility across accounts.
+    """
+    __tablename__ = "free_plan_claims"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    plan_id = Column(Integer, ForeignKey("subscription_plans.id", ondelete="SET NULL"), nullable=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("user_subscriptions.id", ondelete="SET NULL"), nullable=True, index=True)
+    email = Column(String(120), nullable=False, index=True)
+    normalized_email = Column(String(120), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=True, index=True)
+    normalized_phone = Column(String(50), nullable=True, index=True)
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    plan = relationship("SubscriptionPlan", foreign_keys=[plan_id])
+    subscription = relationship("UserSubscription", foreign_keys=[subscription_id])
+
+    def __repr__(self) -> str:
+        return f"<FreePlanClaim id={self.id} user_id={self.user_id} email='{self.email}' phone='{self.phone_number}'>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Returns JSON-serializable dictionary representation."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "plan_id": self.plan_id,
+            "subscription_id": self.subscription_id,
+            "email": self.email,
+            "phone_number": self.phone_number,
+            "claimed_at": self.claimed_at.isoformat() if self.claimed_at else None
+        }
+

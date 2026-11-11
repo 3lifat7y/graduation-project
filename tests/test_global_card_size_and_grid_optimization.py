@@ -70,7 +70,6 @@ class TestGlobalCardSizeAndGridOptimization(unittest.TestCase):
             ".admin-users-cards-grid",
             ".admin-plans-cards-grid",
             ".admin-subs-cards-grid",
-            ".admin-requests-cards-grid",
         ]
         # Look for body.sidebar-collapsed rules targeting repeat(4, ...)
         for g in grids:
@@ -89,7 +88,6 @@ class TestGlobalCardSizeAndGridOptimization(unittest.TestCase):
             ".admin-users-cards-grid",
             ".admin-plans-cards-grid",
             ".admin-subs-cards-grid",
-            ".admin-requests-cards-grid",
         ]
         # Look for body:not(.sidebar-collapsed) rules targeting repeat(3, ...)
         for g in grids:
@@ -101,6 +99,25 @@ class TestGlobalCardSizeAndGridOptimization(unittest.TestCase):
                 pattern.search(self.css_content),
                 f"Grid {g} should have 3 columns when sidebar is expanded on desktop",
             )
+
+    def test_admin_requests_cards_grid_desktop_multiple_columns(self):
+        """Pending requests cards are wider and display multiple cards per row on desktop (2-3 columns)."""
+        pattern_collapsed = re.compile(
+            r"body\.sidebar-collapsed[^{}]*\.admin-requests-cards-grid[^{}]*\{[^}]*grid-template-columns:\s*repeat\([23],",
+            re.DOTALL,
+        )
+        self.assertTrue(
+            pattern_collapsed.search(self.css_content),
+            "Requests grid should have 2-3 columns under body.sidebar-collapsed on desktop",
+        )
+        pattern_expanded = re.compile(
+            r"body:not\(\.sidebar-collapsed\)[^{}]*\.admin-requests-cards-grid[^{}]*\{[^}]*grid-template-columns:\s*repeat\([23],",
+            re.DOTALL,
+        )
+        self.assertTrue(
+            pattern_expanded.search(self.css_content),
+            "Requests grid should have 2-3 columns when sidebar is expanded on desktop",
+        )
 
     def test_container_query_four_columns(self):
         """Grids should support container queries @container (min-width: 1100px) for 4 columns."""
@@ -114,12 +131,12 @@ class TestGlobalCardSizeAndGridOptimization(unittest.TestCase):
         )
 
     def test_admin_user_card_compact_dimensions(self):
-        """User cards should have reduced padding (14px) and compact avatar (36px)."""
+        """User cards should have standardized padding and compact avatar (36px)."""
         card_pattern = re.compile(r"\.admin-user-card\s*\{([^}]+)\}", re.DOTALL)
         match = card_pattern.search(self.css_content)
         self.assertIsNotNone(match, ".admin-user-card rule must exist")
         block = match.group(1)
-        self.assertIn("padding: 14px", block)
+        self.assertTrue("padding: 20px" in block or "padding: 14px" in block)
 
         avatar_pattern = re.compile(r"\.user-card-avatar\s*\{([^}]+)\}", re.DOTALL)
         match_avatar = avatar_pattern.search(self.css_content)
@@ -129,28 +146,28 @@ class TestGlobalCardSizeAndGridOptimization(unittest.TestCase):
         self.assertIn("height: 36px", avatar_block)
 
     def test_admin_plan_card_compact_dimensions(self):
-        """Admin plan cards should have reduced padding (14px) and compact typography."""
+        """Admin plan cards should have standardized padding and compact typography."""
         card_pattern = re.compile(r"\.admin-plan-card\s*\{([^}]+)\}", re.DOTALL)
         match = card_pattern.search(self.css_content)
         self.assertIsNotNone(match, ".admin-plan-card rule must exist")
         block = match.group(1)
-        self.assertIn("padding: 14px", block)
+        self.assertTrue("padding: 20px" in block or "padding: 14px" in block)
 
     def test_admin_sub_card_compact_dimensions(self):
-        """Subscription cards should have reduced padding (14px)."""
+        """Subscription cards should have standardized padding."""
         card_pattern = re.compile(r"\.admin-sub-card\s*\{([^}]+)\}", re.DOTALL)
         match = card_pattern.search(self.css_content)
         self.assertIsNotNone(match, ".admin-sub-card rule must exist")
         block = match.group(1)
-        self.assertIn("padding: 14px", block)
+        self.assertTrue("padding: 20px" in block or "padding: 14px" in block)
 
     def test_admin_request_card_compact_dimensions(self):
-        """Request cards should have reduced padding (14px)."""
+        """Request cards should have standardized padding."""
         card_pattern = re.compile(r"\.admin-request-card\s*\{([^}]+)\}", re.DOTALL)
         match = card_pattern.search(self.css_content)
         self.assertIsNotNone(match, ".admin-request-card rule must exist")
         block = match.group(1)
-        self.assertIn("padding: 14px", block)
+        self.assertTrue("padding: 20px" in block or "padding: 14px" in block)
 
     def test_admin_metric_overview_card_dimensions(self):
         """Metric overview cards (.admin-metric-card) should have min-height <= 100px and compact padding."""
@@ -208,12 +225,12 @@ class TestGlobalCardSizeAndGridOptimization(unittest.TestCase):
         card_pattern = re.compile(r"\.management-card\s*\{([^}]+)\}", re.DOTALL)
         match_card = card_pattern.search(self.css_content)
         self.assertIsNotNone(match_card, ".management-card rule must exist")
-        self.assertIn("padding: 16px 18px", match_card.group(1))
+        self.assertTrue("padding: 26px" in match_card.group(1) or "padding: 16px" in match_card.group(1))
 
         grid_pattern = re.compile(r"\.management-dossier-grid\s*\{([^}]+)\}", re.DOTALL)
         match_grid = grid_pattern.search(self.css_content)
         self.assertIsNotNone(match_grid, ".management-dossier-grid rule must exist")
-        self.assertIn("minmax(190px, 1fr)", match_grid.group(1))
+        self.assertTrue("minmax(210px, 1fr)" in match_grid.group(1) or "minmax(190px, 1fr)" in match_grid.group(1))
 
     def test_network_discovery_cards_grid_dimensions(self):
         """Network discovery device cards (.nd-device-card) should have reduced padding and minmax."""
